@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Media, MediaState } from '../types/media';
 import { Film, Tv, Gamepad2, Play, RefreshCw, PauseCircle, Calendar, Star } from 'lucide-react';
+import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
+import { dbService } from '../services/DatabaseService';
 
 interface MediaCardProps {
   media: Media;
@@ -10,6 +12,50 @@ interface MediaCardProps {
 }
 
 export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onClick }) => {
+  const [posterUrl, setPosterUrl] = useState<string | undefined>(media.poster);
+  const [imgFailed, setImgFailed] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    setPosterUrl(media.poster);
+    setImgFailed(false);
+
+    // If media.poster is missing, resolve artwork asynchronously via ArtworkCacheProvider
+    if (!media.poster) {
+      artworkCacheProvider.resolveArtworkForMedia(media).then(res => {
+        if (isMounted && res.poster) {
+          setPosterUrl(res.poster);
+          if (res.source !== 'placeholder' && !media.poster) {
+            try {
+              dbService.saveMedia({
+                ...media,
+                poster: res.poster,
+                backdrop: res.backdrop || media.backdrop,
+                logo: res.logo || media.logo
+              });
+            } catch (err) {
+              console.warn('Failed to auto-save resolved poster:', err);
+            }
+          }
+        }
+      });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [media]);
+
+  const handleImageError = () => {
+    setImgFailed(true);
+    artworkCacheProvider.resolveArtworkForMedia(media).then(res => {
+      if (res.poster && res.poster !== posterUrl) {
+        setPosterUrl(res.poster);
+        setImgFailed(false);
+      }
+    });
+  };
+
   const getTypeIcon = () => {
     switch (media.type) {
       case 'Film':
@@ -57,17 +103,18 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onCli
     >
       {/* Poster Image Container */}
       <div className="relative aspect-[2/3] w-full bg-[#1b1e2b] overflow-hidden">
-        {media.poster ? (
+        {posterUrl && !imgFailed ? (
           <img
-            src={media.poster}
+            src={posterUrl}
             alt={media.title}
+            onError={handleImageError}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-gradient-to-b from-[#1b1e2b] to-[#12141d]">
             {getTypeIcon()}
-            <span className="text-sm font-medium text-gray-300 mt-2">{media.title}</span>
+            <span className="text-sm font-medium text-gray-300 mt-2 line-clamp-2">{media.title}</span>
           </div>
         )}
 

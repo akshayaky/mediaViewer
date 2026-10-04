@@ -44,82 +44,104 @@ export class IGDBProvider implements MetadataProvider {
     return null;
   }
 
+  private cleanQueryString(rawQuery: string): string {
+    let q = rawQuery;
+    q = q.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ');
+    q = q.replace(/\.(exe|lnk|iso|bin|zip|rar)$/i, '');
+    const noiseRegex = /\b(v\d+(\.\d+)*|repack|fitgirl|dodi|crack|gog|steam|portable|multi\d*|edition|setup|installer)\b/gi;
+    q = q.replace(noiseRegex, ' ');
+    q = q.replace(/[\._\-]/g, ' ').replace(/\s+/g, ' ').trim();
+    return q;
+  }
+
   public async searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]> {
     if (type && type !== 'VideoGame') return [];
 
     const { clientId, clientSecret, rawgApiKey } = this.getTwitchCredentials();
+    const cleanQuery = this.cleanQueryString(query);
+    const words = (cleanQuery || query).split(/\s+/).filter(Boolean);
 
-    // 1. Try IGDB API if Twitch credentials are available
+    // 1. Try IGDB API with progressive word trimming
     if (clientId && clientSecret) {
       const token = await this.getTwitchAccessToken(clientId, clientSecret);
       if (token) {
-        try {
-          const body = `search "${query.replace(/"/g, '')}"; fields name, summary, first_release_date, cover.image_id, artworks.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher; limit 8;`;
-          const res = await fetch(`${this.igdbBaseUrl}/games`, {
-            method: 'POST',
-            headers: {
-              'Client-ID': clientId,
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'text/plain'
-            },
-            body
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            return data.map((game: any) => {
-              const coverUrl = game.cover?.image_id
-                ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${game.cover.image_id}.jpg`
-                : undefined;
-              const backdropUrl = game.artworks && game.artworks.length > 0
-                ? `https://images.igdb.com/igdb/image/upload/t_1080p/${game.artworks[0].image_id}.jpg`
-                : undefined;
-              const year = game.first_release_date
-                ? new Date(game.first_release_date * 1000).getFullYear()
-                : undefined;
-
-              return {
-                title: game.name,
-                type: 'VideoGame' as MediaType,
-                release_year: year,
-                description: game.summary,
-                poster: coverUrl,
-                backdrop: backdropUrl,
-                external_id: `igdb:${game.id}`,
-                provider: this.name
-              };
+        for (let len = words.length; len >= 1; len--) {
+          const searchStr = words.slice(0, len).join(' ');
+          try {
+            const body = `search "${searchStr.replace(/"/g, '')}"; fields name, summary, first_release_date, cover.image_id, artworks.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher; limit 8;`;
+            const res = await fetch(`${this.igdbBaseUrl}/games`, {
+              method: 'POST',
+              headers: {
+                'Client-ID': clientId,
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'text/plain'
+              },
+              body
             });
+
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.length > 0) {
+                return data.map((game: any) => {
+                  const coverUrl = game.cover?.image_id
+                    ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${game.cover.image_id}.jpg`
+                    : undefined;
+                  const backdropUrl = game.artworks && game.artworks.length > 0
+                    ? `https://images.igdb.com/igdb/image/upload/t_1080p/${game.artworks[0].image_id}.jpg`
+                    : undefined;
+                  const year = game.first_release_date
+                    ? new Date(game.first_release_date * 1000).getFullYear()
+                    : undefined;
+
+                  return {
+                    title: game.name,
+                    type: 'VideoGame' as MediaType,
+                    release_year: year,
+                    description: game.summary,
+                    poster: coverUrl,
+                    backdrop: backdropUrl,
+                    external_id: `igdb:${game.id}`,
+                    provider: this.name
+                  };
+                });
+              }
+            }
+          } catch (err) {
+            console.error('IGDB search failed:', err);
           }
-        } catch (err) {
-          console.error('IGDB search failed:', err);
         }
       }
     }
 
-    // 2. Try RAWG API fallback if RAWG key is set
+    // 2. Try RAWG API fallback if RAWG key is set with progressive word trimming
     if (rawgApiKey) {
-      try {
-        const res = await fetch(`${this.rawgBaseUrl}/games?key=${rawgApiKey}&search=${encodeURIComponent(query)}&page_size=8`);
-        if (res.ok) {
-          const data = await res.json();
-          return (data.results || []).map((game: any) => ({
-            title: game.name,
-            type: 'VideoGame' as MediaType,
-            release_year: game.released ? parseInt(game.released.split('-')[0], 10) : undefined,
-            description: undefined,
-            poster: game.background_image,
-            backdrop: game.background_image,
-            external_id: `rawg:${game.id}`,
-            provider: 'RAWG'
-          }));
+      for (let len = words.length; len >= 1; len--) {
+        const searchStr = words.slice(0, len).join(' ');
+        try {
+          const res = await fetch(`${this.rawgBaseUrl}/games?key=${rawgApiKey}&search=${encodeURIComponent(searchStr)}&page_size=8`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.results && data.results.length > 0) {
+              return data.results.map((game: any) => ({
+                title: game.name,
+                type: 'VideoGame' as MediaType,
+                release_year: game.released ? parseInt(game.released.split('-')[0], 10) : undefined,
+                description: undefined,
+                poster: game.background_image,
+                backdrop: game.background_image,
+                external_id: `rawg:${game.id}`,
+                provider: 'RAWG'
+              }));
+            }
+          }
+        } catch (err) {
+          console.error('RAWG search failed:', err);
         }
-      } catch (err) {
-        console.error('RAWG search failed:', err);
       }
     }
 
     // 3. Fallback mock search results if no keys configured or failed
-    return this.getMockSearchResults(query);
+    return this.getMockSearchResults(cleanQuery || query);
   }
 
   public async getMediaDetails(externalId: string): Promise<Partial<Media>> {

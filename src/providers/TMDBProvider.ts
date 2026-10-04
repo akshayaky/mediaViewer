@@ -32,6 +32,68 @@ export class TMDBProvider implements MetadataProvider {
     return { url, headers };
   }
 
+  private cleanQueryString(rawQuery: string): string {
+    let q = rawQuery;
+    // Strip brackets and parentheses
+    q = q.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ');
+    // Strip file extension if present
+    q = q.replace(/\.(mkv|mp4|avi|mov|m4v|webm|ts|flv)$/i, '');
+    // Strip common release noise
+    const noiseRegex = /\b(1080p|720p|480p|2160p|4k|uhd|webrip|web-dl|webdl|bluray|blu-ray|remux|x264|x265|hevc|h264|h265|av1|10bit|hdr|hdr10|dv|aac|dts|dd5\.1|5\.1|dvdrip|hdrip|hdtv|proper|repack|yify|rarbg|eztv|sva|fleet|shortcut|game|dual|multi|audio|subbed|dubbed|esub|eng|sub|hindi|telugu|tamil|malayalam|kannada|directors|director|cut|uncut|extended|edition|version)\b/gi;
+    q = q.replace(noiseRegex, ' ');
+    q = q.replace(/[\._\-]/g, ' ').replace(/\s+/g, ' ').trim();
+    return q;
+  }
+
+  private async searchSingleTypeWithProgressiveTrim(
+    rawQuery: string,
+    endpoint: '/search/movie' | '/search/tv',
+    mediaType: 'Film' | 'TV Series'
+  ): Promise<MetadataSearchResult[]> {
+    const initialClean = this.cleanQueryString(rawQuery);
+    if (!initialClean) return [];
+
+    const words = initialClean.split(/\s+/).filter(Boolean);
+
+    // Progressive search: start with full cleaned query, then progressively strip trailing words if 0 results returned
+    for (let len = words.length; len >= 1; len--) {
+      const currentQuery = words.slice(0, len).join(' ');
+      const { url, headers } = this.getFetchConfig(endpoint, {
+        query: currentQuery,
+        include_adult: 'false'
+      });
+
+      try {
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          const items = data.results || [];
+          if (items.length > 0) {
+            return items.slice(0, 8).map((item: any) => {
+              const yearStr = endpoint === '/search/movie' ? item.release_date : item.first_air_date;
+              const yearNum = yearStr ? parseInt(yearStr.split('-')[0], 10) : undefined;
+              return {
+                title: endpoint === '/search/movie' ? item.title : item.name,
+                original_title: endpoint === '/search/movie' ? item.original_title : item.original_name,
+                release_year: yearNum && !isNaN(yearNum) ? yearNum : undefined,
+                type: mediaType,
+                description: item.overview,
+                poster: item.poster_path ? `${this.imageBaseUrl}/w500${item.poster_path}` : undefined,
+                backdrop: item.backdrop_path ? `${this.imageBaseUrl}/w1280${item.backdrop_path}` : undefined,
+                external_id: `${endpoint === '/search/movie' ? 'movie' : 'tv'}:${item.id}`,
+                provider: this.name
+              };
+            });
+          }
+        }
+      } catch (err) {
+        console.warn(`TMDB progressive search failed for query '${currentQuery}':`, err);
+      }
+    }
+
+    return [];
+  }
+
   public async searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -42,53 +104,13 @@ export class TMDBProvider implements MetadataProvider {
 
     try {
       if (!type || type === 'Film') {
-        const { url, headers } = this.getFetchConfig('/search/movie', {
-          query,
-          include_adult: 'false'
-        });
-        const movieRes = await fetch(url, { headers });
-        if (movieRes.ok) {
-          const data = await movieRes.json();
-          for (const item of (data.results || []).slice(0, 8)) {
-            const yearNum = item.release_date ? parseInt(item.release_date.split('-')[0], 10) : undefined;
-            results.push({
-              title: item.title,
-              original_title: item.original_title,
-              release_year: yearNum && !isNaN(yearNum) ? yearNum : undefined,
-              type: 'Film',
-              description: item.overview,
-              poster: item.poster_path ? `${this.imageBaseUrl}/w500${item.poster_path}` : undefined,
-              backdrop: item.backdrop_path ? `${this.imageBaseUrl}/w1280${item.backdrop_path}` : undefined,
-              external_id: `movie:${item.id}`,
-              provider: this.name
-            });
-          }
-        }
+        const movieResults = await this.searchSingleTypeWithProgressiveTrim(query, '/search/movie', 'Film');
+        results.push(...movieResults);
       }
 
       if (!type || type === 'TV Series') {
-        const { url, headers } = this.getFetchConfig('/search/tv', {
-          query,
-          include_adult: 'false'
-        });
-        const tvRes = await fetch(url, { headers });
-        if (tvRes.ok) {
-          const data = await tvRes.json();
-          for (const item of (data.results || []).slice(0, 8)) {
-            const yearNum = item.first_air_date ? parseInt(item.first_air_date.split('-')[0], 10) : undefined;
-            results.push({
-              title: item.name,
-              original_title: item.original_name,
-              release_year: yearNum && !isNaN(yearNum) ? yearNum : undefined,
-              type: 'TV Series',
-              description: item.overview,
-              poster: item.poster_path ? `${this.imageBaseUrl}/w500${item.poster_path}` : undefined,
-              backdrop: item.backdrop_path ? `${this.imageBaseUrl}/w1280${item.backdrop_path}` : undefined,
-              external_id: `tv:${item.id}`,
-              provider: this.name
-            });
-          }
-        }
+        const tvResults = await this.searchSingleTypeWithProgressiveTrim(query, '/search/tv', 'TV Series');
+        results.push(...tvResults);
       }
     } catch (err) {
       console.error('TMDB searchMedia failed:', err);
