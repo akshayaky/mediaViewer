@@ -38,7 +38,9 @@ export class ArtworkCacheProvider implements ArtworkProvider {
     try {
       const obj: Record<string, ArtworkResult> = {};
       this.memoryCache.forEach((val, key) => {
-        obj[key] = val;
+        if (val.source !== 'placeholder') {
+          obj[key] = val;
+        }
       });
       localStorage.setItem(ARTWORK_CACHE_STORAGE_KEY, JSON.stringify(obj));
     } catch (err) {
@@ -50,10 +52,21 @@ export class ArtworkCacheProvider implements ArtworkProvider {
     return this.memoryCache.get(cacheKey.toLowerCase());
   }
 
-  public setCachedArtwork(cacheKey: string, artwork: { poster?: string; backdrop?: string; logo?: string }) {
+  public invalidateCache(cacheKey: string) {
+    if (!cacheKey) return;
+    this.memoryCache.delete(cacheKey.toLowerCase());
+    this.savePersistentCache();
+  }
+
+  public setCachedArtwork(
+    cacheKey: string,
+    artwork: { poster?: string; backdrop?: string; logo?: string },
+    source: 'local_cache' | 'metadata_provider' | 'placeholder' = 'local_cache'
+  ) {
+    if (!cacheKey) return;
     const result: ArtworkResult = {
       ...artwork,
-      source: 'local_cache'
+      source
     };
     this.memoryCache.set(cacheKey.toLowerCase(), result);
     this.savePersistentCache();
@@ -86,9 +99,9 @@ export class ArtworkCacheProvider implements ArtworkProvider {
   public async resolveArtworkForMedia(media: Media): Promise<ArtworkResult> {
     const cacheKey = media.id || media.title;
 
-    // Priority 1: Check local cached artwork
+    // Priority 1: Check local cached artwork (excluding placeholders)
     const cached = this.getCachedArtwork(cacheKey);
-    if (cached && (cached.poster || cached.backdrop)) {
+    if (cached && cached.source !== 'placeholder' && (cached.poster || cached.backdrop)) {
       return cached;
     }
 
@@ -100,7 +113,7 @@ export class ArtworkCacheProvider implements ArtworkProvider {
         logo: media.logo,
         source: 'local_cache'
       };
-      this.setCachedArtwork(cacheKey, dbResult);
+      this.setCachedArtwork(cacheKey, dbResult, 'local_cache');
       return dbResult;
     }
 
@@ -112,17 +125,15 @@ export class ArtworkCacheProvider implements ArtworkProvider {
           ...providerArtwork,
           source: 'metadata_provider'
         };
-        this.setCachedArtwork(cacheKey, result);
+        this.setCachedArtwork(cacheKey, result, 'metadata_provider');
         return result;
       }
     } catch (err) {
       console.warn(`Metadata provider artwork fetch failed for "${media.title}":`, err);
     }
 
-    // Priority 3: Fallback placeholder artwork
-    const placeholder = this.getPlaceholderArtwork(media.type, media.title);
-    this.setCachedArtwork(cacheKey, placeholder);
-    return placeholder;
+    // Priority 3: Fallback placeholder artwork (do not persist as local_cache)
+    return this.getPlaceholderArtwork(media.type, media.title);
   }
 
   public async getArtwork(

@@ -8,7 +8,28 @@ export class TMDBProvider implements MetadataProvider {
   private imageBaseUrl = 'https://image.tmdb.org/t/p';
 
   private getApiKey(): string | undefined {
-    return dbService.getSettings().tmdb_api_key;
+    const key = dbService.getSettings().tmdb_api_key;
+    return key ? key.trim() : undefined;
+  }
+
+  private getFetchConfig(endpoint: string, params: Record<string, string> = {}): { url: string; headers: Record<string, string> } {
+    const key = this.getApiKey() || '';
+    const urlParams = new URLSearchParams(params);
+    const headers: Record<string, string> = {
+      'Accept': 'application/json'
+    };
+
+    if (key.startsWith('eyJ')) {
+      // TMDB v4 Bearer Read Access Token
+      headers['Authorization'] = `Bearer ${key}`;
+    } else if (key) {
+      // TMDB v3 API Key
+      urlParams.set('api_key', key);
+    }
+
+    const queryString = urlParams.toString();
+    const url = `${this.baseUrl}${endpoint}${queryString ? '?' + queryString : ''}`;
+    return { url, headers };
   }
 
   public async searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]> {
@@ -21,16 +42,19 @@ export class TMDBProvider implements MetadataProvider {
 
     try {
       if (!type || type === 'Film') {
-        const movieRes = await fetch(
-          `${this.baseUrl}/search/movie?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false`
-        );
+        const { url, headers } = this.getFetchConfig('/search/movie', {
+          query,
+          include_adult: 'false'
+        });
+        const movieRes = await fetch(url, { headers });
         if (movieRes.ok) {
           const data = await movieRes.json();
           for (const item of (data.results || []).slice(0, 8)) {
+            const yearNum = item.release_date ? parseInt(item.release_date.split('-')[0], 10) : undefined;
             results.push({
               title: item.title,
               original_title: item.original_title,
-              release_year: item.release_date ? parseInt(item.release_date.split('-')[0], 10) : undefined,
+              release_year: yearNum && !isNaN(yearNum) ? yearNum : undefined,
               type: 'Film',
               description: item.overview,
               poster: item.poster_path ? `${this.imageBaseUrl}/w500${item.poster_path}` : undefined,
@@ -43,16 +67,19 @@ export class TMDBProvider implements MetadataProvider {
       }
 
       if (!type || type === 'TV Series') {
-        const tvRes = await fetch(
-          `${this.baseUrl}/search/tv?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false`
-        );
+        const { url, headers } = this.getFetchConfig('/search/tv', {
+          query,
+          include_adult: 'false'
+        });
+        const tvRes = await fetch(url, { headers });
         if (tvRes.ok) {
           const data = await tvRes.json();
           for (const item of (data.results || []).slice(0, 8)) {
+            const yearNum = item.first_air_date ? parseInt(item.first_air_date.split('-')[0], 10) : undefined;
             results.push({
               title: item.name,
               original_title: item.original_name,
-              release_year: item.first_air_date ? parseInt(item.first_air_date.split('-')[0], 10) : undefined,
+              release_year: yearNum && !isNaN(yearNum) ? yearNum : undefined,
               type: 'TV Series',
               description: item.overview,
               poster: item.poster_path ? `${this.imageBaseUrl}/w500${item.poster_path}` : undefined,
@@ -65,6 +92,10 @@ export class TMDBProvider implements MetadataProvider {
       }
     } catch (err) {
       console.error('TMDB searchMedia failed:', err);
+      return this.getMockSearchResults(query, type);
+    }
+
+    if (results.length === 0) {
       return this.getMockSearchResults(query, type);
     }
 
@@ -89,11 +120,25 @@ export class TMDBProvider implements MetadataProvider {
       return this.getMockDetails(externalId, mediaType);
     }
 
+    // If tmdbId is not a raw numeric ID, search TMDB by query
+    if (!/^\d+$/.test(tmdbId)) {
+      const candidates = await this.searchMedia(externalId, mediaType === 'movie' ? 'Film' : 'TV Series');
+      if (candidates.length > 0 && candidates[0].external_id !== externalId) {
+        return this.getMediaDetails(candidates[0].external_id);
+      }
+      return this.getMockDetails(externalId, mediaType);
+    }
+
     try {
-      const res = await fetch(
-        `${this.baseUrl}/${mediaType}/${tmdbId}?api_key=${apiKey}&append_to_response=credits,images&include_image_language=en,null`
-      );
+      const { url, headers } = this.getFetchConfig(`/${mediaType}/${tmdbId}`, {
+        append_to_response: 'credits,images',
+        include_image_language: 'en,null'
+      });
+
+      const res = await fetch(url, { headers });
       if (!res.ok) {
+        // ID may be invalid/legacy seed ID -> Fall back to searching by title or returning candidate
+        console.warn(`TMDB API returned ${res.status} for ${mediaType}/${tmdbId}`);
         return this.getMockDetails(externalId, mediaType);
       }
 
@@ -123,13 +168,12 @@ export class TMDBProvider implements MetadataProvider {
       if (mediaType === 'tv' && data.seasons) {
         seasons = [];
         for (const s of data.seasons) {
-          if (s.season_number === 0 && (!s.episodes || s.episodes.length === 0)) continue; // skip specials if empty
+          if (s.season_number === 0 && (!s.episodes || s.episodes.length === 0)) continue;
 
           let seasonEpisodes: Episode[] = [];
           try {
-            const seasonRes = await fetch(
-              `${this.baseUrl}/tv/${tmdbId}/season/${s.season_number}?api_key=${apiKey}`
-            );
+            const seasonFetch = this.getFetchConfig(`/tv/${tmdbId}/season/${s.season_number}`);
+            const seasonRes = await fetch(seasonFetch.url, { headers: seasonFetch.headers });
             if (seasonRes.ok) {
               const seasonData = await seasonRes.json();
               seasonEpisodes = (seasonData.episodes || []).map((e: any) => ({
@@ -156,13 +200,17 @@ export class TMDBProvider implements MetadataProvider {
         }
       }
 
-      const releaseYear = mediaType === 'movie'
+      const rawYear = mediaType === 'movie'
         ? (data.release_date ? parseInt(data.release_date.split('-')[0], 10) : undefined)
         : (data.first_air_date ? parseInt(data.first_air_date.split('-')[0], 10) : undefined);
 
-      const runtime = mediaType === 'movie'
+      const releaseYear = rawYear && !isNaN(rawYear) ? rawYear : undefined;
+
+      const rawRuntime = mediaType === 'movie'
         ? data.runtime
         : (data.episode_run_time && data.episode_run_time.length > 0 ? data.episode_run_time[0] : undefined);
+
+      const runtime = rawRuntime && !isNaN(rawRuntime) ? rawRuntime : undefined;
 
       const publisher = mediaType === 'tv' && data.networks && data.networks.length > 0
         ? data.networks[0].name

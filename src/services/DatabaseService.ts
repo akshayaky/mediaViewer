@@ -57,6 +57,15 @@ export class DatabaseService {
     localStorage.setItem(DB_STORAGE_KEY, base64);
   }
 
+  private addColumnIfNotExists(table: string, column: string, type: string): void {
+    if (!this.db) return;
+    try {
+      this.db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
+    } catch {
+      // Column already exists in SQLite table schema
+    }
+  }
+
   private runMigrations(): void {
     if (!this.db) return;
 
@@ -167,6 +176,12 @@ export class DatabaseService {
         value TEXT NOT NULL
       );
     `);
+
+    // Migrations for pre-existing SQLite databases
+    this.addColumnIfNotExists('media', 'metadata_refreshed_at', 'TEXT');
+    this.addColumnIfNotExists('media', 'developer', 'TEXT');
+    this.addColumnIfNotExists('media', 'cast', 'TEXT');
+    this.addColumnIfNotExists('media', 'seasons', 'TEXT');
   }
 
   // --- REPOSITORY METHODS ---

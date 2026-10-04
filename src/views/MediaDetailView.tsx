@@ -106,21 +106,29 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       let freshDetails: Partial<Media> = {};
 
       if (currentMedia.type === 'VideoGame') {
-        if (!extId) {
+        if (!extId || (!extId.startsWith('igdb:') && !extId.startsWith('rawg:'))) {
           const searchRes = await igdbProvider.searchMedia(currentMedia.title, 'VideoGame');
           if (searchRes.length > 0) extId = searchRes[0].external_id;
         }
         if (extId) {
           freshDetails = await igdbProvider.getMediaDetails(extId);
+        } else {
+          freshDetails = await igdbProvider.getMediaDetails(currentMedia.title);
         }
       } else {
-        if (!extId) {
+        if (!extId || (!extId.startsWith('movie:') && !extId.startsWith('tv:'))) {
           const searchRes = await tmdbProvider.searchMedia(currentMedia.title, currentMedia.type);
           if (searchRes.length > 0) extId = searchRes[0].external_id;
         }
         if (extId) {
           freshDetails = await tmdbProvider.getMediaDetails(extId);
+        } else {
+          freshDetails = await tmdbProvider.getMediaDetails(currentMedia.title);
         }
+      }
+
+      if (!freshDetails || Object.keys(freshDetails).length === 0) {
+        throw new Error('No metadata returned from provider.');
       }
 
       const now = new Date().toISOString();
@@ -135,6 +143,23 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       dbService.saveMedia(updatedMedia);
       setCurrentMedia(updatedMedia);
 
+      if (updatedMedia.poster || updatedMedia.backdrop || updatedMedia.logo) {
+        artworkCacheProvider.setCachedArtwork(
+          currentMedia.id,
+          {
+            poster: updatedMedia.poster,
+            backdrop: updatedMedia.backdrop,
+            logo: updatedMedia.logo
+          },
+          'metadata_provider'
+        );
+        setArtwork({
+          poster: updatedMedia.poster,
+          backdrop: updatedMedia.backdrop,
+          logo: updatedMedia.logo
+        });
+      }
+
       if (extId && (!currentMedia.external_ids || currentMedia.external_ids.length === 0)) {
         dbService.saveExternalId({
           id: `ext_${Date.now()}`,
@@ -146,9 +171,9 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
       setRefreshMessage('Metadata & artwork successfully refreshed from provider!');
       setTimeout(() => setRefreshMessage(''), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to refresh metadata:', err);
-      setRefreshMessage('Failed to refresh metadata.');
+      setRefreshMessage(`Failed to refresh metadata: ${err?.message || 'Check title or API key'}`);
     } finally {
       setIsRefreshingMetadata(false);
     }
