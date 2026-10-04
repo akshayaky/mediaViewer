@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Home,
   Film,
@@ -20,7 +20,16 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
-  const unmatchedCount = dbService.getUnmatchedLocalFiles().length;
+  const [unmatchedCount, setUnmatchedCount] = useState<number>(dbService.getUnmatchedLocalFiles().length);
+
+  useEffect(() => {
+    const handleLibraryUpdate = () => {
+      setUnmatchedCount(dbService.getUnmatchedLocalFiles().length);
+    };
+
+    window.addEventListener('library-scanned', handleLibraryUpdate);
+    return () => window.removeEventListener('library-scanned', handleLibraryUpdate);
+  }, []);
 
   const navItems = [
     { id: 'home' as NavTab, label: 'Home', icon: Home },
@@ -56,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
               <button
                 key={item.id}
                 onClick={() => onSelectTab(item.id)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
                   isActive
                     ? 'bg-rose-600/15 text-rose-400 border-l-4 border-rose-500 font-semibold shadow-sm'
                     : 'text-gray-400 hover:text-gray-200 hover:bg-[#181a24]'

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { dbService } from '../services/DatabaseService';
 import { notionService } from '../services/NotionIntegrationService';
 import { localScannerService, ScanResult } from '../services/LocalScannerService';
@@ -24,8 +24,8 @@ export const SettingsView: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(dbService.getSettings());
 
   // Input states
-  const [moviesFolder, setMoviesFolder] = useState(settings.movies_folder || 'D:\\Movies');
-  const [tvFolder, setTvFolder] = useState(settings.tv_folder || 'D:\\TV');
+  const [moviesFolder, setMoviesFolder] = useState(settings.movies_folder || 'C:\\Media\\Movies');
+  const [tvFolder, setTvFolder] = useState(settings.tv_folder || 'C:\\Media\\TV Shows');
   const [gamesFolder, setGamesFolder] = useState(settings.games_folder || 'D:\\Games');
   const [region, setRegion] = useState(settings.country_region || 'United States');
   const [tmdbKey, setTmdbKey] = useState(settings.tmdb_api_key || '');
@@ -33,6 +33,11 @@ export const SettingsView: React.FC = () => {
   const [notionToken, setNotionToken] = useState(settings.notion_integration_token || '');
 
   const [savedMessage, setSavedMessage] = useState('');
+
+  // Folder Directory Input Refs
+  const moviesFolderInputRef = useRef<HTMLInputElement>(null);
+  const tvFolderInputRef = useRef<HTMLInputElement>(null);
+  const gamesFolderInputRef = useRef<HTMLInputElement>(null);
 
   // Local Directory Scanner state
   const [scanningType, setScanningType] = useState<MediaType | null>(null);
@@ -68,7 +73,10 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setSavedMessage(''), 3000);
   };
 
-  const handleScanDirectory = async (folderPath: string, mediaType: MediaType) => {
+  const handleScanDirectory = async (e: React.MouseEvent, folderPath: string, mediaType: MediaType) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     if (!folderPath.trim()) return;
 
     setScanningType(mediaType);
@@ -76,7 +84,6 @@ export const SettingsView: React.FC = () => {
     setScanResult(null);
 
     try {
-      // Simulate real progress step for responsiveness feedback
       const result = await localScannerService.scanFolder(
         folderPath,
         mediaType,
@@ -84,11 +91,14 @@ export const SettingsView: React.FC = () => {
         (count) => setScanProgressCount(count)
       );
 
-      // Brief delay to ensure smooth loading UI transitions
       await new Promise(res => setTimeout(res, 500));
 
       setScanResult({ type: mediaType, result });
       setSavedMessage(`Scanned ${mediaType} folder: ${result.totalScanned} files processed.`);
+
+      // Dispatch custom event so App and Sidebar update Unmatched Inbox badge immediately
+      window.dispatchEvent(new CustomEvent('library-scanned'));
+
       setTimeout(() => setSavedMessage(''), 4000);
     } catch (err: any) {
       console.error('Directory scan error:', err);
@@ -107,37 +117,45 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setSavedMessage(''), 3000);
   };
 
-  const handleFolderSelect = async (key: 'movies' | 'tv' | 'games') => {
-    try {
-      // Attempt to dynamically load @tauri-apps/plugin-dialog
-      const dialog = await import('@tauri-apps/plugin-dialog');
-      const selected = await dialog.open({
-        directory: true,
-        multiple: false,
-        title: `Select ${key.toUpperCase()} Library Directory`
-      });
+  const handleFolderBrowseClick = (e: React.MouseEvent, key: 'movies' | 'tv' | 'games') => {
+    e.preventDefault();
+    e.stopPropagation();
 
-      if (selected && typeof selected === 'string') {
-        if (key === 'movies') setMoviesFolder(selected);
-        if (key === 'tv') setTvFolder(selected);
-        if (key === 'games') setGamesFolder(selected);
-        return;
-      }
-    } catch (e) {
-      console.warn('Native dialog plugin not available in web context, using prompt:', e);
+    if (key === 'movies' && moviesFolderInputRef.current) {
+      moviesFolderInputRef.current.click();
+    } else if (key === 'tv' && tvFolderInputRef.current) {
+      tvFolderInputRef.current.click();
+    } else if (key === 'games' && gamesFolderInputRef.current) {
+      gamesFolderInputRef.current.click();
     }
+  };
 
-    // Web/fallback context
-    const defaultPaths = {
-      movies: moviesFolder || 'D:\\Movies',
-      tv: tvFolder || 'D:\\TV',
-      games: gamesFolder || 'D:\\Games'
-    };
-    const path = prompt(`Enter path for ${key} folder:`, defaultPaths[key]);
-    if (path) {
-      if (key === 'movies') setMoviesFolder(path);
-      if (key === 'tv') setTvFolder(path);
-      if (key === 'games') setGamesFolder(path);
+  const handleHTMLFolderSelect = (e: React.ChangeEvent<HTMLInputElement>, key: 'movies' | 'tv' | 'games') => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const firstFile = files[0];
+      let folderPath = '';
+      if ('path' in firstFile && (firstFile as any).path) {
+        const fullPath = (firstFile as any).path as string;
+        const relativePath = firstFile.webkitRelativePath || '';
+        folderPath = fullPath.substring(0, fullPath.indexOf(relativePath.replace(/\//g, '\\')));
+        if (!folderPath) folderPath = fullPath.substring(0, fullPath.lastIndexOf('\\'));
+      } else if (firstFile.webkitRelativePath) {
+        const folderName = firstFile.webkitRelativePath.split('/')[0];
+        folderPath = `C:\\Media\\${folderName}`;
+      }
+
+      if (!folderPath) {
+        folderPath = key === 'movies' ? 'C:\\Media\\Movies' : key === 'tv' ? 'C:\\Media\\TV Shows' : 'D:\\Games';
+      }
+
+      if (key === 'movies') setMoviesFolder(folderPath);
+      if (key === 'tv') setTvFolder(folderPath);
+      if (key === 'games') setGamesFolder(folderPath);
+
+      dbService.saveSetting(`${key}_folder`, folderPath);
+      setSavedMessage(`Updated ${key} folder path.`);
+      setTimeout(() => setSavedMessage(''), 3000);
     }
   };
 
@@ -181,6 +199,7 @@ export const SettingsView: React.FC = () => {
     try {
       const result = await notionService.importFromRows(csvRows, mapping);
       setImportResult(result);
+      window.dispatchEvent(new CustomEvent('library-scanned'));
     } catch (err: any) {
       setImportResult({
         totalRows: csvRows.length,
@@ -196,6 +215,29 @@ export const SettingsView: React.FC = () => {
 
   return (
     <div className="p-8 space-y-8 max-w-5xl mx-auto">
+      {/* Hidden Folder Directory Inputs */}
+      <input
+        type="file"
+        ref={moviesFolderInputRef}
+        onChange={(e) => handleHTMLFolderSelect(e, 'movies')}
+        style={{ display: 'none' }}
+        {...({ webkitdirectory: '', directory: '' } as any)}
+      />
+      <input
+        type="file"
+        ref={tvFolderInputRef}
+        onChange={(e) => handleHTMLFolderSelect(e, 'tv')}
+        style={{ display: 'none' }}
+        {...({ webkitdirectory: '', directory: '' } as any)}
+      />
+      <input
+        type="file"
+        ref={gamesFolderInputRef}
+        onChange={(e) => handleHTMLFolderSelect(e, 'games')}
+        style={{ display: 'none' }}
+        {...({ webkitdirectory: '', directory: '' } as any)}
+      />
+
       {/* Header */}
       <div className="border-b border-[#1f222e] pb-6 flex items-center justify-between">
         <div>
@@ -237,13 +279,13 @@ export const SettingsView: React.FC = () => {
                     type="text"
                     value={moviesFolder}
                     onChange={e => setMoviesFolder(e.target.value)}
-                    placeholder="D:\Movies"
+                    placeholder="C:\Media\Movies"
                     className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100 font-mono"
                   />
                   <button
                     type="button"
-                    onClick={() => handleFolderSelect('movies')}
-                    className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#3b4059] transition-all whitespace-nowrap"
+                    onClick={(e) => handleFolderBrowseClick(e, 'movies')}
+                    className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#3b4059] transition-all whitespace-nowrap cursor-pointer"
                   >
                     Browse
                   </button>
@@ -252,9 +294,9 @@ export const SettingsView: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => handleScanDirectory(moviesFolder, 'Film')}
+                onClick={(e) => handleScanDirectory(e, moviesFolder, 'Film')}
                 disabled={scanningType !== null}
-                className="w-full bg-rose-600/90 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4"
+                className="w-full bg-rose-600/90 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4 cursor-pointer"
               >
                 {scanningType === 'Film' ? (
                   <>
@@ -279,13 +321,13 @@ export const SettingsView: React.FC = () => {
                     type="text"
                     value={tvFolder}
                     onChange={e => setTvFolder(e.target.value)}
-                    placeholder="D:\TV"
+                    placeholder="C:\Media\TV Shows"
                     className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100 font-mono"
                   />
                   <button
                     type="button"
-                    onClick={() => handleFolderSelect('tv')}
-                    className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#3b4059] transition-all whitespace-nowrap"
+                    onClick={(e) => handleFolderBrowseClick(e, 'tv')}
+                    className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#3b4059] transition-all whitespace-nowrap cursor-pointer"
                   >
                     Browse
                   </button>
@@ -294,9 +336,9 @@ export const SettingsView: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => handleScanDirectory(tvFolder, 'TV Series')}
+                onClick={(e) => handleScanDirectory(e, tvFolder, 'TV Series')}
                 disabled={scanningType !== null}
-                className="w-full bg-sky-600/90 hover:bg-sky-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4"
+                className="w-full bg-sky-600/90 hover:bg-sky-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4 cursor-pointer"
               >
                 {scanningType === 'TV Series' ? (
                   <>
@@ -326,8 +368,8 @@ export const SettingsView: React.FC = () => {
                   />
                   <button
                     type="button"
-                    onClick={() => handleFolderSelect('games')}
-                    className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#3b4059] transition-all whitespace-nowrap"
+                    onClick={(e) => handleFolderBrowseClick(e, 'games')}
+                    className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#3b4059] transition-all whitespace-nowrap cursor-pointer"
                   >
                     Browse
                   </button>
@@ -336,9 +378,9 @@ export const SettingsView: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => handleScanDirectory(gamesFolder, 'VideoGame')}
+                onClick={(e) => handleScanDirectory(e, gamesFolder, 'VideoGame')}
                 disabled={scanningType !== null}
-                className="w-full bg-purple-600/90 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4"
+                className="w-full bg-purple-600/90 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4 cursor-pointer"
               >
                 {scanningType === 'VideoGame' ? (
                   <>
@@ -358,7 +400,7 @@ export const SettingsView: React.FC = () => {
           <div className="flex justify-end pt-1">
             <button
               type="submit"
-              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all"
+              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
             >
               Save Folder Settings
             </button>
@@ -552,7 +594,7 @@ export const SettingsView: React.FC = () => {
                   type="button"
                   onClick={handleRunNotionImport}
                   disabled={isImporting}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center space-x-2"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center space-x-2 cursor-pointer"
                 >
                   <Database className="w-4 h-4" />
                   <span>{isImporting ? 'Importing Rows...' : 'Execute Notion Import'}</span>
@@ -652,7 +694,7 @@ export const SettingsView: React.FC = () => {
           <div className="flex justify-end">
             <button
               type="submit"
-              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all"
+              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
             >
               Save API Settings
             </button>
