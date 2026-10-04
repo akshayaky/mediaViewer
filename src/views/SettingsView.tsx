@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbService } from '../services/DatabaseService';
 import { notionService } from '../services/NotionIntegrationService';
-import { localScannerService, ScanResult } from '../services/LocalScannerService';
+import { localScannerService, ScanResult, isTauri } from '../services/LocalScannerService';
+import { invoke } from '@tauri-apps/api/core';
 import { AppSettings, MediaType } from '../types/media';
 import { NotionColumnMapping, NotionImportResult } from '../providers/interfaces';
 import Papa from 'papaparse';
@@ -117,45 +118,103 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setSavedMessage(''), 3000);
   };
 
-  const handleFolderBrowseClick = (e: React.MouseEvent, key: 'movies' | 'tv' | 'games') => {
+  const handleFolderBrowseClick = async (e: React.MouseEvent, key: 'movies' | 'tv' | 'games') => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (key === 'movies' && moviesFolderInputRef.current) {
-      moviesFolderInputRef.current.click();
-    } else if (key === 'tv' && tvFolderInputRef.current) {
-      tvFolderInputRef.current.click();
-    } else if (key === 'games' && gamesFolderInputRef.current) {
-      gamesFolderInputRef.current.click();
+    const mediaType: MediaType = key === 'movies' ? 'Film' : key === 'tv' ? 'TV Series' : 'VideoGame';
+
+    if (isTauri()) {
+      try {
+        const selected = await invoke<string | null>('select_folder');
+        if (selected) {
+          if (key === 'movies') setMoviesFolder(selected);
+          if (key === 'tv') setTvFolder(selected);
+          if (key === 'games') setGamesFolder(selected);
+
+          dbService.saveSetting(`${key}_folder`, selected);
+          setSavedMessage(`Updated ${key} folder path: ${selected}`);
+          setTimeout(() => setSavedMessage(''), 3000);
+        }
+      } catch (err) {
+        console.error('Failed to open native folder picker in Tauri:', err);
+      }
+    } else {
+      // Web Mode: Try showDirectoryPicker or fallback to hidden file input
+      if ('showDirectoryPicker' in window) {
+        try {
+          const dirHandle = await (window as any).showDirectoryPicker();
+          if (dirHandle) {
+            const files: File[] = [];
+
+            const collectFiles = async (handle: any) => {
+              for await (const entry of handle.values()) {
+                if (entry.kind === 'file') {
+                  const file = await entry.getFile();
+                  files.push(file);
+                } else if (entry.kind === 'directory') {
+                  await collectFiles(entry);
+                }
+              }
+            };
+
+            await collectFiles(dirHandle);
+
+            localScannerService.setWebSelectedFiles(mediaType, files);
+
+            const displayPath = `C:\\Media\\${dirHandle.name}`;
+            if (key === 'movies') setMoviesFolder(displayPath);
+            if (key === 'tv') setTvFolder(displayPath);
+            if (key === 'games') setGamesFolder(displayPath);
+
+            dbService.saveSetting(`${key}_folder`, displayPath);
+            setSavedMessage(`Selected web directory "${dirHandle.name}" containing ${files.length} files.`);
+            setTimeout(() => setSavedMessage(''), 4000);
+            return;
+          }
+        } catch (err: any) {
+          if (err.name !== 'AbortError') {
+            console.warn('showDirectoryPicker error, falling back to file input:', err);
+          } else {
+            return; // User cancelled directory picker
+          }
+        }
+      }
+
+      // Fallback HTML directory input
+      if (key === 'movies' && moviesFolderInputRef.current) {
+        moviesFolderInputRef.current.click();
+      } else if (key === 'tv' && tvFolderInputRef.current) {
+        tvFolderInputRef.current.click();
+      } else if (key === 'games' && gamesFolderInputRef.current) {
+        gamesFolderInputRef.current.click();
+      }
     }
   };
 
   const handleHTMLFolderSelect = (e: React.ChangeEvent<HTMLInputElement>, key: 'movies' | 'tv' | 'games') => {
     const files = e.target.files;
+    const mediaType: MediaType = key === 'movies' ? 'Film' : key === 'tv' ? 'TV Series' : 'VideoGame';
+
     if (files && files.length > 0) {
+      const fileArray = Array.from(files);
+      localScannerService.setWebSelectedFiles(mediaType, fileArray);
+
       const firstFile = files[0];
-      let folderPath = '';
-      if ('path' in firstFile && (firstFile as any).path) {
-        const fullPath = (firstFile as any).path as string;
-        const relativePath = firstFile.webkitRelativePath || '';
-        folderPath = fullPath.substring(0, fullPath.indexOf(relativePath.replace(/\//g, '\\')));
-        if (!folderPath) folderPath = fullPath.substring(0, fullPath.lastIndexOf('\\'));
-      } else if (firstFile.webkitRelativePath) {
-        const folderName = firstFile.webkitRelativePath.split('/')[0];
-        folderPath = `C:\\Media\\${folderName}`;
+      let folderName = 'Selected Folder';
+      if (firstFile.webkitRelativePath) {
+        folderName = firstFile.webkitRelativePath.split('/')[0];
       }
 
-      if (!folderPath) {
-        folderPath = key === 'movies' ? 'C:\\Media\\Movies' : key === 'tv' ? 'C:\\Media\\TV Shows' : 'D:\\Games';
-      }
+      const folderPath = `C:\\Media\\${folderName}`;
 
       if (key === 'movies') setMoviesFolder(folderPath);
       if (key === 'tv') setTvFolder(folderPath);
       if (key === 'games') setGamesFolder(folderPath);
 
       dbService.saveSetting(`${key}_folder`, folderPath);
-      setSavedMessage(`Updated ${key} folder path.`);
-      setTimeout(() => setSavedMessage(''), 3000);
+      setSavedMessage(`Loaded ${fileArray.length} files from folder "${folderName}".`);
+      setTimeout(() => setSavedMessage(''), 4000);
     }
   };
 

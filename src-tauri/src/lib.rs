@@ -7,6 +7,12 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
+fn select_folder() -> Option<String> {
+    let folder = rfd::FileDialog::new().pick_folder();
+    folder.map(|p| p.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 fn scan_directory(folder_path: String, extensions: Vec<String>) -> Vec<String> {
     let mut results = Vec::new();
     let ext_set: Vec<String> = extensions.iter().map(|e| e.to_lowercase()).collect();
@@ -38,6 +44,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet,
+            select_folder,
             scan_directory
         ])
         .run(tauri::generate_context!())

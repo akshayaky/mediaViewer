@@ -2,6 +2,10 @@ import { LocalFile, MediaType, Media } from '../types/media';
 import { dbService } from './DatabaseService';
 import { invoke } from '@tauri-apps/api/core';
 
+export const isTauri = (): boolean => {
+  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+};
+
 export interface ParsedFileInfo {
   cleanTitle: string;
   year?: number;
@@ -19,6 +23,20 @@ export interface ScanResult {
 }
 
 export class LocalScannerService {
+  private webFilesMap: Map<MediaType, File[]> = new Map();
+
+  public setWebSelectedFiles(mediaType: MediaType, files: File[]) {
+    this.webFilesMap.set(mediaType, files);
+  }
+
+  public getWebSelectedFiles(mediaType: MediaType): File[] | undefined {
+    return this.webFilesMap.get(mediaType);
+  }
+
+  public clearWebSelectedFiles(mediaType: MediaType) {
+    this.webFilesMap.delete(mediaType);
+  }
+
   /**
    * Extracts clean title, year, season, and episode from file paths.
    */
@@ -103,31 +121,66 @@ export class LocalScannerService {
       fileMapByPath.set(lf.path.toLowerCase(), lf);
     }
 
-    let discoveredPaths: string[] = [];
+    let discoveredItems: Array<{ path: string; filename: string; size: number }> = [];
 
     if (samplePathsOverride) {
-      discoveredPaths = samplePathsOverride;
-    } else {
-      // Target extensions based on media type
-      let targetExtensions = ['mkv', 'mp4', 'avi', 'mov', 'm4v'];
+      discoveredItems = samplePathsOverride.map(p => ({
+        path: p,
+        filename: p.split(/\\|\//).pop() || p,
+        size: 1500000000
+      }));
+    } else if (isTauri()) {
+      let targetExtensions = ['mkv', 'mp4', 'avi', 'mov', 'm4v', 'webm', 'ts', 'm2ts', 'flv'];
       if (mediaType === 'VideoGame') {
-        targetExtensions = ['exe', 'lnk'];
+        targetExtensions = ['exe', 'lnk', 'iso', 'bin'];
       }
 
       try {
-        discoveredPaths = await invoke<string[]>('scan_directory', {
+        const paths = await invoke<string[]>('scan_directory', {
           folderPath,
           extensions: targetExtensions
         });
+        discoveredItems = paths.map(p => ({
+          path: p,
+          filename: p.split(/\\|\//).pop() || p,
+          size: 1500000000
+        }));
       } catch (e) {
-        console.warn('Native scan_directory command not available, utilizing fallback file discovery:', e);
-        discoveredPaths = this.getDiscoveredPathsForFolder(folderPath, mediaType);
+        console.error('Tauri scan_directory failed:', e);
       }
-    }
+    } else {
+      // Web Mode scanning
+      const selectedFiles = this.webFilesMap.get(mediaType);
+      if (selectedFiles && selectedFiles.length > 0) {
+        let targetExtensions = ['mkv', 'mp4', 'avi', 'mov', 'm4v', 'webm', 'ts', 'flv'];
+        if (mediaType === 'VideoGame') {
+          targetExtensions = ['exe', 'lnk', 'iso', 'bin', 'html', 'zip'];
+        }
 
-    // If native scan returned empty for demo folder, provide initial realistic items
-    if (discoveredPaths.length === 0) {
-      discoveredPaths = this.getDiscoveredPathsForFolder(folderPath, mediaType);
+        const validFiles = selectedFiles.filter(f => {
+          const ext = (f.name.split('.').pop() || '').toLowerCase();
+          return targetExtensions.includes(ext) || mediaType === 'VideoGame' || selectedFiles.length < 10;
+        });
+
+        discoveredItems = validFiles.map(f => {
+          const relPath = f.webkitRelativePath || f.name;
+          const cleanFolderPath = folderPath ? folderPath.replace(/[\\\/]+$/, '') : 'C:\\Media';
+          const fullPath = `${cleanFolderPath}\\${relPath.replace(/\//g, '\\')}`;
+          return {
+            path: fullPath,
+            filename: f.name,
+            size: f.size
+          };
+        });
+      } else {
+        // Web mode default sample paths if no real files selected yet
+        const samplePaths = this.getDiscoveredPathsForFolder(folderPath, mediaType);
+        discoveredItems = samplePaths.map(p => ({
+          path: p,
+          filename: p.split(/\\|\//).pop() || p,
+          size: 1500000000
+        }));
+      }
     }
 
     const now = new Date().toISOString();
@@ -137,18 +190,17 @@ export class LocalScannerService {
 
     const currentDiscoveredSet = new Set<string>();
 
-    for (let i = 0; i < discoveredPaths.length; i++) {
-      const rawPath = discoveredPaths[i];
-      const pathLower = rawPath.toLowerCase();
+    for (let i = 0; i < discoveredItems.length; i++) {
+      const item = discoveredItems[i];
+      const pathLower = item.path.toLowerCase();
       currentDiscoveredSet.add(pathLower);
 
       if (onProgress) {
         onProgress(i + 1);
       }
 
-      const parsed = this.parseFilePath(rawPath, mediaType);
-      const filename = rawPath.split(/\\|\//).pop() || rawPath;
-      const ext = filename.split('.').pop() || '';
+      const parsed = this.parseFilePath(item.path, mediaType);
+      const ext = item.filename.split('.').pop() || '';
 
       const matchedMedia = this.findHighConfidenceMatch(parsed, mediaType, existingMedia);
       let localFileRecord = fileMapByPath.get(pathLower);
@@ -167,15 +219,15 @@ export class LocalScannerService {
         localFileRecord = {
           id: newId,
           media_id: matchedMedia ? matchedMedia.id : undefined,
-          path: rawPath,
-          filename,
+          path: item.path,
+          filename: item.filename,
           extension: ext,
-          size: 1500000000,
+          size: item.size,
           discovered_at: now,
           last_seen_at: now,
           exists: true,
           file_type: parsed.fileType,
-          launch_info: rawPath,
+          launch_info: item.path,
           parsed_title: parsed.cleanTitle,
           parsed_year: parsed.year,
           season: parsed.season,
@@ -207,7 +259,7 @@ export class LocalScannerService {
     }
 
     return {
-      totalScanned: discoveredPaths.length,
+      totalScanned: discoveredItems.length,
       autoMatchedCount,
       unmatchedCount,
       missingMarkedCount,
