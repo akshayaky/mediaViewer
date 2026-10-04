@@ -1,0 +1,120 @@
+export type MediaType = 'Film' | 'TV Series' | 'VideoGame';
+
+export type MediaStatus = 'Finished' | 'Currently' | 'Abandoned' | 'Planned' | 'Paused';
+
+export interface ExternalID {
+  id: string;
+  media_id: string;
+  provider: 'TMDB' | 'IGDB' | 'Steam' | 'Notion' | string;
+  external_id: string;
+}
+
+export interface Media {
+  id: string;
+  type: MediaType;
+  title: string;
+  original_title?: string;
+  release_year?: number;
+  language?: string;
+  description?: string;
+  genres: string[];
+  runtime?: number;
+  poster?: string;
+  backdrop?: string;
+  logo?: string;
+  metadata_source?: string;
+  publisher?: string;
+  created_at: string;
+  updated_at: string;
+  external_ids?: ExternalID[];
+}
+
+export interface MediaHistory {
+  id: string;
+  media_id: string;
+  started_at?: string;
+  completed_at?: string;
+  status: MediaStatus;
+  score?: number; // 1-5 scale or star rating
+  thoughts?: string;
+  context?: string; // "2+ Rewatch", "restart", "theater", "resync", "Season 1-2 rewatch"
+  source: string; // 'Notion' | 'Manual' | 'Import'
+  original_source_record_id?: string;
+  created_at: string;
+}
+
+export interface MediaState {
+  media_id: string;
+  current_status: MediaStatus;
+  last_watched_played?: string;
+  total_watch_play_count: number;
+  rewatch_count: number;
+  abandoned_count: number;
+  currently_watching_playing: boolean;
+  first_watched_played?: string;
+  most_recent_completion?: string;
+}
+
+export interface LocalFile {
+  id: string;
+  media_id: string;
+  path: string;
+  filename: string;
+  extension: string;
+  size: number;
+  discovered_at: string;
+  last_seen_at: string;
+  exists: boolean;
+  file_type: 'movie' | 'tv_episode' | 'game_executable' | 'other';
+  launch_info?: string;
+}
+
+export interface Availability {
+  id: string;
+  media_id: string;
+  provider: string; // e.g. 'Netflix', 'Steam', 'Xbox Game Pass'
+  country?: string;
+  availability_type: 'Stream' | 'Buy' | 'Rent' | 'Local' | 'Subscription';
+  url?: string;
+  last_checked: string;
+}
+
+export interface Wishlist {
+  id: string;
+  media_id?: string; // link to canonical Media when matched
+  title: string;
+  type: MediaType;
+  source: 'Google' | 'Notion' | 'Manual' | string;
+  external_url?: string;
+  notes?: string;
+  added_at: string;
+  target_release_date?: string;
+  poster?: string;
+}
+
+export interface NotionRawRecord {
+  id: string;
+  name_raw: string;
+  type_raw: string;
+  watched_on_raw?: string;
+  score_raw?: string;
+  status_raw?: string;
+  language_raw?: string;
+  thoughts_raw?: string;
+  publisher_raw?: string;
+  imported_at: string;
+  parsed_media_id?: string;
+  parsed_history_id?: string;
+}
+
+export interface AppSettings {
+  movies_folder?: string;
+  tv_folder?: string;
+  games_folder?: string;
+  country_region?: string;
+  tmdb_api_key?: string;
+  igdb_api_key?: string;
+  notion_integration_token?: string;
+  notion_database_id?: string;
+  streaming_preferences?: string[];
+}
