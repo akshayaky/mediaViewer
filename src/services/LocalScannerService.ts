@@ -105,7 +105,7 @@ export class LocalScannerService {
 
   /**
    * Scans a configured folder for media files.
-   * Leverages Rust Tauri scan_directory command if available, or falls back to demo paths.
+   * Leverages Rust Tauri scan_directory command when running in the desktop app.
    */
   public async scanFolder(
     folderPath: string,
@@ -135,35 +135,15 @@ export class LocalScannerService {
         targetExtensions = ['exe', 'lnk', 'iso', 'bin'];
       }
 
-      try {
-        const paths = await invoke<string[]>('scan_directory', {
-          folderPath,
-          extensions: targetExtensions
-        });
-        if (paths && paths.length > 0) {
-          discoveredItems = paths.map(p => ({
-            path: p,
-            filename: p.split(/\\|\//).pop() || p,
-            size: 1500000000
-          }));
-        } else {
-          // Fallback to demo sample paths if path doesn't exist or contains no matching media files
-          const samplePaths = this.getDiscoveredPathsForFolder(folderPath, mediaType);
-          discoveredItems = samplePaths.map(p => ({
-            path: p,
-            filename: p.split(/\\|\//).pop() || p,
-            size: 1500000000
-          }));
-        }
-      } catch (e) {
-        console.error('Tauri scan_directory failed:', e);
-        const samplePaths = this.getDiscoveredPathsForFolder(folderPath, mediaType);
-        discoveredItems = samplePaths.map(p => ({
-          path: p,
-          filename: p.split(/\\|\//).pop() || p,
-          size: 1500000000
-        }));
-      }
+      const paths = await invoke<string[]>('scan_directory', {
+        folderPath,
+        extensions: targetExtensions
+      });
+      discoveredItems = paths.map(p => ({
+        path: p,
+        filename: p.split(/\\|\//).pop() || p,
+        size: 1500000000
+      }));
     } else {
       // Web Mode scanning
       const selectedFiles = this.webFilesMap.get(mediaType);

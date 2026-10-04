@@ -44,6 +44,7 @@ export const SettingsView: React.FC = () => {
   const [scanningType, setScanningType] = useState<MediaType | null>(null);
   const [scanProgressCount, setScanProgressCount] = useState<number>(0);
   const [scanResult, setScanResult] = useState<{ type: MediaType; result: ScanResult } | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   // Notion CSV Import Wizard state
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
@@ -78,11 +79,16 @@ export const SettingsView: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!folderPath.trim()) return;
+    if (!folderPath.trim()) {
+      setScanError('Enter a folder path before scanning.');
+      return;
+    }
 
     setScanningType(mediaType);
     setScanProgressCount(0);
     setScanResult(null);
+    setScanError(null);
+    setSavedMessage('');
 
     try {
       const result = await localScannerService.scanFolder(
@@ -101,8 +107,9 @@ export const SettingsView: React.FC = () => {
       window.dispatchEvent(new CustomEvent('library-scanned'));
 
       setTimeout(() => setSavedMessage(''), 4000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Directory scan error:', err);
+      setScanError(err instanceof Error ? err.message : String(err));
     } finally {
       setScanningType(null);
     }
@@ -489,6 +496,15 @@ export const SettingsView: React.FC = () => {
             <p className="text-gray-300">
               Scanned & Processed <strong className="text-white">{scanResult.result.totalScanned}</strong> files → Auto-matched & linked <strong className="text-emerald-400">{scanResult.result.autoMatchedCount}</strong> items directly to Media entities. Routed <strong className="text-amber-400">{scanResult.result.unmatchedCount}</strong> unknown/ambiguous files to Unmatched Inbox. Updated <strong className="text-gray-400">{scanResult.result.missingMarkedCount}</strong> offline files.
             </p>
+          </div>
+        )}
+        {scanError && !scanningType && (
+          <div role="alert" className="bg-[#2a1719] border border-rose-500/40 p-4 rounded-xl text-xs flex items-start space-x-2">
+            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+            <div>
+              <h4 className="font-bold text-rose-300">Library Scan Failed</h4>
+              <p className="text-gray-300 mt-0.5">{scanError}</p>
+            </div>
           </div>
         )}
       </section>
