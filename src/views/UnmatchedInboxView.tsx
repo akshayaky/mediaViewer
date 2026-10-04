@@ -17,6 +17,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
 
   const refreshFiles = () => {
     setUnmatchedFiles(dbService.getUnmatchedLocalFiles());
+    window.dispatchEvent(new CustomEvent('library-scanned'));
     if (onMediaMatched) onMediaMatched();
   };
 
