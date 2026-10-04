@@ -237,7 +237,11 @@ export class LocalScannerService {
         }
       }
 
-      dbService.saveLocalFile(localFileRecord);
+      try {
+        dbService.saveLocalFile(localFileRecord);
+      } catch (err) {
+        console.error('Failed to save local file record during scan:', err);
+      }
       discoveredFiles.push(localFileRecord);
     }
 

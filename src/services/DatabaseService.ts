@@ -511,13 +511,14 @@ export class DatabaseService {
       `INSERT INTO local_file (id, media_id, path, filename, extension, size, discovered_at, last_seen_at, file_exists, file_type, launch_info)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
+         media_id=excluded.media_id,
          path=excluded.path,
          last_seen_at=excluded.last_seen_at,
          file_exists=excluded.file_exists,
          launch_info=excluded.launch_info`,
       [
         file.id,
-        file.media_id || null,
+        file.media_id || '',
         file.path,
         file.filename,
         file.extension,
