@@ -57,7 +57,7 @@ export interface MediaState {
 
 export interface LocalFile {
   id: string;
-  media_id: string;
+  media_id?: string; // Optional until matched
   path: string;
   filename: string;
   extension: string;
@@ -67,6 +67,10 @@ export interface LocalFile {
   exists: boolean;
   file_type: 'movie' | 'tv_episode' | 'game_executable' | 'other';
   launch_info?: string;
+  parsed_title?: string;
+  parsed_year?: number;
+  season?: number;
+  episode?: number;
 }
 
 export interface Availability {

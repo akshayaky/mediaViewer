@@ -7,10 +7,12 @@ import {
   Heart,
   History,
   Settings,
-  Tv2
+  Tv2,
+  Inbox
 } from 'lucide-react';
+import { dbService } from '../services/DatabaseService';
 
-export type NavTab = 'home' | 'movies' | 'tv' | 'games' | 'wishlist' | 'history' | 'settings';
+export type NavTab = 'home' | 'movies' | 'tv' | 'games' | 'wishlist' | 'history' | 'inbox' | 'settings';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -18,6 +20,8 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
+  const unmatchedCount = dbService.getUnmatchedLocalFiles().length;
+
   const navItems = [
     { id: 'home' as NavTab, label: 'Home', icon: Home },
     { id: 'movies' as NavTab, label: 'Movies', icon: Film },
@@ -25,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
     { id: 'games' as NavTab, label: 'Games', icon: Gamepad2 },
     { id: 'wishlist' as NavTab, label: 'Wishlist', icon: Heart },
     { id: 'history' as NavTab, label: 'History', icon: History },
+    { id: 'inbox' as NavTab, label: 'Unmatched Inbox', icon: Inbox, badge: unmatchedCount },
     { id: 'settings' as NavTab, label: 'Settings', icon: Settings }
   ];
 
@@ -51,14 +56,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
               <button
                 key={item.id}
                 onClick={() => onSelectTab(item.id)}
-                className={`w-full flex items-center space-x-3.5 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                   isActive
                     ? 'bg-rose-600/15 text-rose-400 border-l-4 border-rose-500 font-semibold shadow-sm'
                     : 'text-gray-400 hover:text-gray-200 hover:bg-[#181a24]'
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'text-rose-500' : 'text-gray-400'}`} />
-                <span>{item.label}</span>
+                <div className="flex items-center space-x-3.5">
+                  <Icon className={`w-5 h-5 ${isActive ? 'text-rose-500' : 'text-gray-400'}`} />
+                  <span>{item.label}</span>
+                </div>
+
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className="bg-rose-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                    {item.badge}
+                  </span>
+                )}
               </button>
             );
           })}

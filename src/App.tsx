@@ -6,6 +6,7 @@ import { MediaDetailView } from './views/MediaDetailView';
 import { WishlistView } from './views/WishlistView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
+import { UnmatchedInboxView } from './views/UnmatchedInboxView';
 import { dbService } from './services/DatabaseService';
 import { seedDatabaseIfEmpty } from './services/seedData';
 import { Media } from './types/media';
@@ -94,6 +95,8 @@ export function App() {
         return <WishlistView />;
       case 'history':
         return <HistoryView onSelectMedia={handleSelectMedia} />;
+      case 'inbox':
+        return <UnmatchedInboxView onMediaMatched={() => {}} />;
       case 'settings':
         return <SettingsView />;
       default:

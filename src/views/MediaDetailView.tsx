@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Media } from '../types/media';
+import { Media, LocalFile } from '../types/media';
 import { dbService } from '../services/DatabaseService';
+import { localLauncherService } from '../services/LocalLauncherService';
 import {
   ArrowLeft,
   Star,
@@ -9,12 +10,15 @@ import {
   Tv,
   Gamepad2,
   FolderCheck,
+  FolderX,
   Globe,
   Plus,
   History,
   FileText,
   Building,
-  Tag
+  Tag,
+  Play,
+  Edit3
 } from 'lucide-react';
 
 interface MediaDetailViewProps {
@@ -25,8 +29,12 @@ interface MediaDetailViewProps {
 export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onBack }) => {
   const historyList = dbService.getHistoryForMedia(media.id);
   const state = dbService.getMediaState(media.id);
-  const localFiles = dbService.getLocalFilesForMedia(media.id);
+  const [localFiles, setLocalFiles] = useState<LocalFile[]>(dbService.getLocalFilesForMedia(media.id));
   const availabilities = dbService.getAvailabilityForMedia(media.id);
+
+  const activeLocalFile = localFiles.find(lf => lf.exists) || localFiles[0];
+  const isAvailableLocally = localFiles.some(lf => lf.exists);
+  const isLocalMissing = localFiles.length > 0 && !isAvailableLocally;
 
   // New history session state
   const [showAddHistoryModal, setShowAddHistoryModal] = useState(false);
@@ -34,6 +42,24 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onBack 
   const [newScore, setNewScore] = useState<number>(4);
   const [newContext, setNewContext] = useState<string>('Rewatch');
   const [newThoughts, setNewThoughts] = useState<string>('');
+
+  // Executable / file picker modal state
+  const [showFilePickerModal, setShowFilePickerModal] = useState(false);
+  const [customPath, setCustomPath] = useState('');
+  const [launchMessage, setLaunchMessage] = useState('');
+
+  const refreshLocalFiles = () => {
+    setLocalFiles(dbService.getLocalFilesForMedia(media.id));
+  };
+
+  const handlePlayFile = async (file?: LocalFile) => {
+    const targetFile = file || activeLocalFile;
+    if (!targetFile) return;
+
+    const res = await localLauncherService.launchFile(targetFile);
+    setLaunchMessage(res.message);
+    setTimeout(() => setLaunchMessage(''), 4000);
+  };
 
   const handleAddHistory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +77,34 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onBack 
     });
     setShowAddHistoryModal(false);
     setNewThoughts('');
+  };
+
+  const handleSaveCustomExecutable = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customPath.trim()) return;
+
+    const now = new Date().toISOString();
+    const filename = customPath.split(/\\|\//).pop() || customPath;
+    const ext = filename.split('.').pop() || 'exe';
+
+    const newLocalFile: LocalFile = {
+      id: `lf_custom_${Date.now()}`,
+      media_id: media.id,
+      path: customPath.trim(),
+      filename,
+      extension: ext,
+      size: 2000000000,
+      discovered_at: now,
+      last_seen_at: now,
+      exists: true,
+      file_type: media.type === 'VideoGame' ? 'game_executable' : 'movie',
+      launch_info: customPath.trim()
+    };
+
+    dbService.saveLocalFile(newLocalFile);
+    refreshLocalFiles();
+    setShowFilePickerModal(false);
+    setCustomPath('');
   };
 
   const getTypeIcon = () => {
@@ -111,6 +165,20 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onBack 
                 {getTypeIcon()}
                 <span>{media.type}</span>
               </span>
+
+              {/* Local Availability Badge */}
+              {isAvailableLocally ? (
+                <span className="bg-emerald-950/90 text-emerald-400 border border-emerald-500/40 text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 shadow-md">
+                  <FolderCheck className="w-4 h-4" />
+                  <span>🖥 Available Locally</span>
+                </span>
+              ) : isLocalMissing ? (
+                <span className="bg-amber-950/90 text-amber-400 border border-amber-500/40 text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 shadow-md">
+                  <FolderX className="w-4 h-4" />
+                  <span>⚠ Local file missing</span>
+                </span>
+              ) : null}
+
               {media.release_year && (
                 <span className="bg-[#1b1e2b] text-gray-300 border border-[#2d3248] text-xs font-semibold px-2.5 py-1 rounded-full flex items-center space-x-1">
                   <Calendar className="w-3.5 h-3.5 text-rose-400" />
@@ -123,30 +191,30 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onBack 
                   <span>{media.publisher}</span>
                 </span>
               )}
-              {media.language && (
-                <span className="bg-[#1b1e2b] text-gray-300 border border-[#2d3248] text-xs font-semibold px-2.5 py-1 rounded-full">
-                  {media.language}
-                </span>
-              )}
             </div>
 
             <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight drop-shadow-lg">
               {media.title}
             </h1>
 
-            {/* Genres */}
-            {media.genres && media.genres.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {media.genres.map(g => (
-                  <span
-                    key={g}
-                    className="bg-gray-800/80 text-gray-300 text-xs px-2.5 py-0.5 rounded-md border border-gray-700/60"
-                  >
-                    {g}
-                  </span>
-                ))}
-              </div>
-            )}
+            {/* Play Button & Launch Status */}
+            <div className="flex items-center space-x-3 pt-2">
+              {activeLocalFile && isAvailableLocally && (
+                <button
+                  onClick={() => handlePlayFile(activeLocalFile)}
+                  className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm px-6 py-3 rounded-xl shadow-xl shadow-emerald-950/40 transition-all transform hover:-translate-y-0.5"
+                >
+                  <Play className="w-5 h-5 fill-current" />
+                  <span>PLAY {media.type === 'VideoGame' ? 'GAME' : 'MEDIA'}</span>
+                </button>
+              )}
+
+              {launchMessage && (
+                <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-3 py-2 rounded-lg animate-fadeIn">
+                  {launchMessage}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -260,26 +328,54 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onBack 
 
         {/* Right Column: Local Files & Availability */}
         <div className="space-y-6">
-          {/* Local Storage & Files */}
+          {/* Local Storage & Executable Files */}
           <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-3">
-            <h2 className="text-base font-bold text-white flex items-center space-x-2">
-              <FolderCheck className="w-4 h-4 text-rose-500" />
-              <span>Local System Files</span>
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-white flex items-center space-x-2">
+                <FolderCheck className="w-4 h-4 text-rose-500" />
+                <span>Local System Files</span>
+              </h2>
+
+              <button
+                onClick={() => setShowFilePickerModal(true)}
+                className="text-xs text-rose-400 hover:text-rose-300 font-semibold flex items-center space-x-1 bg-rose-950/50 border border-rose-500/30 px-2.5 py-1 rounded-lg"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>Configure Path</span>
+              </button>
+            </div>
+
             {localFiles.length === 0 ? (
               <p className="text-xs text-gray-400">No local file detected for this media item.</p>
             ) : (
               <div className="space-y-2">
                 {localFiles.map(lf => (
-                  <div key={lf.id} className="bg-[#1a1d29] p-3 rounded-lg border border-[#2d3145] text-xs space-y-1">
-                    <p className="font-medium text-gray-200 truncate" title={lf.path}>
-                      {lf.filename}
-                    </p>
+                  <div key={lf.id} className="bg-[#1a1d29] p-3 rounded-lg border border-[#2d3145] text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-gray-200 truncate" title={lf.path}>
+                        {lf.filename}
+                      </p>
+                      {lf.exists ? (
+                        <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded">
+                          Available
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded">
+                          Missing
+                        </span>
+                      )}
+                    </div>
+
                     <p className="text-[10px] text-gray-400 font-mono truncate">{lf.path}</p>
-                    {lf.launch_info && (
-                      <span className="inline-block text-[10px] text-rose-400 font-semibold bg-rose-950/50 px-2 py-0.5 rounded">
-                        Launchable
-                      </span>
+
+                    {lf.exists && (
+                      <button
+                        onClick={() => handlePlayFile(lf)}
+                        className="w-full bg-emerald-600/90 hover:bg-emerald-500 text-white font-bold text-xs py-1.5 rounded-lg flex items-center justify-center space-x-1.5 shadow-sm transition-all"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Launch File</span>
+                      </button>
                     )}
                   </div>
                 ))}
@@ -392,6 +488,46 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onBack 
                   className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow-md"
                 >
                   Save Log
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* File / Executable Selector Modal */}
+      {showFilePickerModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-white">Configure Executable or Video File</h3>
+            <form onSubmit={handleSaveCustomExecutable} className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-400 font-medium block mb-1">
+                  Local File Path / Shortcut (.exe, .lnk, .mkv)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={media.type === 'VideoGame' ? 'D:\\Games\\Game.lnk or .exe' : 'D:\\Movies\\Film.mkv'}
+                  value={customPath}
+                  onChange={e => setCustomPath(e.target.value)}
+                  className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFilePickerModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow-md"
+                >
+                  Save File Path
                 </button>
               </div>
             </form>

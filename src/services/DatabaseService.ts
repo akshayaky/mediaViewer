@@ -97,7 +97,7 @@ export class DatabaseService {
 
       CREATE TABLE IF NOT EXISTS local_file (
         id TEXT PRIMARY KEY,
-        media_id TEXT NOT NULL,
+        media_id TEXT,
         path TEXT NOT NULL,
         filename TEXT NOT NULL,
         extension TEXT NOT NULL,
@@ -462,7 +462,7 @@ export class DatabaseService {
     if (!res.length) return [];
     return res[0].values.map(row => ({
       id: row[0] as string,
-      media_id: row[1] as string,
+      media_id: (row[1] as string) || undefined,
       path: row[2] as string,
       filename: row[3] as string,
       extension: row[4] as string,
@@ -473,6 +473,36 @@ export class DatabaseService {
       file_type: row[9] as any,
       launch_info: (row[10] as string) || undefined
     }));
+  }
+
+  public getUnmatchedLocalFiles(): LocalFile[] {
+    if (!this.db) return [];
+    const stmt = this.db.prepare('SELECT * FROM local_file WHERE media_id IS NULL OR media_id = ""');
+    const results: LocalFile[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      results.push({
+        id: row.id as string,
+        media_id: undefined,
+        path: row.path as string,
+        filename: row.filename as string,
+        extension: row.extension as string,
+        size: Number(row.size),
+        discovered_at: row.discovered_at as string,
+        last_seen_at: row.last_seen_at as string,
+        exists: Boolean(row.file_exists),
+        file_type: row.file_type as any,
+        launch_info: (row.launch_info as string) || undefined
+      });
+    }
+    stmt.free();
+    return results;
+  }
+
+  public linkLocalFileToMedia(file_id: string, media_id: string): void {
+    if (!this.db) return;
+    this.db.run('UPDATE local_file SET media_id = ? WHERE id = ?', [media_id, file_id]);
+    this.save();
   }
 
   public saveLocalFile(file: LocalFile): void {
@@ -487,7 +517,7 @@ export class DatabaseService {
          launch_info=excluded.launch_info`,
       [
         file.id,
-        file.media_id,
+        file.media_id || null,
         file.path,
         file.filename,
         file.extension,
