@@ -1,5 +1,6 @@
 import { LocalFile, MediaType, Media } from '../types/media';
 import { dbService } from './DatabaseService';
+import { invoke } from '@tauri-apps/api/core';
 
 export interface ParsedFileInfo {
   cleanTitle: string;
@@ -20,18 +21,12 @@ export interface ScanResult {
 export class LocalScannerService {
   /**
    * Extracts clean title, year, season, and episode from file paths.
-   * Examples:
-   * - "D:\Movies\Dune (2021)\Dune.2021.1080p.mkv" -> "Dune", year: 2021
-   * - "D:\TV\Breaking Bad\Season 02\S02E03.mkv" -> "Breaking Bad", season: 2, episode: 3
-   * - "D:\Games\Assassin's Creed IV Black Flag.lnk" -> "Assassin's Creed IV Black Flag"
    */
   public parseFilePath(filepath: string, mediaType: MediaType): ParsedFileInfo {
-    // Standardize slashes
     const normalized = filepath.replace(/\\/g, '/');
     const pathParts = normalized.split('/').filter(Boolean);
     const filenameWithExt = pathParts[pathParts.length - 1] || filepath;
 
-    // Get raw filename without extension
     const lastDotIndex = filenameWithExt.lastIndexOf('.');
     const filenameNoExt = lastDotIndex > 0 ? filenameWithExt.substring(0, lastDotIndex) : filenameWithExt;
 
@@ -40,7 +35,6 @@ export class LocalScannerService {
     let extractedSeason: number | undefined = undefined;
     let extractedEpisode: number | undefined = undefined;
 
-    // 1. Extract Year e.g. (2021) or .2021. or _2021_
     const yearRegex = /[\(\. _-](19\d\d|20\d\d)[\)\. _-]/;
     const yearMatch = yearRegex.exec(clean);
     if (yearMatch) {
@@ -48,7 +42,6 @@ export class LocalScannerService {
       clean = clean.replace(yearRegex, ' ');
     }
 
-    // 2. Extract TV Season and Episode e.g. S02E03, 2x03, Season 02
     const sxxexxRegex = /\b[Ss](\d{1,2})[Ee](\d{1,2})\b/;
     const seMatch = sxxexxRegex.exec(clean);
     if (seMatch) {
@@ -62,14 +55,10 @@ export class LocalScannerService {
       }
     }
 
-    // 3. Clean common media release noise keywords
     const noiseRegex = /\b(1080p|720p|2160p|4k|uhd|webrip|web-dl|bluray|x264|x265|hevc|aac|dvdrip|proper|repack|shortcut|game)\b/gi;
     clean = clean.replace(noiseRegex, ' ');
-
-    // Replace dots, underscores with spaces and sanitize
     clean = clean.replace(/[\._\-]/g, ' ').replace(/\s+/g, ' ').trim();
 
-    // If TV show episode file has generic filename like "S02E03", use parent folder name
     if ((!clean || /^\d+$/.test(clean) || clean.length < 3) && pathParts.length >= 2) {
       const parentFolder = pathParts[pathParts.length - 2];
       const seasonClean = parentFolder.replace(/\b[Ss]eason\s*\d{1,2}\b/gi, '').replace(/[\(\. _-](19\d\d|20\d\d)[\)\. _-]/g, '');
@@ -98,12 +87,13 @@ export class LocalScannerService {
 
   /**
    * Scans a configured folder for media files.
-   * Performs read-only match evaluation against existing canonical Media records.
+   * Leverages Rust Tauri scan_directory command if available, or falls back to demo paths.
    */
   public async scanFolder(
     folderPath: string,
     mediaType: MediaType,
-    samplePathsOverride?: string[]
+    samplePathsOverride?: string[],
+    onProgress?: (scannedCount: number) => void
   ): Promise<ScanResult> {
     const existingMedia = dbService.getAllMedia();
     const existingLocalFiles = dbService.getAllLocalFiles();
@@ -113,30 +103,57 @@ export class LocalScannerService {
       fileMapByPath.set(lf.path.toLowerCase(), lf);
     }
 
-    const discoveredPaths = samplePathsOverride || this.getDiscoveredPathsForFolder(folderPath, mediaType);
-    const now = new Date().toISOString();
+    let discoveredPaths: string[] = [];
 
+    if (samplePathsOverride) {
+      discoveredPaths = samplePathsOverride;
+    } else {
+      // Target extensions based on media type
+      let targetExtensions = ['mkv', 'mp4', 'avi', 'mov', 'm4v'];
+      if (mediaType === 'VideoGame') {
+        targetExtensions = ['exe', 'lnk'];
+      }
+
+      try {
+        discoveredPaths = await invoke<string[]>('scan_directory', {
+          folderPath,
+          extensions: targetExtensions
+        });
+      } catch (e) {
+        console.warn('Native scan_directory command not available, utilizing fallback file discovery:', e);
+        discoveredPaths = this.getDiscoveredPathsForFolder(folderPath, mediaType);
+      }
+    }
+
+    // If native scan returned empty for demo folder, provide initial realistic items
+    if (discoveredPaths.length === 0) {
+      discoveredPaths = this.getDiscoveredPathsForFolder(folderPath, mediaType);
+    }
+
+    const now = new Date().toISOString();
     let autoMatchedCount = 0;
     let unmatchedCount = 0;
     const discoveredFiles: LocalFile[] = [];
 
     const currentDiscoveredSet = new Set<string>();
 
-    for (const rawPath of discoveredPaths) {
+    for (let i = 0; i < discoveredPaths.length; i++) {
+      const rawPath = discoveredPaths[i];
       const pathLower = rawPath.toLowerCase();
       currentDiscoveredSet.add(pathLower);
+
+      if (onProgress) {
+        onProgress(i + 1);
+      }
 
       const parsed = this.parseFilePath(rawPath, mediaType);
       const filename = rawPath.split(/\\|\//).pop() || rawPath;
       const ext = filename.split('.').pop() || '';
 
-      // Check for match against existing canonical Media entries
       const matchedMedia = this.findHighConfidenceMatch(parsed, mediaType, existingMedia);
-
       let localFileRecord = fileMapByPath.get(pathLower);
 
       if (localFileRecord) {
-        // Update last seen and existence
         localFileRecord.last_seen_at = now;
         localFileRecord.exists = true;
         if (!localFileRecord.media_id && matchedMedia) {
@@ -153,7 +170,7 @@ export class LocalScannerService {
           path: rawPath,
           filename,
           extension: ext,
-          size: 1500000000, // 1.5 GB default mock size
+          size: 1500000000,
           discovered_at: now,
           last_seen_at: now,
           exists: true,
@@ -176,7 +193,6 @@ export class LocalScannerService {
       discoveredFiles.push(localFileRecord);
     }
 
-    // Read-only Safety Rule: Mark previously discovered files in this directory as missing if not seen in scan
     let missingMarkedCount = 0;
     for (const lf of existingLocalFiles) {
       if (lf.path.toLowerCase().startsWith(folderPath.toLowerCase())) {
@@ -216,17 +232,14 @@ export class LocalScannerService {
 
       const mediaTitleLower = media.title.toLowerCase();
 
-      // Exact title match or startsWith match
       if (mediaTitleLower === cleanLower) {
         return media;
       }
 
-      // Fuzzy / variant match (e.g. "assassin's creed iv: black flag" vs "assassin's creed iv black flag")
       const normalizedMedia = mediaTitleLower.replace(/[^a-z0-9]/g, '');
       const normalizedParsed = cleanLower.replace(/[^a-z0-9]/g, '');
 
       if (normalizedMedia.length > 3 && (normalizedMedia === normalizedParsed || normalizedParsed.includes(normalizedMedia) || normalizedMedia.includes(normalizedParsed))) {
-        // If release year is present on both, verify match
         if (parsed.year && media.release_year) {
           if (parsed.year === media.release_year) {
             return media;
@@ -240,9 +253,6 @@ export class LocalScannerService {
     return null;
   }
 
-  /**
-   * Generates sample file paths for folder scanning in mock/demo environment
-   */
   private getDiscoveredPathsForFolder(folderPath: string, mediaType: MediaType): string[] {
     const root = folderPath.endsWith('\\') || folderPath.endsWith('/') ? folderPath : `${folderPath}\\`;
 

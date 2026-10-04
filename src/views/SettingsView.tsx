@@ -16,7 +16,8 @@ import {
   AlertCircle,
   Sparkles,
   FileSpreadsheet,
-  FolderSearch
+  FolderSearch,
+  Loader2
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -34,7 +35,8 @@ export const SettingsView: React.FC = () => {
   const [savedMessage, setSavedMessage] = useState('');
 
   // Local Directory Scanner state
-  const [isScanning, setIsScanning] = useState(false);
+  const [scanningType, setScanningType] = useState<MediaType | null>(null);
+  const [scanProgressCount, setScanProgressCount] = useState<number>(0);
   const [scanResult, setScanResult] = useState<{ type: MediaType; result: ScanResult } | null>(null);
 
   // Notion CSV Import Wizard state
@@ -69,18 +71,29 @@ export const SettingsView: React.FC = () => {
   const handleScanDirectory = async (folderPath: string, mediaType: MediaType) => {
     if (!folderPath.trim()) return;
 
-    setIsScanning(true);
+    setScanningType(mediaType);
+    setScanProgressCount(0);
     setScanResult(null);
 
     try {
-      const result = await localScannerService.scanFolder(folderPath, mediaType);
+      // Simulate real progress step for responsiveness feedback
+      const result = await localScannerService.scanFolder(
+        folderPath,
+        mediaType,
+        undefined,
+        (count) => setScanProgressCount(count)
+      );
+
+      // Brief delay to ensure smooth loading UI transitions
+      await new Promise(res => setTimeout(res, 500));
+
       setScanResult({ type: mediaType, result });
       setSavedMessage(`Scanned ${mediaType} folder: ${result.totalScanned} files processed.`);
       setTimeout(() => setSavedMessage(''), 4000);
     } catch (err: any) {
       console.error('Directory scan error:', err);
     } finally {
-      setIsScanning(false);
+      setScanningType(null);
     }
   };
 
@@ -94,11 +107,31 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setSavedMessage(''), 3000);
   };
 
-  const handleFolderSelect = (key: 'movies' | 'tv' | 'games') => {
+  const handleFolderSelect = async (key: 'movies' | 'tv' | 'games') => {
+    try {
+      // Attempt to dynamically load @tauri-apps/plugin-dialog
+      const dialog = await import('@tauri-apps/plugin-dialog');
+      const selected = await dialog.open({
+        directory: true,
+        multiple: false,
+        title: `Select ${key.toUpperCase()} Library Directory`
+      });
+
+      if (selected && typeof selected === 'string') {
+        if (key === 'movies') setMoviesFolder(selected);
+        if (key === 'tv') setTvFolder(selected);
+        if (key === 'games') setGamesFolder(selected);
+        return;
+      }
+    } catch (e) {
+      console.warn('Native dialog plugin not available in web context, using prompt:', e);
+    }
+
+    // Web/fallback context
     const defaultPaths = {
-      movies: 'D:\\Movies',
-      tv: 'D:\\TV',
-      games: 'D:\\Games'
+      movies: moviesFolder || 'D:\\Movies',
+      tv: tvFolder || 'D:\\TV',
+      games: gamesFolder || 'D:\\Games'
     };
     const path = prompt(`Enter path for ${key} folder:`, defaultPaths[key]);
     if (path) {
@@ -171,7 +204,7 @@ export const SettingsView: React.FC = () => {
             <span>Settings & Integrations</span>
           </h1>
           <p className="text-sm text-rose-400/80 font-medium mt-1">
-            Configure local folders, run library scans, API keys, and import Notion databases
+            Configure local folders using Windows File Explorer, run library scans with live feedback, configure API keys, and import Notion databases
           </p>
         </div>
 
@@ -190,101 +223,134 @@ export const SettingsView: React.FC = () => {
           <span>Local Library Folders & Directory Scanner</span>
         </h2>
         <p className="text-xs text-gray-400">
-          Configure root directories for media files on your Windows machine and run read-only local scans.
+          Configure root directories for media files on your Windows machine using native file selection dialogs and run read-only local scans.
         </p>
 
         <form onSubmit={handleSaveFolders} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Movies Folder */}
-            <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-2">
-              <label className="text-xs text-gray-300 font-bold block">Movies Folder</label>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={moviesFolder}
-                  onChange={e => setMoviesFolder(e.target.value)}
-                  placeholder="D:\Movies"
-                  className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleFolderSelect('movies')}
-                  className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                >
-                  Browse
-                </button>
+            <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-2 flex flex-col justify-between">
+              <div>
+                <label className="text-xs text-gray-300 font-bold block mb-1">Movies Folder</label>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={moviesFolder}
+                    onChange={e => setMoviesFolder(e.target.value)}
+                    placeholder="D:\Movies"
+                    className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleFolderSelect('movies')}
+                    className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#3b4059] transition-all whitespace-nowrap"
+                  >
+                    Browse
+                  </button>
+                </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => handleScanDirectory(moviesFolder, 'Film')}
-                disabled={isScanning}
-                className="w-full bg-rose-600/90 hover:bg-rose-500 text-white font-semibold text-xs py-2 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-2"
+                disabled={scanningType !== null}
+                className="w-full bg-rose-600/90 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4"
               >
-                <FolderSearch className="w-4 h-4" />
-                <span>Scan Movies Folder</span>
+                {scanningType === 'Film' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Scanning Movies... ({scanProgressCount})</span>
+                  </>
+                ) : (
+                  <>
+                    <FolderSearch className="w-4 h-4" />
+                    <span>Scan Movies Folder</span>
+                  </>
+                )}
               </button>
             </div>
 
             {/* TV Shows Folder */}
-            <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-2">
-              <label className="text-xs text-gray-300 font-bold block">TV Shows Folder</label>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={tvFolder}
-                  onChange={e => setTvFolder(e.target.value)}
-                  placeholder="D:\TV"
-                  className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleFolderSelect('tv')}
-                  className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                >
-                  Browse
-                </button>
+            <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-2 flex flex-col justify-between">
+              <div>
+                <label className="text-xs text-gray-300 font-bold block mb-1">TV Shows Folder</label>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={tvFolder}
+                    onChange={e => setTvFolder(e.target.value)}
+                    placeholder="D:\TV"
+                    className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleFolderSelect('tv')}
+                    className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#3b4059] transition-all whitespace-nowrap"
+                  >
+                    Browse
+                  </button>
+                </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => handleScanDirectory(tvFolder, 'TV Series')}
-                disabled={isScanning}
-                className="w-full bg-sky-600/90 hover:bg-sky-500 text-white font-semibold text-xs py-2 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-2"
+                disabled={scanningType !== null}
+                className="w-full bg-sky-600/90 hover:bg-sky-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4"
               >
-                <FolderSearch className="w-4 h-4" />
-                <span>Scan TV Folder</span>
+                {scanningType === 'TV Series' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Scanning TV Shows... ({scanProgressCount})</span>
+                  </>
+                ) : (
+                  <>
+                    <FolderSearch className="w-4 h-4" />
+                    <span>Scan TV Folder</span>
+                  </>
+                )}
               </button>
             </div>
 
             {/* Games Folder */}
-            <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-2">
-              <label className="text-xs text-gray-300 font-bold block">Games Folder</label>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={gamesFolder}
-                  onChange={e => setGamesFolder(e.target.value)}
-                  placeholder="D:\Games"
-                  className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleFolderSelect('games')}
-                  className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                >
-                  Browse
-                </button>
+            <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-2 flex flex-col justify-between">
+              <div>
+                <label className="text-xs text-gray-300 font-bold block mb-1">Games Folder</label>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={gamesFolder}
+                    onChange={e => setGamesFolder(e.target.value)}
+                    placeholder="D:\Games"
+                    className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleFolderSelect('games')}
+                    className="bg-[#242838] hover:bg-[#2d3247] text-gray-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#3b4059] transition-all whitespace-nowrap"
+                  >
+                    Browse
+                  </button>
+                </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => handleScanDirectory(gamesFolder, 'VideoGame')}
-                disabled={isScanning}
-                className="w-full bg-purple-600/90 hover:bg-purple-500 text-white font-semibold text-xs py-2 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-2"
+                disabled={scanningType !== null}
+                className="w-full bg-purple-600/90 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4"
               >
-                <FolderSearch className="w-4 h-4" />
-                <span>Scan Games Folder</span>
+                {scanningType === 'VideoGame' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Scanning Games... ({scanProgressCount})</span>
+                  </>
+                ) : (
+                  <>
+                    <FolderSearch className="w-4 h-4" />
+                    <span>Scan Games Folder</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -299,15 +365,28 @@ export const SettingsView: React.FC = () => {
           </div>
         </form>
 
+        {/* Live Active Scanning Banner */}
+        {scanningType && (
+          <div className="bg-[#1c2238] border border-sky-500/50 p-4 rounded-xl text-xs space-y-2 animate-pulse flex items-center space-x-3">
+            <Loader2 className="w-5 h-5 text-sky-400 animate-spin flex-shrink-0" />
+            <div>
+              <h4 className="font-bold text-sky-300">Scanning in Progress: {scanningType} Folder</h4>
+              <p className="text-gray-300 mt-0.5">
+                Traversing directory structure, analyzing files, and running title matching algorithms... ({scanProgressCount} items processed)
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Real-time Scan Progress & Feedback Banner */}
-        {scanResult && (
+        {scanResult && !scanningType && (
           <div className="bg-[#102419] border border-emerald-500/40 p-4 rounded-xl text-xs space-y-2 animate-fadeIn">
             <h4 className="font-bold text-emerald-400 flex items-center space-x-2">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Library Scan Summary ({scanResult.type})</span>
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>Library Scan Completed Successfully ({scanResult.type})</span>
             </h4>
             <p className="text-gray-300">
-              Processed {scanResult.result.totalScanned} files → Auto-matched & linked {scanResult.result.autoMatchedCount} items to Media entries. Routed {scanResult.result.unmatchedCount} ambiguous files to Unmatched Inbox. Updated {scanResult.result.missingMarkedCount} missing files.
+              Scanned & Processed <strong className="text-white">{scanResult.result.totalScanned}</strong> files → Auto-matched & linked <strong className="text-emerald-400">{scanResult.result.autoMatchedCount}</strong> items directly to Media entities. Routed <strong className="text-amber-400">{scanResult.result.unmatchedCount}</strong> unknown/ambiguous files to Unmatched Inbox. Updated <strong className="text-gray-400">{scanResult.result.missingMarkedCount}</strong> offline files.
             </p>
           </div>
         )}
