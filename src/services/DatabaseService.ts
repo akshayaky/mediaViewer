@@ -75,7 +75,11 @@ export class DatabaseService {
         backdrop TEXT,
         logo TEXT,
         metadata_source TEXT,
+        metadata_refreshed_at TEXT,
         publisher TEXT,
+        developer TEXT,
+        cast TEXT,
+        seasons TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -171,25 +175,7 @@ export class DatabaseService {
     if (!this.db) return [];
     const res = this.db.exec('SELECT * FROM media ORDER BY title ASC');
     if (!res.length) return [];
-    return res[0].values.map(row => ({
-      id: row[0] as string,
-      type: row[1] as any,
-      title: row[2] as string,
-      original_title: (row[3] as string) || undefined,
-      release_year: row[4] ? Number(row[4]) : undefined,
-      language: (row[5] as string) || undefined,
-      description: (row[6] as string) || undefined,
-      genres: JSON.parse((row[7] as string) || '[]'),
-      runtime: row[8] ? Number(row[8]) : undefined,
-      poster: (row[9] as string) || undefined,
-      backdrop: (row[10] as string) || undefined,
-      logo: (row[11] as string) || undefined,
-      metadata_source: (row[12] as string) || undefined,
-      publisher: (row[13] as string) || undefined,
-      created_at: row[14] as string,
-      updated_at: row[15] as string,
-      external_ids: this.getExternalIdsForMedia(row[0] as string)
-    }));
+    return res[0].values.map(row => this.mapMediaRow(res[0].columns, row));
   }
 
   public getMediaById(id: string): Media | null {
@@ -199,35 +185,76 @@ export class DatabaseService {
     if (stmt.step()) {
       const row = stmt.getAsObject();
       stmt.free();
-      return {
-        id: row.id as string,
-        type: row.type as any,
-        title: row.title as string,
-        original_title: (row.original_title as string) || undefined,
-        release_year: row.release_year ? Number(row.release_year) : undefined,
-        language: (row.language as string) || undefined,
-        description: (row.description as string) || undefined,
-        genres: JSON.parse((row.genres as string) || '[]'),
-        runtime: row.runtime ? Number(row.runtime) : undefined,
-        poster: (row.poster as string) || undefined,
-        backdrop: (row.backdrop as string) || undefined,
-        logo: (row.logo as string) || undefined,
-        metadata_source: (row.metadata_source as string) || undefined,
-        publisher: (row.publisher as string) || undefined,
-        created_at: row.created_at as string,
-        updated_at: row.updated_at as string,
-        external_ids: this.getExternalIdsForMedia(row.id as string)
-      };
+      return this.mapMediaObject(row);
     }
     stmt.free();
     return null;
   }
 
+  private mapMediaObject(row: Record<string, any>): Media {
+    let genres: string[] = [];
+    try {
+      genres = typeof row.genres === 'string' ? JSON.parse(row.genres) : row.genres || [];
+    } catch {
+      genres = [];
+    }
+
+    let cast: any[] | undefined = undefined;
+    if (row.cast) {
+      try {
+        cast = typeof row.cast === 'string' ? JSON.parse(row.cast) : row.cast;
+      } catch {
+        cast = undefined;
+      }
+    }
+
+    let seasons: any[] | undefined = undefined;
+    if (row.seasons) {
+      try {
+        seasons = typeof row.seasons === 'string' ? JSON.parse(row.seasons) : row.seasons;
+      } catch {
+        seasons = undefined;
+      }
+    }
+
+    return {
+      id: row.id as string,
+      type: row.type as any,
+      title: row.title as string,
+      original_title: (row.original_title as string) || undefined,
+      release_year: row.release_year ? Number(row.release_year) : undefined,
+      language: (row.language as string) || undefined,
+      description: (row.description as string) || undefined,
+      genres,
+      runtime: row.runtime ? Number(row.runtime) : undefined,
+      poster: (row.poster as string) || undefined,
+      backdrop: (row.backdrop as string) || undefined,
+      logo: (row.logo as string) || undefined,
+      metadata_source: (row.metadata_source as string) || undefined,
+      metadata_refreshed_at: (row.metadata_refreshed_at as string) || undefined,
+      publisher: (row.publisher as string) || undefined,
+      developer: (row.developer as string) || undefined,
+      cast,
+      seasons,
+      created_at: row.created_at as string,
+      updated_at: row.updated_at as string,
+      external_ids: this.getExternalIdsForMedia(row.id as string)
+    };
+  }
+
+  private mapMediaRow(columns: string[], values: any[]): Media {
+    const rowObj: Record<string, any> = {};
+    columns.forEach((col, idx) => {
+      rowObj[col] = values[idx];
+    });
+    return this.mapMediaObject(rowObj);
+  }
+
   public saveMedia(media: Media): void {
     if (!this.db) return;
     this.db.run(
-      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, publisher, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          type=excluded.type,
          title=excluded.title,
@@ -241,7 +268,11 @@ export class DatabaseService {
          backdrop=excluded.backdrop,
          logo=excluded.logo,
          metadata_source=excluded.metadata_source,
+         metadata_refreshed_at=excluded.metadata_refreshed_at,
          publisher=excluded.publisher,
+         developer=excluded.developer,
+         cast=excluded.cast,
+         seasons=excluded.seasons,
          updated_at=excluded.updated_at`,
       [
         media.id,
@@ -257,7 +288,11 @@ export class DatabaseService {
         media.backdrop || null,
         media.logo || null,
         media.metadata_source || null,
+        media.metadata_refreshed_at || null,
         media.publisher || null,
+        media.developer || null,
+        media.cast ? JSON.stringify(media.cast) : null,
+        media.seasons ? JSON.stringify(media.seasons) : null,
         media.created_at,
         media.updated_at
       ]

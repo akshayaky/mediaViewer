@@ -45,6 +45,27 @@ A personal entertainment library desktop application for Windows 10/11 built wit
 
 ---
 
+## 🔑 Metadata API Setup & Configuration
+
+**My Media Library** features automatic artwork resolution and metadata fetching for Movies, TV Shows, and Video Games using external providers. API credentials are encrypted/stored locally in your local SQLite database and are never committed to source control or exposed in frontend code.
+
+If API keys are unconfigured, the application runs in **Demo / Fallback Mode** with sample candidate metadata and artwork.
+
+### 🎬 TMDB Setup (Movies & TV Shows)
+1. Create a free account at [The Movie Database (TMDB)](https://www.themoviedb.org/).
+2. Go to **Account Settings** -> **API** -> **Request an API Key** (Developer).
+3. Copy your **API Key (v3 auth)**.
+4. Open **My Media Library** -> **Settings**, paste your key into **TMDB API Key**, and click **Save API Settings**.
+
+### 🎮 IGDB Setup (Video Games - Twitch OAuth)
+1. Register an application on the [Twitch Developer Console](https://dev.twitch.tv/console/apps).
+2. Set the Category to **Application** and OAuth Redirect URL to `http://localhost`.
+3. Copy your **Client ID** and generate a new **Client Secret**.
+4. Open **Settings** in **My Media Library**, enter both **Twitch Client ID** and **Twitch Client Secret**, and click **Save API Settings**.
+5. *(Optional)* You may also enter a **RAWG API Key** from [RAWG.io](https://rawg.io/apidocs) as an additional game metadata fallback.
+
+---
+
 ## 🛠️ Tech Stack
 
 * **Desktop Application Framework**: Tauri 2 (Rust backend)
