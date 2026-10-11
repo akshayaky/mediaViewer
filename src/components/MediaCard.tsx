@@ -1,4 +1,5 @@
 import React from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { Media, MediaState } from '../types/media';
 import { Film, Tv, Gamepad2, Play, RefreshCw, PauseCircle, Calendar, Star } from 'lucide-react';
 
@@ -59,7 +60,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onCli
       <div className="relative aspect-[2/3] w-full bg-[#1b1e2b] overflow-hidden">
         {media.poster ? (
           <img
-            src={media.poster}
+            src={media.poster.startsWith('http') ? media.poster : (typeof window !== 'undefined' && (window as any).__TAURI__ ? convertFileSrc(media.poster) : media.poster)}
             alt={media.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"

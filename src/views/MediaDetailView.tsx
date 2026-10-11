@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { Media, LocalFile } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { localLauncherService } from '../services/LocalLauncherService';
@@ -124,7 +125,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onBack 
       <div className="relative w-full h-[480px] bg-[#12141c] border-b border-[#232736]">
         {media.backdrop ? (
           <img
-            src={media.backdrop}
+            src={media.backdrop.startsWith('http') ? media.backdrop : (typeof window !== 'undefined' && (window as any).__TAURI__ ? convertFileSrc(media.backdrop) : media.backdrop)}
             alt={media.title}
             className="w-full h-full object-cover object-center opacity-45"
           />
@@ -149,7 +150,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media, onBack 
           {/* Poster */}
           <div className="w-44 aspect-[2/3] rounded-2xl overflow-hidden border-2 border-[#2f3448] shadow-2xl bg-[#1b1e2b] shrink-0">
             {media.poster ? (
-              <img src={media.poster} alt={media.title} className="w-full h-full object-cover" />
+              <img src={media.poster.startsWith('http') ? media.poster : (typeof window !== 'undefined' && (window as any).__TAURI__ ? convertFileSrc(media.poster) : media.poster)} alt={media.title} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
                 {getTypeIcon()}
