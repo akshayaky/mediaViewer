@@ -2,6 +2,8 @@ import { Media, MediaType } from '../types/media';
 import { ArtworkProvider } from './interfaces';
 import { tmdbProvider } from './TMDBProvider';
 import { igdbProvider } from './IGDBProvider';
+import { dbService } from '../services/DatabaseService';
+import { Logger } from "tslog";
 
 const ARTWORK_CACHE_STORAGE_KEY = 'my_media_library_artwork_cache_v1';
 
@@ -113,6 +115,11 @@ export class ArtworkCacheProvider implements ArtworkProvider {
           source: 'metadata_provider'
         };
         this.setCachedArtwork(cacheKey, result);
+        dbService.updateMediaArtwork(media.id, result);
+        console.log("General info log");
+        const log = new Logger({ name: "myAppLogger" });
+        log.debug("I am a debug log.");
+
         return result;
       }
     } catch (err) {
@@ -129,6 +136,9 @@ export class ArtworkCacheProvider implements ArtworkProvider {
     mediaTitle: string,
     type: MediaType
   ): Promise<{ poster?: string; backdrop?: string; logo?: string }> {
+    console.log("something");
+    const log = new Logger({ name: "myAppLogger" });
+        log.debug("I am a debug log.");
     if (type === 'VideoGame') {
       const searchRes = await igdbProvider.searchMedia(mediaTitle, 'VideoGame');
       if (searchRes.length > 0) {

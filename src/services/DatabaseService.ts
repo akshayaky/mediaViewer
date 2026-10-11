@@ -306,6 +306,24 @@ export class DatabaseService {
     this.save();
   }
 
+  public updateMediaArtwork(media_id: string, artwork: {poster?: string; backdrop?:
+    string; logo?: string}): void{
+      if(!this.db) return;
+      const now = new Date().toISOString();
+      this.db.run(
+        `UPDATE media SET
+          poster = COALESCE(?, poster),
+          backdrop = COALESCE(?, backdrop),
+          logo = COALESCE(?, logo),
+          updated_at = ?
+        WHERE id = ?`,
+         [artwork.poster || null, artwork.backdrop ||
+           null, artwork.logo || null, now, media_id]
+      )
+      this.save();
+      
+  }
+
   public getExternalIdsForMedia(media_id: string): ExternalID[] {
     if (!this.db) return [];
     const stmt = this.db.prepare('SELECT * FROM external_ids WHERE media_id = :media_id');
