@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Media } from '../types/media';
 import { useMediaDetail } from '../hooks/useMediaDetail';
+import { useDominantColor } from '../helper/useDominantColour'
+
 import {
   ArrowLeft,
   Star,
@@ -50,6 +52,12 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     logSessionHistory,
     addCustomFilePath
   } = useMediaDetail(initialMedia);
+
+  const dominantColor = useDominantColor(artwork.backdrop!!);
+  console.log(dominantColor);
+  const accentColor = dominantColor
+     ? `rgb(${dominantColor.join(",")})`
+     : '#e11d48'; // fallback to rose-600
 
   // Season accordion state
   const [expandedSeason, setExpandedSeason] = useState<number | null>(1);
@@ -627,7 +635,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow-md"
+                  style={{ backgroundColor: accentColor }}
+                  className="px-4 py-2 text-xs font-semibold hover:opacity-90 text-white rounded-lg shadow-md"
                 >
                   Save Log
                 </button>
@@ -667,7 +676,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow-md"
+                  style={{ backgroundColor: accentColor }}
+                  className="px-4 py-2 text-xs font-semibold hover:opacity-90 text-white rounded-lg shadow-md"
                 >
                   Save File Path
                 </button>

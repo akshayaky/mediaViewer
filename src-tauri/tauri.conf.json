@@ -18,7 +18,23 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "main-capability",
+          "windows": ["main"],
+          "permissions": [
+            "core:default",
+            "opener:default",
+            {
+              "identifier": "http:default",
+              "allow": [
+                { "url": "https://image.tmdb.org/**" }
+              ]
+            }
+          ]
+        }
+      ]
     }
   },
   "bundle": {
