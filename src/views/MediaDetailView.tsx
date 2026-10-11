@@ -1,11 +1,6 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
-import React, { useState, useEffect } from 'react';
-import { Media, LocalFile } from '../types/media';
-import { dbService } from '../services/DatabaseService';
-import { localLauncherService } from '../services/LocalLauncherService';
-import { tmdbProvider } from '../providers/TMDBProvider';
-import { igdbProvider } from '../providers/IGDBProvider';
-import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
+import React, { useState } from 'react';
+import { Media } from '../types/media';
+import { useMediaDetail } from '../hooks/useMediaDetail';
 import {
   ArrowLeft,
   Star,
@@ -40,25 +35,24 @@ interface MediaDetailViewProps {
 }
 
 export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack }) => {
-  const [currentMedia, setCurrentMedia] = useState<Media>(initialMedia);
-  const [historyList, setHistoryList] = useState(dbService.getHistoryForMedia(initialMedia.id));
-  const [state, setState] = useState(dbService.getMediaState(initialMedia.id));
-  const [localFiles, setLocalFiles] = useState<LocalFile[]>(dbService.getLocalFilesForMedia(initialMedia.id));
-  const availabilities = dbService.getAvailabilityForMedia(initialMedia.id);
-
-  // Artwork resolution
-  const [artwork, setArtwork] = useState<{ poster?: string; backdrop?: string; logo?: string }>({
-    poster: currentMedia.poster,
-    backdrop: currentMedia.backdrop,
-    logo: currentMedia.logo
-  });
+  const {
+    currentMedia,
+    historyList,
+    state,
+    localFiles,
+    availabilities,
+    artwork,
+    isRefreshingMetadata,
+    refreshMessage,
+    launchMessage,
+    handleManualMetadataRefresh,
+    handlePlayFile,
+    logSessionHistory,
+    addCustomFilePath
+  } = useMediaDetail(initialMedia);
 
   // Season accordion state
   const [expandedSeason, setExpandedSeason] = useState<number | null>(1);
-
-  // Manual Metadata Refresh state
-  const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false);
-  const [refreshMessage, setRefreshMessage] = useState('');
 
   // Local launcher & modals state
   const [showAddHistoryModal, setShowAddHistoryModal] = useState(false);
@@ -69,169 +63,26 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
   const [showFilePickerModal, setShowFilePickerModal] = useState(false);
   const [customPath, setCustomPath] = useState('');
-  const [launchMessage, setLaunchMessage] = useState('');
-
-  useEffect(() => {
-    // Resolve artwork with caching priority
-    artworkCacheProvider.resolveArtworkForMedia(currentMedia).then(res => {
-      setArtwork({
-        poster: res.poster || currentMedia.poster,
-        backdrop: res.backdrop || currentMedia.backdrop,
-        logo: res.logo || currentMedia.logo
-      });
-    });
-  }, [currentMedia]);
 
   const activeLocalFile = localFiles.find(lf => lf.exists) || localFiles[0];
   const isAvailableLocally = localFiles.some(lf => lf.exists);
   const isLocalMissing = localFiles.length > 0 && !isAvailableLocally;
 
-  const refreshLocalFiles = () => {
-    setLocalFiles(dbService.getLocalFilesForMedia(currentMedia.id));
-  };
-
-  const refreshHistoryAndState = () => {
-    setHistoryList(dbService.getHistoryForMedia(currentMedia.id));
-    setState(dbService.getMediaState(currentMedia.id));
-  };
-
-  const handleManualMetadataRefresh = async () => {
-    setIsRefreshingMetadata(true);
-    setRefreshMessage('');
-
-    try {
-      let extId = currentMedia.external_ids && currentMedia.external_ids.length > 0
-        ? currentMedia.external_ids[0].external_id
-        : undefined;
-
-      let freshDetails: Partial<Media> = {};
-
-      if (currentMedia.type === 'VideoGame') {
-        if (!extId || (!extId.startsWith('igdb:') && !extId.startsWith('rawg:'))) {
-          const searchRes = await igdbProvider.searchMedia(currentMedia.title, 'VideoGame');
-          if (searchRes.length > 0) extId = searchRes[0].external_id;
-        }
-        if (extId) {
-          freshDetails = await igdbProvider.getMediaDetails(extId);
-        } else {
-          freshDetails = await igdbProvider.getMediaDetails(currentMedia.title);
-        }
-      } else {
-        if (!extId || (!extId.startsWith('movie:') && !extId.startsWith('tv:'))) {
-          const searchRes = await tmdbProvider.searchMedia(currentMedia.title, currentMedia.type);
-          if (searchRes.length > 0) extId = searchRes[0].external_id;
-        }
-        if (extId) {
-          freshDetails = await tmdbProvider.getMediaDetails(extId);
-        } else {
-          freshDetails = await tmdbProvider.getMediaDetails(currentMedia.title);
-        }
-      }
-
-      if (!freshDetails || Object.keys(freshDetails).length === 0) {
-        throw new Error('No metadata returned from provider.');
-      }
-
-      const now = new Date().toISOString();
-      const updatedMedia: Media = {
-        ...currentMedia,
-        ...freshDetails,
-        id: currentMedia.id,
-        metadata_refreshed_at: now,
-        updated_at: now
-      };
-
-      dbService.saveMedia(updatedMedia);
-      setCurrentMedia(updatedMedia);
-
-      if (updatedMedia.poster || updatedMedia.backdrop || updatedMedia.logo) {
-        artworkCacheProvider.setCachedArtwork(
-          currentMedia.id,
-          {
-            poster: updatedMedia.poster,
-            backdrop: updatedMedia.backdrop,
-            logo: updatedMedia.logo
-          },
-          'metadata_provider'
-        );
-        setArtwork({
-          poster: updatedMedia.poster,
-          backdrop: updatedMedia.backdrop,
-          logo: updatedMedia.logo
-        });
-      }
-
-      if (extId && (!currentMedia.external_ids || currentMedia.external_ids.length === 0)) {
-        dbService.saveExternalId({
-          id: `ext_${Date.now()}`,
-          media_id: currentMedia.id,
-          provider: currentMedia.type === 'VideoGame' ? 'IGDB' : 'TMDB',
-          external_id: extId
-        });
-      }
-
-      setRefreshMessage('Metadata & artwork successfully refreshed from provider!');
-      setTimeout(() => setRefreshMessage(''), 4000);
-    } catch (err: any) {
-      console.error('Failed to refresh metadata:', err);
-      setRefreshMessage(`Failed to refresh metadata: ${err?.message || 'Check title or API key'}`);
-    } finally {
-      setIsRefreshingMetadata(false);
-    }
-  };
-
-  const handlePlayFile = async (file?: LocalFile) => {
-    const targetFile = file || activeLocalFile;
-    if (!targetFile) return;
-
-    const res = await localLauncherService.launchFile(targetFile);
-    setLaunchMessage(res.message);
-    setTimeout(() => setLaunchMessage(''), 4000);
-  };
-
-  const handleAddHistory = (e: React.FormEvent) => {
+  const handleAddHistorySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date().toISOString();
-    dbService.saveHistory({
-      id: `hist_manual_${Date.now()}`,
-      media_id: currentMedia.id,
-      completed_at: now.split('T')[0],
+    logSessionHistory({
       status: newStatus,
       score: newScore,
-      context: newContext.trim() || undefined,
-      thoughts: newThoughts.trim() || undefined,
-      source: 'Manual',
-      created_at: now
+      context: newContext,
+      thoughts: newThoughts
     });
     setShowAddHistoryModal(false);
     setNewThoughts('');
-    refreshHistoryAndState();
   };
 
-  const handleSaveCustomExecutable = (e: React.FormEvent) => {
+  const handleCustomPathSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customPath.trim()) return;
-
-    const now = new Date().toISOString();
-    const filename = customPath.split(/\\|\//).pop() || customPath;
-    const ext = filename.split('.').pop() || 'exe';
-
-    const newLocalFile: LocalFile = {
-      id: `lf_custom_${Date.now()}`,
-      media_id: currentMedia.id,
-      path: customPath.trim(),
-      filename,
-      extension: ext,
-      size: 2000000000,
-      discovered_at: now,
-      last_seen_at: now,
-      exists: true,
-      file_type: currentMedia.type === 'VideoGame' ? 'game_executable' : 'movie',
-      launch_info: customPath.trim()
-    };
-
-    dbService.saveLocalFile(newLocalFile);
-    refreshLocalFiles();
+    addCustomFilePath(customPath);
     setShowFilePickerModal(false);
     setCustomPath('');
   };
@@ -255,8 +106,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           <img
             src={artwork.backdrop}
             alt={currentMedia.title}
-            // src={media.backdrop.startsWith('http') ? media.backdrop : (typeof window !== 'undefined' && (window as any).__TAURI__ ? convertFileSrc(media.backdrop) : media.backdrop)}
-            // alt={media.title}
             className="w-full h-full object-cover object-center opacity-45"
           />
         ) : (
@@ -720,7 +569,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
             <h3 className="text-lg font-bold text-white">Log Interaction Session</h3>
-            <form onSubmit={handleAddHistory} className="space-y-3">
+            <form onSubmit={handleAddHistorySubmit} className="space-y-3">
               <div>
                 <label className="text-xs text-gray-400 font-medium block mb-1">Status</label>
                 <select
@@ -793,7 +642,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
             <h3 className="text-lg font-bold text-white">Configure Executable or Video File</h3>
-            <form onSubmit={handleSaveCustomExecutable} className="space-y-3">
+            <form onSubmit={handleCustomPathSubmit} className="space-y-3">
               <div>
                 <label className="text-xs text-gray-400 font-medium block mb-1">
                   Local File Path / Shortcut (.exe, .lnk, .mkv)

@@ -1,4 +1,3 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
 import React, { useState, useEffect } from 'react';
 import { Media, MediaState } from '../types/media';
 import { Film, Tv, Gamepad2, Play, RefreshCw, PauseCircle, Calendar, Star } from 'lucide-react';

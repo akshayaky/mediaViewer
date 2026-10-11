@@ -47,9 +47,15 @@ export class NotionIntegrationService implements NotionProvider {
     clean = clean.replace(/’/g, "'").replace(/\s+/g, ' ');
 
     // Normalize known variant names for consistency
-    if (clean.toLowerCase().startsWith("assasin’s creed 4") || clean.toLowerCase().startsWith("assassin's creed 4")) {
+    const lower = clean.toLowerCase();
+    if (
+      lower.startsWith("assasin's creed 4") ||
+      lower.startsWith("assasin’s creed 4") ||
+      lower.startsWith("assassin's creed 4") ||
+      lower.startsWith("assassin’s creed 4")
+    ) {
       clean = "Assassin's Creed IV: Black Flag";
-    } else if (clean.toLowerCase().startsWith("the paper s2") || clean.toLowerCase().startsWith("the paper season 2")) {
+    } else if (lower.startsWith("the paper s2") || lower.startsWith("the paper season 2")) {
       clean = "The Paper";
       extractedContext = extractedContext ? `Season 2, ${extractedContext}` : "Season 2";
     }
