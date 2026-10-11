@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
-export function useDominantColor(imageSrc: string) {
+export function useDominantColor(imageSrc?: string | null) {
   const [rgb, setRgb] = useState<[number, number, number] | null>(null);
 
   useEffect(() => {
