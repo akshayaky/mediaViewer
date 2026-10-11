@@ -1,4 +1,3 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
 import React, { useState, useEffect } from 'react';
 import { Media, LocalFile } from '../types/media';
 import { dbService } from '../services/DatabaseService';
@@ -6,6 +5,7 @@ import { localLauncherService } from '../services/LocalLauncherService';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
+import { useDominantColor } from '../helper/useDominantColour';
 import {
   ArrowLeft,
   Star,
@@ -52,6 +52,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     backdrop: currentMedia.backdrop,
     logo: currentMedia.logo
   });
+  const dominantColor = useDominantColor(artwork.backdrop || artwork.poster);
+  const accentColor = dominantColor ? `rgb(${dominantColor.join(',')})` : '#e11d48';
+  const accentColorRgb = dominantColor ? dominantColor.join(',') : '225, 29, 72';
+  const accentBgLight = `rgba(${accentColorRgb}, 0.2)`;
+  const accentBorderLight = `rgba(${accentColorRgb}, 0.45)`;
 
   // Season accordion state
   const [expandedSeason, setExpandedSeason] = useState<number | null>(1);
@@ -239,7 +244,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const getTypeIcon = () => {
     switch (currentMedia.type) {
       case 'Film':
-        return <Film className="w-4 h-4 text-rose-400" />;
+        return <Film className="w-4 h-4" style={{ color: accentColor }} />;
       case 'TV Series':
         return <Tv className="w-4 h-4 text-sky-400" />;
       case 'VideoGame':
@@ -248,23 +253,46 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   };
 
   return (
-    <div className="relative min-h-screen bg-[#0c0d10] text-gray-100 pb-12">
+    <div
+      className="relative min-h-screen text-gray-100 pb-12 transition-colors duration-500"
+      style={{
+        backgroundColor: '#0c0d10',
+        backgroundImage: `linear-gradient(180deg, rgba(${accentColorRgb}, 0.22) 0%, rgba(12, 13, 16, 0.98) 820px)`,
+        '--media-accent': accentColor,
+        '--media-accent-strong': `rgba(${accentColorRgb}, 0.82)`,
+        '--media-accent-wash': accentBgLight,
+        '--media-accent-border': accentBorderLight,
+        '--accent-color': accentColor,
+        '--accent-rgb': accentColorRgb
+      } as React.CSSProperties}
+    >
       {/* Top Backdrop Header */}
-      <div className="relative w-full h-[520px] bg-[#12141c] border-b border-[#232736]">
+      <div
+        className="relative w-full h-[520px] border-b border-black/20"
+        style={{ backgroundColor: `rgba(${accentColorRgb}, 0.25)` }}
+      >
         {artwork.backdrop ? (
           <img
             src={artwork.backdrop}
             alt={currentMedia.title}
-            // src={media.backdrop.startsWith('http') ? media.backdrop : (typeof window !== 'undefined' && (window as any).__TAURI__ ? convertFileSrc(media.backdrop) : media.backdrop)}
-            // alt={media.title}
             className="w-full h-full object-cover object-center opacity-45"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-rose-950/30 via-[#12141c] to-[#0c0d10]" />
+          <div
+            className="w-full h-full"
+            style={{
+              background: `linear-gradient(to bottom right, ${accentColor}, rgba(0, 0, 0, 0.3))`
+            }}
+          />
         )}
 
         {/* Backdrop Gradient Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d10] via-[#0c0d10]/60 to-black/30" />
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[700px]"
+          style={{
+            background: `linear-gradient(to top, #0c0d10 0%, rgba(${accentColorRgb}, 0.45) 35%, rgba(0, 0, 0, 0.4) 100%)`
+          }}
+        />
 
         {/* Header Bar Actions */}
         <div className="absolute top-6 left-6 right-6 z-20 flex items-center justify-between">
@@ -279,7 +307,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           <button
             onClick={handleManualMetadataRefresh}
             disabled={isRefreshingMetadata}
-            className="flex items-center space-x-2 bg-rose-600/90 hover:bg-rose-500 disabled:opacity-50 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-lg transition-all cursor-pointer"
+            className="flex items-center space-x-2 hover:brightness-110 disabled:opacity-50 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-lg transition-all cursor-pointer"
+            style={{
+              backgroundColor: 'var(--media-accent-strong)'
+            }}
           >
             {isRefreshingMetadata ? (
               <>
@@ -312,7 +343,12 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           {/* Title & Core Badges */}
           <div className="space-y-3 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="bg-rose-600/90 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 uppercase tracking-wider">
+              <span
+                className="text-white text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 uppercase tracking-wider"
+                style={{
+                  backgroundColor: 'var(--media-accent-strong)'
+                }}
+              >
                 {getTypeIcon()}
                 <span>{currentMedia.type}</span>
               </span>
@@ -332,14 +368,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
               {currentMedia.release_year && (
                 <span className="bg-[#1b1e2b] text-gray-300 border border-[#2d3248] text-xs font-semibold px-2.5 py-1 rounded-full flex items-center space-x-1">
-                  <Calendar className="w-3.5 h-3.5 text-rose-400" />
+                  <Calendar className="w-3.5 h-3.5 text-[var(--media-accent)]" />
                   <span>{currentMedia.release_year}</span>
                 </span>
               )}
 
               {currentMedia.runtime && (
                 <span className="bg-[#1b1e2b] text-gray-300 border border-[#2d3248] text-xs font-semibold px-2.5 py-1 rounded-full flex items-center space-x-1">
-                  <Clock className="w-3.5 h-3.5 text-rose-400" />
+                  <Clock className="w-3.5 h-3.5 text-[var(--media-accent)]" />
                   <span>{currentMedia.runtime} mins</span>
                 </span>
               )}
@@ -407,13 +443,13 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       </div>
 
       {/* Main Content Layout */}
-      <div className="p-8 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="relative z-10 p-8 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Overview, Seasons, Cast, Journal */}
         <div className="lg:col-span-2 space-y-8">
           {/* Overview */}
           <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-3">
             <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-              <FileText className="w-5 h-5 text-rose-500" />
+              <FileText className="w-5 h-5 text-[var(--media-accent)]" />
               <span>Overview & Synopsis</span>
             </h2>
             <p className="text-sm text-gray-300 leading-relaxed">
@@ -430,14 +466,17 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           {currentMedia.cast && currentMedia.cast.length > 0 && (
             <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
               <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                <User className="w-5 h-5 text-rose-500" />
+                <User className="w-5 h-5 text-[var(--media-accent)]" />
                 <span>Top Cast Members</span>
               </h2>
 
               <div className="flex space-x-4 overflow-x-auto pb-2 scrollbar-none">
                 {currentMedia.cast.map(member => (
                   <div key={member.id} className="w-28 shrink-0 space-y-1.5 text-center group">
-                    <div className="w-24 h-24 mx-auto rounded-full overflow-hidden bg-[#1d202e] border-2 border-[#2e3347] group-hover:border-rose-500/50 transition-all">
+                    <div
+                      className="w-24 h-24 mx-auto rounded-full overflow-hidden bg-[#1d202e] border-2 transition-all"
+                      style={{ borderColor: 'var(--media-accent-border)' }}
+                    >
                       {member.profile_path ? (
                         <img src={member.profile_path} alt={member.name} className="w-full h-full object-cover" />
                       ) : (
@@ -460,7 +499,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           {currentMedia.type === 'TV Series' && currentMedia.seasons && currentMedia.seasons.length > 0 && (
             <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
               <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                <Layers className="w-5 h-5 text-rose-500" />
+                <Layers className="w-5 h-5 text-[var(--media-accent)]" />
                 <span>Seasons & Episode Guide ({currentMedia.seasons.length} Seasons)</span>
               </h2>
 
@@ -485,7 +524,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                           </div>
                         </div>
 
-                        {isExpanded ? <ChevronUp className="w-5 h-5 text-rose-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                        {isExpanded ? <ChevronUp className="w-5 h-5 text-[var(--media-accent)]" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                       </button>
 
                       {isExpanded && (
@@ -530,13 +569,13 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           {/* Derived State & Session Summary */}
           <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
             <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-              <Tag className="w-5 h-5 text-rose-500" />
+              <Tag className="w-5 h-5 text-[var(--media-accent)]" />
               <span>Derived Library Statistics</span>
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-[#1a1d29] p-3.5 rounded-xl border border-[#2d3145]">
                 <span className="text-xs text-gray-400 font-medium">Current Status</span>
-                <p className="text-sm font-bold text-rose-400 mt-1">{state.current_status}</p>
+                <p className="text-sm font-bold text-[var(--media-accent)] mt-1">{state.current_status}</p>
               </div>
               <div className="bg-[#1a1d29] p-3.5 rounded-xl border border-[#2d3145]">
                 <span className="text-xs text-gray-400 font-medium">Total Sessions</span>
@@ -559,12 +598,15 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                <History className="w-5 h-5 text-rose-500" />
+                <History className="w-5 h-5 text-[var(--media-accent)]" />
                 <span>Interaction Journal ({historyList.length})</span>
               </h2>
               <button
                 onClick={() => setShowAddHistoryModal(true)}
-                className="flex items-center space-x-1.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-all shadow-md cursor-pointer"
+                className="flex items-center space-x-1.5 hover:brightness-110 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-all shadow-md cursor-pointer"
+                style={{
+                  backgroundColor: 'var(--media-accent-strong)'
+                }}
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Log Session</span>
@@ -582,7 +624,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <span className="text-xs font-bold px-2 py-0.5 rounded bg-rose-950/80 text-rose-400 border border-rose-500/30">
+                        <span
+                          className="text-xs font-bold px-2 py-0.5 rounded"
+                          style={{
+                            backgroundColor: 'var(--media-accent-wash)',
+                            color: 'var(--media-accent)',
+                            border: '1px solid var(--media-accent-border)'
+                          }}
+                        >
                           {h.status}
                         </span>
                         {h.context && (
@@ -625,13 +674,18 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-white flex items-center space-x-2">
-                <FolderCheck className="w-4 h-4 text-rose-500" />
+                <FolderCheck className="w-4 h-4 text-[var(--media-accent)]" />
                 <span>Local System Files</span>
               </h2>
 
               <button
                 onClick={() => setShowFilePickerModal(true)}
-                className="text-xs text-rose-400 hover:text-rose-300 font-semibold flex items-center space-x-1 bg-rose-950/50 border border-rose-500/30 px-2.5 py-1 rounded-lg cursor-pointer"
+                className="text-xs hover:brightness-125 font-semibold flex items-center space-x-1 px-2.5 py-1 rounded-lg cursor-pointer"
+                style={{
+                  color: 'var(--media-accent)',
+                  backgroundColor: 'var(--media-accent-wash)',
+                  border: '1px solid var(--media-accent-border)'
+                }}
               >
                 <Edit3 className="w-3 h-3" />
                 <span>Configure Path</span>
@@ -679,7 +733,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           {/* Streaming & Provider Availability */}
           <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-3">
             <h2 className="text-base font-bold text-white flex items-center space-x-2">
-              <Globe className="w-4 h-4 text-rose-500" />
+              <Globe className="w-4 h-4 text-[var(--media-accent)]" />
               <span>Streaming & Availability</span>
             </h2>
             {availabilities.length === 0 ? (
@@ -702,7 +756,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                         href={av.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-rose-400 hover:underline font-medium"
+                        className="text-xs hover:underline font-medium text-[var(--media-accent)]"
                       >
                         Open
                       </a>
@@ -778,7 +832,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow-md"
+                  className="px-4 py-2 text-xs font-semibold hover:brightness-110 text-white rounded-lg shadow-md"
+                  style={{
+                    backgroundColor: 'var(--media-accent-strong)'
+                  }}
                 >
                   Save Log
                 </button>
@@ -818,7 +875,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow-md"
+                  className="px-4 py-2 text-xs font-semibold hover:brightness-110 text-white rounded-lg shadow-md"
+                  style={{
+                    backgroundColor: 'var(--media-accent-strong)'
+                  }}
                 >
                   Save File Path
                 </button>
