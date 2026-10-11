@@ -6,6 +6,24 @@ export class TMDBProvider implements MetadataProvider {
   public name = 'TMDB';
   private baseUrl = 'https://api.themoviedb.org/3';
   private imageBaseUrl = 'https://image.tmdb.org/t/p';
+  private languageMap: Record<string, string> = {};
+
+  private async initLanguages(): Promise<void> {
+    if (Object.keys(this.languageMap).length > 0) return;
+    
+    try {
+      const { url, headers } = this.getFetchConfig('/configuration/languages');
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        data.forEach((lang: any) => {
+          this.languageMap[lang.iso_639_1] = lang.english_name;
+        });
+      }
+    } catch (err) {
+      console.warn('TMDB failed to load language configuration:', err);
+    }
+  }
 
   private getApiKey(): string | undefined {
     const key = dbService.getSettings().tmdb_api_key;
@@ -30,6 +48,10 @@ export class TMDBProvider implements MetadataProvider {
     const queryString = urlParams.toString();
     const url = `${this.baseUrl}${endpoint}${queryString ? '?' + queryString : ''}`;
     return { url, headers };
+  }
+
+  private getLanguageName(isoCode: string): string {
+    return this.languageMap[isoCode.toLowerCase()] || isoCode.toUpperCase();
   }
 
   private cleanQueryString(rawQuery: string): string {
@@ -142,6 +164,8 @@ export class TMDBProvider implements MetadataProvider {
       return this.getMockDetails(externalId, mediaType);
     }
 
+    await this.initLanguages();
+
     // If tmdbId is not a raw numeric ID, search TMDB by query
     if (!/^\d+$/.test(tmdbId)) {
       const candidates = await this.searchMedia(externalId, mediaType === 'movie' ? 'Film' : 'TV Series');
@@ -169,6 +193,8 @@ export class TMDBProvider implements MetadataProvider {
       const genres = (data.genres || []).map((g: any) => g.name);
       const poster = data.poster_path ? `${this.imageBaseUrl}/w500${data.poster_path}` : undefined;
       const backdrop = data.backdrop_path ? `${this.imageBaseUrl}/w1280${data.backdrop_path}` : undefined;
+      const language = this.getLanguageName(data.original_language || '');
+      console.log("language: " + language);
 
       let logo: string | undefined = undefined;
       if (data.images && data.images.logos && data.images.logos.length > 0) {
@@ -253,7 +279,8 @@ export class TMDBProvider implements MetadataProvider {
         cast,
         seasons,
         metadata_source: 'TMDB',
-        metadata_refreshed_at: new Date().toISOString()
+        metadata_refreshed_at: new Date().toISOString(),
+        language
       };
     } catch (err) {
       console.error('TMDB getMediaDetails failed:', err);

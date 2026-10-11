@@ -22,6 +22,7 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [languageFilter, setLanguageFilter] = useState<string>('All');
 
   const allMedia = dbService.getAllMedia();
 
@@ -32,6 +33,11 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const genresSet = new Set<string>();
   items.forEach(m => m.genres?.forEach(g => genresSet.add(g)));
   const availableGenres = ['All', ...Array.from(genresSet)];
+
+  // Extract unique genres
+  const languageSet = new Set<string>();
+  items.forEach(m => languageSet.add(m.language!!));
+  const availableLanguages  = ['All', ...Array.from(languageSet)];
 
   // Apply search query
   if (searchQuery.trim()) {
@@ -52,6 +58,11 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
       const state = dbService.getMediaState(m.id);
       return state.current_status === statusFilter;
     });
+  }
+
+  // Apply language filter
+  if (languageFilter !== 'All') {
+    items = items.filter(m => m.language?.includes(languageFilter));
   }
 
   return (
@@ -116,6 +127,19 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
           <option value="Abandoned">Status: Paused / Abandoned</option>
           <option value="Planned">Status: Planned</option>
         </select>
+
+        {/* Language Filter */}
+        <select
+          value={languageFilter}
+          onChange={e => setLanguageFilter(e.target.value)}
+          className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-rose-500"
+        >
+          {availableLanguages.map(g => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
+        </select> 
       </div>
 
       {/* Grid */}
