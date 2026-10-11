@@ -2,10 +2,15 @@ import { Media, MediaType } from '../types/media';
 import { ArtworkProvider } from './interfaces';
 import { tmdbProvider } from './TMDBProvider';
 import { igdbProvider } from './IGDBProvider';
-import { dbService } from '../services/DatabaseService';
-import { Logger } from "tslog";
+import { STORAGE_KEYS } from '../constants/appConstants';
 
-const ARTWORK_CACHE_STORAGE_KEY = 'my_media_library_artwork_cache_v1';
+/**
+ * Caches artwork results in memory and persists them to LocalStorage.
+ * Resolves media artwork using a 3-tier priority sequence:
+ * 1. Local Cache / Existing Database Artwork
+ * 2. External Provider Lookup (TMDB / IGDB)
+ * 3. Dynamic SVG Placeholder Artwork
+ */
 
 export interface ArtworkResult {
   poster?: string;
@@ -24,7 +29,7 @@ export class ArtworkCacheProvider implements ArtworkProvider {
 
   private loadPersistentCache() {
     try {
-      const stored = localStorage.getItem(ARTWORK_CACHE_STORAGE_KEY);
+      const stored = localStorage.getItem(STORAGE_KEYS.ARTWORK_CACHE);
       if (stored) {
         const parsed = JSON.parse(stored);
         Object.keys(parsed).forEach(key => {
@@ -44,7 +49,7 @@ export class ArtworkCacheProvider implements ArtworkProvider {
           obj[key] = val;
         }
       });
-      localStorage.setItem(ARTWORK_CACHE_STORAGE_KEY, JSON.stringify(obj));
+      localStorage.setItem(STORAGE_KEYS.ARTWORK_CACHE, JSON.stringify(obj));
     } catch (err) {
       console.warn('Failed to save artwork cache to localStorage:', err);
     }
@@ -142,9 +147,6 @@ export class ArtworkCacheProvider implements ArtworkProvider {
     mediaTitle: string,
     type: MediaType
   ): Promise<{ poster?: string; backdrop?: string; logo?: string }> {
-    console.log("something");
-    const log = new Logger({ name: "myAppLogger" });
-        log.debug("I am a debug log.");
     if (type === 'VideoGame') {
       const searchRes = await igdbProvider.searchMedia(mediaTitle, 'VideoGame');
       if (searchRes.length > 0) {

@@ -11,8 +11,7 @@ import {
   AppSettings,
   ExternalID
 } from '../types/media';
-
-const DB_STORAGE_KEY = 'my_media_library_sqlite_db';
+import { STORAGE_KEYS } from '../constants/appConstants';
 
 export class DatabaseService {
   private db: Database | null = null;
@@ -27,7 +26,7 @@ export class DatabaseService {
       locateFile: () => sqlWasmUrl
     });
 
-    const savedDb = localStorage.getItem(DB_STORAGE_KEY);
+    const savedDb = localStorage.getItem(STORAGE_KEYS.SQLITE_DB);
     if (savedDb) {
       const uInt8Array = new Uint8Array(
         atob(savedDb)
@@ -54,7 +53,7 @@ export class DatabaseService {
       binary += String.fromCharCode(buffer[i]);
     }
     const base64 = btoa(binary);
-    localStorage.setItem(DB_STORAGE_KEY, base64);
+    localStorage.setItem(STORAGE_KEYS.SQLITE_DB, base64);
   }
 
   private addColumnIfNotExists(table: string, column: string, type: string): void {
@@ -184,8 +183,11 @@ export class DatabaseService {
     this.addColumnIfNotExists('media', 'seasons', 'TEXT');
   }
 
-  // --- REPOSITORY METHODS ---
+  // ==========================================
+  // 1. MEDIA REPOSITORY
+  // ==========================================
 
+  /** Retrieves all media items sorted alphabetically by title. */
   public getAllMedia(): Media[] {
     if (!this.db) return [];
     const res = this.db.exec('SELECT * FROM media ORDER BY title ASC');
@@ -339,6 +341,11 @@ export class DatabaseService {
       
   }
 
+  // ==========================================
+  // 2. EXTERNAL IDS REPOSITORY
+  // ==========================================
+
+  /** Retrieves linked provider external IDs for a media item. */
   public getExternalIdsForMedia(media_id: string): ExternalID[] {
     if (!this.db) return [];
     const stmt = this.db.prepare('SELECT * FROM external_ids WHERE media_id = :media_id');
@@ -367,6 +374,11 @@ export class DatabaseService {
     );
   }
 
+  // ==========================================
+  // 3. MEDIA HISTORY & DERIVED STATE REPOSITORY
+  // ==========================================
+
+  /** Retrieves interaction logs for a specific media item sorted newest first. */
   public getHistoryForMedia(media_id: string): MediaHistory[] {
     if (!this.db) return [];
     const stmt = this.db.prepare('SELECT * FROM media_history WHERE media_id = :media_id ORDER BY created_at DESC');
@@ -499,6 +511,11 @@ export class DatabaseService {
     };
   }
 
+  // ==========================================
+  // 4. LOCAL FILES REPOSITORY
+  // ==========================================
+
+  /** Retrieves local system files linked to a specific media item. */
   public getLocalFilesForMedia(media_id: string): LocalFile[] {
     if (!this.db) return [];
     const stmt = this.db.prepare('SELECT * FROM local_file WHERE media_id = :media_id');
@@ -601,6 +618,11 @@ export class DatabaseService {
     this.save();
   }
 
+  // ==========================================
+  // 5. STREAMING AVAILABILITY REPOSITORY
+  // ==========================================
+
+  /** Retrieves streaming availability entries for a specific media item. */
   public getAvailabilityForMedia(media_id: string): Availability[] {
     if (!this.db) return [];
     const stmt = this.db.prepare('SELECT * FROM availability WHERE media_id = :media_id');
@@ -646,6 +668,11 @@ export class DatabaseService {
     this.save();
   }
 
+  // ==========================================
+  // 6. WISHLIST REPOSITORY
+  // ==========================================
+
+  /** Retrieves all wishlist items sorted newest first. */
   public getAllWishlist(): Wishlist[] {
     if (!this.db) return [];
     const res = this.db.exec('SELECT * FROM wishlist ORDER BY added_at DESC');
@@ -693,6 +720,11 @@ export class DatabaseService {
     this.save();
   }
 
+  // ==========================================
+  // 7. NOTION RAW RECORDS REPOSITORY
+  // ==========================================
+
+  /** Persists original un-altered Notion CSV row records. */
   public saveNotionRawRecord(record: NotionRawRecord): void {
     if (!this.db) return;
     this.db.run(
@@ -739,6 +771,11 @@ export class DatabaseService {
     }));
   }
 
+  // ==========================================
+  // 8. SETTINGS REPOSITORY
+  // ==========================================
+
+  /** Retrieves application settings key-value object. */
   public getSettings(): AppSettings {
     if (!this.db) return {};
     const res = this.db.exec('SELECT key, value FROM settings');

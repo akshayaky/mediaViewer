@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbService } from '../services/DatabaseService';
-import { notionService } from '../services/NotionIntegrationService';
-import { localScannerService, ScanResult, isTauri } from '../services/LocalScannerService';
+import { localScannerService, isTauri } from '../services/LocalScannerService';
 import { invoke } from '@tauri-apps/api/core';
 import { AppSettings, MediaType } from '../types/media';
-import { NotionColumnMapping, NotionImportResult } from '../providers/interfaces';
-import Papa from 'papaparse';
+import { useNotionImporter } from '../hooks/useNotionImporter';
+import { useLibraryScanner } from '../hooks/useLibraryScanner';
+import { DEFAULT_FOLDERS } from '../constants/appConstants';
 import {
   Settings,
   Folder,
@@ -27,9 +27,9 @@ export const SettingsView: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(dbService.getSettings());
 
   // Input states
-  const [moviesFolder, setMoviesFolder] = useState(settings.movies_folder || 'C:\\Media\\Movies');
-  const [tvFolder, setTvFolder] = useState(settings.tv_folder || 'C:\\Media\\TV Shows');
-  const [gamesFolder, setGamesFolder] = useState(settings.games_folder || 'D:\\Games');
+  const [moviesFolder, setMoviesFolder] = useState(settings.movies_folder || DEFAULT_FOLDERS.MOVIES);
+  const [tvFolder, setTvFolder] = useState(settings.tv_folder || DEFAULT_FOLDERS.TV_SHOWS);
+  const [gamesFolder, setGamesFolder] = useState(settings.games_folder || DEFAULT_FOLDERS.GAMES);
   const [region, setRegion] = useState(settings.country_region || 'United States');
   const [tmdbKey, setTmdbKey] = useState(settings.tmdb_api_key || '');
   const [twitchClientId, setTwitchClientId] = useState(settings.twitch_client_id || '');
@@ -44,27 +44,18 @@ export const SettingsView: React.FC = () => {
   const tvFolderInputRef = useRef<HTMLInputElement>(null);
   const gamesFolderInputRef = useRef<HTMLInputElement>(null);
 
-  // Local Directory Scanner state
-  const [scanningType, setScanningType] = useState<MediaType | null>(null);
-  const [scanProgressCount, setScanProgressCount] = useState<number>(0);
-  const [scanResult, setScanResult] = useState<{ type: MediaType; result: ScanResult } | null>(null);
-  const [scanError, setScanError] = useState<string | null>(null);
-
-  // Notion CSV Import Wizard state
-  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
-  const [csvRows, setCsvRows] = useState<any[]>([]);
-  const [mapping, setMapping] = useState<NotionColumnMapping>({
-    typeField: 'Type',
-    nameField: 'Name',
-    watchedOnField: 'Watched On/Completed Watching',
-    scoreField: 'Score /5',
-    statusField: 'Status',
-    languageField: 'Language',
-    thoughtsField: 'Thoughts',
-    publisherField: 'Publisher'
-  });
-  const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<NotionImportResult | null>(null);
+  // Custom Hooks
+  const { scanningType, scanProgressCount, scanResult, scanError, scanFolder } = useLibraryScanner();
+  const {
+    csvHeaders,
+    csvRows,
+    mapping,
+    setMapping,
+    isImporting,
+    importResult,
+    parseCsvFile,
+    runImport
+  } = useNotionImporter();
 
   useEffect(() => {
     setSettings(dbService.getSettings());
@@ -82,41 +73,9 @@ export const SettingsView: React.FC = () => {
   const handleScanDirectory = async (e: React.MouseEvent, folderPath: string, mediaType: MediaType) => {
     e.preventDefault();
     e.stopPropagation();
-
-    if (!folderPath.trim()) {
-      setScanError('Enter a folder path before scanning.');
-      return;
-    }
-
-    setScanningType(mediaType);
-    setScanProgressCount(0);
-    setScanResult(null);
-    setScanError(null);
-    setSavedMessage('');
-
-    try {
-      const result = await localScannerService.scanFolder(
-        folderPath,
-        mediaType,
-        undefined,
-        (count) => setScanProgressCount(count)
-      );
-
-      await new Promise(res => setTimeout(res, 500));
-
-      setScanResult({ type: mediaType, result });
-      setSavedMessage(`Scanned ${mediaType} folder: ${result.totalScanned} files processed.`);
-
-      // Dispatch custom event so App and Sidebar update Unmatched Inbox badge immediately
-      window.dispatchEvent(new CustomEvent('library-scanned'));
-
-      setTimeout(() => setSavedMessage(''), 4000);
-    } catch (err: unknown) {
-      console.error('Directory scan error:', err);
-      setScanError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setScanningType(null);
-    }
+    await scanFolder(folderPath, mediaType);
+    setSavedMessage(`Scanned ${mediaType} folder.`);
+    setTimeout(() => setSavedMessage(''), 4000);
   };
 
   const handleSaveApiKeys = (e: React.FormEvent) => {
@@ -189,7 +148,7 @@ export const SettingsView: React.FC = () => {
           if (err.name !== 'AbortError') {
             console.warn('showDirectoryPicker error, falling back to file input:', err);
           } else {
-            return; // User cancelled directory picker
+            return;
           }
         }
       }
@@ -231,57 +190,10 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  // Handle Notion CSV Upload
   const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (results.meta.fields) {
-          setCsvHeaders(results.meta.fields);
-          setCsvRows(results.data);
-
-          const fields = results.meta.fields;
-          const guessField = (keywords: string[]) =>
-            fields.find(f => keywords.some(k => f.toLowerCase().includes(k))) || fields[0];
-
-          setMapping({
-            typeField: guessField(['type']),
-            nameField: guessField(['name', 'title']),
-            watchedOnField: guessField(['watched', 'completed', 'date']),
-            scoreField: guessField(['score', 'rating', 'star']),
-            statusField: guessField(['status', 'state']),
-            languageField: guessField(['language', 'lang']),
-            thoughtsField: guessField(['thought', 'note', 'review']),
-            publisherField: guessField(['publisher', 'platform', 'developer'])
-          });
-        }
-      }
-    });
-  };
-
-  const handleRunNotionImport = async () => {
-    if (csvRows.length === 0) return;
-    setIsImporting(true);
-    setImportResult(null);
-
-    try {
-      const result = await notionService.importFromRows(csvRows, mapping);
-      setImportResult(result);
-      window.dispatchEvent(new CustomEvent('library-scanned'));
-    } catch (err: any) {
-      setImportResult({
-        totalRows: csvRows.length,
-        importedMediaCount: 0,
-        importedHistoryCount: 0,
-        rawRecordsSaved: 0,
-        errors: [err.message || String(err)]
-      });
-    } finally {
-      setIsImporting(false);
+    if (file) {
+      parseCsvFile(file);
     }
   };
 
@@ -818,7 +730,7 @@ export const SettingsView: React.FC = () => {
               <div className="pt-2">
                 <button
                   type="button"
-                  onClick={handleRunNotionImport}
+                  onClick={runImport}
                   disabled={isImporting}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center space-x-2 cursor-pointer"
                 >

@@ -108,9 +108,21 @@ If API keys are unconfigured, the application runs in **Demo / Fallback Mode** w
 
 ---
 
-## 🧪 Testing & Pre-commit Verification
+## 🧪 Testing & Verification
 
-To run static check and build verification:
+Run lightweight Vitest unit tests:
+```bash
+npm test
+```
+
+Run TypeScript and Vite build verification:
 ```bash
 npm run build
 ```
+
+---
+
+## 📚 Developer Guides & Documentation
+
+* 📐 **[System Architecture Guide](./docs/ARCHITECTURE.md)**: Detailed breakdown of project modules, database layer, custom hooks, and data models.
+* 🛠️ **[Developer Guide](./docs/DEVELOPER_GUIDE.md)**: Step-by-step instructions for common tasks (adding UI views, extending database tables, adding metadata providers, or modifying scanner rules).
