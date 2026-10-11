@@ -18,7 +18,9 @@ import {
   Sparkles,
   FileSpreadsheet,
   FolderSearch,
-  Loader2
+  Loader2,
+  Lock,
+  ShieldCheck
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -30,7 +32,9 @@ export const SettingsView: React.FC = () => {
   const [gamesFolder, setGamesFolder] = useState(settings.games_folder || 'D:\\Games');
   const [region, setRegion] = useState(settings.country_region || 'United States');
   const [tmdbKey, setTmdbKey] = useState(settings.tmdb_api_key || '');
-  const [igdbKey, setIgdbKey] = useState(settings.igdb_api_key || '');
+  const [twitchClientId, setTwitchClientId] = useState(settings.twitch_client_id || '');
+  const [twitchClientSecret, setTwitchClientSecret] = useState(settings.twitch_client_secret || '');
+  const [rawgApiKey, setRawgApiKey] = useState(settings.rawg_api_key || '');
   const [notionToken, setNotionToken] = useState(settings.notion_integration_token || '');
 
   const [savedMessage, setSavedMessage] = useState('');
@@ -117,11 +121,13 @@ export const SettingsView: React.FC = () => {
 
   const handleSaveApiKeys = (e: React.FormEvent) => {
     e.preventDefault();
-    dbService.saveSetting('tmdb_api_key', tmdbKey);
-    dbService.saveSetting('igdb_api_key', igdbKey);
-    dbService.saveSetting('notion_integration_token', notionToken);
-    dbService.saveSetting('country_region', region);
-    setSavedMessage('API integrations and preferences saved.');
+    dbService.saveSetting('tmdb_api_key', tmdbKey.trim());
+    dbService.saveSetting('twitch_client_id', twitchClientId.trim());
+    dbService.saveSetting('twitch_client_secret', twitchClientSecret.trim());
+    dbService.saveSetting('rawg_api_key', rawgApiKey.trim());
+    dbService.saveSetting('notion_integration_token', notionToken.trim());
+    dbService.saveSetting('country_region', region.trim());
+    setSavedMessage('API credentials and preferences saved locally in SQLite.');
     setTimeout(() => setSavedMessage(''), 3000);
   };
 
@@ -509,6 +515,151 @@ export const SettingsView: React.FC = () => {
         )}
       </section>
 
+      {/* External Metadata API Credentials Section */}
+      <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
+        <div className="flex items-center justify-between border-b border-[#232736] pb-3">
+          <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+            <Key className="w-5 h-5 text-rose-500" />
+            <span>Metadata API Keys & Providers</span>
+          </h2>
+          <span className="text-xs text-gray-400 flex items-center space-x-1">
+            <Lock className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Stored Locally in SQLite</span>
+          </span>
+        </div>
+
+        <p className="text-xs text-gray-300 leading-relaxed">
+          API credentials enable live metadata and artwork fetching from TMDB and IGDB/RAWG. If keys are not configured, demo/mock metadata fallback mode is active.
+        </p>
+
+        {/* Integration Badges */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div className="bg-[#1a1d29] p-3 rounded-xl border border-[#2d3145] flex items-center justify-between">
+            <span className="font-bold text-white">TMDB (Movies/TV)</span>
+            {tmdbKey ? (
+              <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-semibold text-[11px] flex items-center space-x-1">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Configured</span>
+              </span>
+            ) : (
+              <span className="bg-amber-950 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-semibold text-[11px]">
+                Demo Fallback
+              </span>
+            )}
+          </div>
+
+          <div className="bg-[#1a1d29] p-3 rounded-xl border border-[#2d3145] flex items-center justify-between">
+            <span className="font-bold text-white">IGDB (Twitch OAuth)</span>
+            {twitchClientId && twitchClientSecret ? (
+              <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-semibold text-[11px] flex items-center space-x-1">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Configured</span>
+              </span>
+            ) : (
+              <span className="bg-amber-950 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-semibold text-[11px]">
+                Demo Fallback
+              </span>
+            )}
+          </div>
+
+          <div className="bg-[#1a1d29] p-3 rounded-xl border border-[#2d3145] flex items-center justify-between">
+            <span className="font-bold text-white">RAWG (Games)</span>
+            {rawgApiKey ? (
+              <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-semibold text-[11px] flex items-center space-x-1">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Configured</span>
+              </span>
+            ) : (
+              <span className="bg-gray-800 text-gray-400 border border-gray-700 px-2 py-0.5 rounded text-[11px]">
+                Optional
+              </span>
+            )}
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveApiKeys} className="space-y-4 pt-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-gray-300 font-bold block mb-1">Country / Streaming Region</label>
+              <div className="flex items-center space-x-2">
+                <Globe className="w-4 h-4 text-rose-400 shrink-0" />
+                <input
+                  type="text"
+                  value={region}
+                  onChange={e => setRegion(e.target.value)}
+                  placeholder="e.g. United States, India"
+                  className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-300 font-bold block mb-1">TMDB API Key (Movies & TV)</label>
+              <input
+                type="password"
+                value={tmdbKey}
+                onChange={e => setTmdbKey(e.target.value)}
+                placeholder="TMDB v3 API Key"
+                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-300 font-bold block mb-1">Twitch Client ID (IGDB)</label>
+              <input
+                type="password"
+                value={twitchClientId}
+                onChange={e => setTwitchClientId(e.target.value)}
+                placeholder="Twitch Developer Client ID"
+                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-300 font-bold block mb-1">Twitch Client Secret (IGDB)</label>
+              <input
+                type="password"
+                value={twitchClientSecret}
+                onChange={e => setTwitchClientSecret(e.target.value)}
+                placeholder="Twitch Developer Client Secret"
+                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-300 font-bold block mb-1">RAWG API Key (Optional Game Fallback)</label>
+              <input
+                type="password"
+                value={rawgApiKey}
+                onChange={e => setRawgApiKey(e.target.value)}
+                placeholder="RAWG API Key"
+                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-300 font-bold block mb-1">Notion Integration Token</label>
+              <input
+                type="password"
+                value={notionToken}
+                onChange={e => setNotionToken(e.target.value)}
+                placeholder="secret_..."
+                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+            >
+              Save API Settings
+            </button>
+          </div>
+        </form>
+      </section>
+
       {/* Notion Integration & Column Mapper Section */}
       <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
         <h2 className="text-lg font-bold text-white flex items-center space-x-2">
@@ -704,77 +855,6 @@ export const SettingsView: React.FC = () => {
             </div>
           )}
         </div>
-      </section>
-
-      {/* External API Keys & Region Section */}
-      <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
-        <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-          <Key className="w-5 h-5 text-rose-500" />
-          <span>Metadata API Keys & Region</span>
-        </h2>
-        <p className="text-xs text-gray-400">
-          API credentials for external integrations (TMDB, IGDB, Notion API token). Secrets are stored locally in SQLite.
-        </p>
-
-        <form onSubmit={handleSaveApiKeys} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-gray-300 font-medium block mb-1">Country / Region</label>
-              <div className="flex items-center space-x-2">
-                <Globe className="w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={region}
-                  onChange={e => setRegion(e.target.value)}
-                  placeholder="e.g. United States, India"
-                  className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-300 font-medium block mb-1">TMDB API Key (Movies/TV)</label>
-              <input
-                type="password"
-                value={tmdbKey}
-                onChange={e => setTmdbKey(e.target.value)}
-                placeholder="Enter TMDB v3 or v4 bearer key"
-                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-300 font-medium block mb-1">IGDB Client ID / Secret (Games)</label>
-              <input
-                type="password"
-                value={igdbKey}
-                onChange={e => setIgdbKey(e.target.value)}
-                placeholder="Enter IGDB credentials"
-                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-300 font-medium block mb-1">Notion Integration Token</label>
-              <input
-                type="password"
-                value={notionToken}
-                onChange={e => setNotionToken(e.target.value)}
-                placeholder="secret_..."
-                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
-            >
-              Save API Settings
-            </button>
-          </div>
-        </form>
       </section>
     </div>
   );

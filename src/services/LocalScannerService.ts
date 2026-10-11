@@ -73,7 +73,10 @@ export class LocalScannerService {
       }
     }
 
-    const noiseRegex = /\b(1080p|720p|2160p|4k|uhd|webrip|web-dl|bluray|x264|x265|hevc|aac|dvdrip|proper|repack|shortcut|game)\b/gi;
+    // Strip bracketed or parenthetical contents [1080p], (2024), etc.
+    clean = clean.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ');
+
+    const noiseRegex = /\b(1080p|720p|480p|2160p|4k|uhd|webrip|web-dl|webdl|bluray|blu-ray|remux|x264|x265|hevc|h264|h265|av1|10bit|hdr|hdr10|dv|aac|dts|dd5\.1|5\.1|dvdrip|hdrip|hdtv|proper|repack|yify|rarbg|eztv|sva|fleet|shortcut|game|dual|multi|audio|subbed|dubbed|esub|eng|sub|hindi|telugu|tamil|malayalam|kannada|directors|director|cut|uncut|extended|edition|version)\b/gi;
     clean = clean.replace(noiseRegex, ' ');
     clean = clean.replace(/[\._\-]/g, ' ').replace(/\s+/g, ' ').trim();
 

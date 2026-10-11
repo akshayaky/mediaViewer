@@ -5,8 +5,33 @@ export type MediaStatus = 'Finished' | 'Currently' | 'Abandoned' | 'Planned' | '
 export interface ExternalID {
   id: string;
   media_id: string;
-  provider: 'TMDB' | 'IGDB' | 'Steam' | 'Notion' | string;
+  provider: 'TMDB' | 'IGDB' | 'RAWG' | 'Steam' | 'Notion' | string;
   external_id: string;
+}
+
+export interface CastMember {
+  id: string;
+  name: string;
+  character?: string;
+  profile_path?: string;
+}
+
+export interface Episode {
+  episode_number: number;
+  name: string;
+  overview?: string;
+  air_date?: string;
+  still_path?: string;
+  vote_average?: number;
+}
+
+export interface Season {
+  season_number: number;
+  name: string;
+  overview?: string;
+  poster_path?: string;
+  episode_count?: number;
+  episodes?: Episode[];
 }
 
 export interface Media {
@@ -23,7 +48,11 @@ export interface Media {
   backdrop?: string;
   logo?: string;
   metadata_source?: string;
+  metadata_refreshed_at?: string;
   publisher?: string;
+  developer?: string;
+  cast?: CastMember[];
+  seasons?: Season[];
   created_at: string;
   updated_at: string;
   external_ids?: ExternalID[];
@@ -117,6 +146,9 @@ export interface AppSettings {
   games_folder?: string;
   country_region?: string;
   tmdb_api_key?: string;
+  twitch_client_id?: string;
+  twitch_client_secret?: string;
+  rawg_api_key?: string;
   igdb_api_key?: string;
   notion_integration_token?: string;
   notion_database_id?: string;
