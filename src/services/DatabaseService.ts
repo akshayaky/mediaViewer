@@ -89,7 +89,8 @@ export class DatabaseService {
         cast TEXT,
         seasons TEXT,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        accent_color TEXT
       );
 
       CREATE TABLE IF NOT EXISTS media_history (
@@ -181,6 +182,7 @@ export class DatabaseService {
     this.addColumnIfNotExists('media', 'developer', 'TEXT');
     this.addColumnIfNotExists('media', 'cast', 'TEXT');
     this.addColumnIfNotExists('media', 'seasons', 'TEXT');
+    this.addColumnIfNotExists('media', 'accent_color', 'TEXT');
   }
 
   // ==========================================
@@ -255,6 +257,7 @@ export class DatabaseService {
       seasons,
       created_at: row.created_at as string,
       updated_at: row.updated_at as string,
+      accent_color: (row.accent_color as string) || undefined,
       external_ids: this.getExternalIdsForMedia(row.id as string)
     };
   }
@@ -270,8 +273,8 @@ export class DatabaseService {
   public saveMedia(media: Media): void {
     if (!this.db) return;
     this.db.run(
-      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at, accent_color)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          type=excluded.type,
          title=excluded.title,
@@ -290,7 +293,8 @@ export class DatabaseService {
          developer=excluded.developer,
          cast=excluded.cast,
          seasons=excluded.seasons,
-         updated_at=excluded.updated_at`,
+         updated_at=excluded.updated_at,
+         accent_color=excluded.accent_color`,
       [
         media.id,
         media.type,
@@ -311,7 +315,8 @@ export class DatabaseService {
         media.cast ? JSON.stringify(media.cast) : null,
         media.seasons ? JSON.stringify(media.seasons) : null,
         media.created_at,
-        media.updated_at
+        media.updated_at,
+        media.accent_color || null
       ]
     );
 

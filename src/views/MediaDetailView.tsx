@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Media } from '../types/media';
 import { useMediaDetail } from '../hooks/useMediaDetail';
 import { useDominantColor } from '../helper/useDominantColour'
-
+//import { dbService } from '../services/DatabaseService';
 import {
   ArrowLeft,
   Star,
@@ -52,16 +52,42 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     logSessionHistory,
     addCustomFilePath
   } = useMediaDetail(initialMedia);
+  let accentColorForPage = initialMedia.accent_color;
+  let accentColor: string;
+  let accentBgLight: string;
+  let accentBorderLight: string;
+  let accentColorRgb: string;
 
-  const dominantColor = useDominantColor(artwork.backdrop || artwork.poster);
-  const accentColor = dominantColor
-     ? `rgb(${dominantColor.join(",")})`
-     : '#e11d48'; // fallback to rose-600
-  const accentColorRgb = dominantColor
-     ? dominantColor.join(",")
-     : '225, 29, 72';
-  const accentBgLight = `rgba(${accentColorRgb}, 0.15)`;
-  const accentBorderLight = `rgba(${accentColorRgb}, 0.3)`;
+  if (!accentColorForPage) {
+    console.log("The color doesn't exist");
+    const dominantColor = useDominantColor(artwork.backdrop || artwork.poster);
+    accentColor = dominantColor
+      ? `rgb(${dominantColor.join(",")})`
+      : '#e11d48'; // fallback to rose-600
+    accentColorRgb = dominantColor
+      ? dominantColor.join(",")
+      : '225, 29, 72';
+    //initialMedia.accent_color = accentColor;
+    //dbService.saveMedia(initialMedia);
+    
+  } else {
+    accentColor = accentColorForPage;
+    // Extract RGB if it's a hex color, or just use it as is if it's already rgb/rgba
+    // For simplicity and consistency with the existing logic, we try to handle hex to rgb conversion if needed
+    if (accentColor.startsWith('#')) {
+      const r = parseInt(accentColor.slice(1, 3), 16);
+      const g = parseInt(accentColor.slice(3, 5), 16);
+      const b = parseInt(accentColor.slice(5, 7), 16);
+      accentColorRgb = `${r}, ${g}, ${b}`;
+    } else if (accentColor.startsWith('rgb')) {
+      accentColorRgb = accentColor.match(/\d+/g)?.join(', ') || '225, 29, 72';
+    } else {
+      accentColorRgb = '225, 29, 72';
+    }
+  }
+
+  accentBgLight = `rgba(${accentColorRgb}, 0.15)`;
+  accentBorderLight = `rgba(${accentColorRgb}, 0.3)`;
 
   // Season accordion state
   const [expandedSeason, setExpandedSeason] = useState<number | null>(1);
