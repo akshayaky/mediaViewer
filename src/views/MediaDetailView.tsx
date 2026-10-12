@@ -167,14 +167,13 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       className="relative min-h-screen text-gray-100 pb-12 transition-colors duration-500"
       style={{
         backgroundColor: accentColor,
-        backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.25) 100%)`,
         '--accent-color': accentColor,
         '--accent-rgb': accentColorRgb,
       } as React.CSSProperties}
     >
       {/* Top Backdrop Header */}
       <div
-        className="relative w-full h-[520px] border-b border-black/20"
+        className="relative w-full h-[520px] overflow-hidden"
         style={{ backgroundColor: accentColor }}
       >
         {artwork.backdrop && failedBackdropSrc !== artwork.backdrop ? (
@@ -220,9 +219,9 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
         {/* Backdrop Gradient Overlays */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 z-10"
           style={{
-            background: `linear-gradient(to top, ${accentColor} 0%, rgba(${accentColorRgb}, 0.7) 35%, rgba(0, 0, 0, 0.4) 100%)`
+            background: `linear-gradient(to top, ${accentColor} 0%, ${accentColor} 10%, rgba(${accentColorRgb}, 0.8) 30%, rgba(0, 0, 0, 0.4) 100%)`
           }}
         />
 
