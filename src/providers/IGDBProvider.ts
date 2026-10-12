@@ -44,7 +44,7 @@ export class IGDBProvider implements MetadataProvider {
     return null;
   }
 
-  private cleanQueryString(rawQuery: string): string {
+  public cleanQueryString(rawQuery: string): string {
     let q = rawQuery;
     q = q.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ');
     q = q.replace(/\.(exe|lnk|iso|bin|zip|rar)$/i, '');
@@ -68,7 +68,7 @@ export class IGDBProvider implements MetadataProvider {
         for (let len = words.length; len >= 1; len--) {
           const searchStr = words.slice(0, len).join(' ');
           try {
-            const body = `search "${searchStr.replace(/"/g, '')}"; fields name, summary, first_release_date, cover.image_id, artworks.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher; limit 8;`;
+            const body = `search "${searchStr.replace(/"/g, '')}"; fields name, summary, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher; limit 8;`;
             const res = await fetch(`${this.igdbBaseUrl}/games`, {
               method: 'POST',
               headers: {
@@ -88,6 +88,8 @@ export class IGDBProvider implements MetadataProvider {
                     : undefined;
                   const backdropUrl = game.artworks && game.artworks.length > 0
                     ? `https://images.igdb.com/igdb/image/upload/t_1080p/${game.artworks[0].image_id}.jpg`
+                    : game.screenshots && game.screenshots.length > 0
+                    ? `https://images.igdb.com/igdb/image/upload/t_1080p/${game.screenshots[0].image_id}.jpg`
                     : undefined;
                   const year = game.first_release_date
                     ? new Date(game.first_release_date * 1000).getFullYear()
@@ -152,7 +154,7 @@ export class IGDBProvider implements MetadataProvider {
       const token = await this.getTwitchAccessToken(clientId, clientSecret);
       if (token) {
         try {
-          const body = `where id = ${igdbId}; fields name, summary, first_release_date, cover.image_id, artworks.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher;`;
+          const body = `where id = ${igdbId}; fields name, summary, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher;`;
           const res = await fetch(`${this.igdbBaseUrl}/games`, {
             method: 'POST',
             headers: {
@@ -172,6 +174,8 @@ export class IGDBProvider implements MetadataProvider {
                 : undefined;
               const backdropUrl = game.artworks && game.artworks.length > 0
                 ? `https://images.igdb.com/igdb/image/upload/t_1080p/${game.artworks[0].image_id}.jpg`
+                : game.screenshots && game.screenshots.length > 0
+                ? `https://images.igdb.com/igdb/image/upload/t_1080p/${game.screenshots[0].image_id}.jpg`
                 : undefined;
               const year = game.first_release_date
                 ? new Date(game.first_release_date * 1000).getFullYear()
@@ -179,15 +183,22 @@ export class IGDBProvider implements MetadataProvider {
 
               const genres = (game.genres || []).map((g: any) => g.name);
 
-              let developer: string | undefined = undefined;
-              let publisher: string | undefined = undefined;
+              const developers: string[] = [];
+              const publishers: string[] = [];
 
               if (game.involved_companies) {
                 for (const ic of game.involved_companies) {
-                  if (ic.developer && ic.company?.name) developer = ic.company.name;
-                  if (ic.publisher && ic.company?.name) publisher = ic.company.name;
+                  if (ic.developer && ic.company?.name && !developers.includes(ic.company.name)) {
+                    developers.push(ic.company.name);
+                  }
+                  if (ic.publisher && ic.company?.name && !publishers.includes(ic.company.name)) {
+                    publishers.push(ic.company.name);
+                  }
                 }
               }
+
+              const developer = developers.length > 0 ? developers.join(', ') : undefined;
+              const publisher = publishers.length > 0 ? publishers.join(', ') : undefined;
 
               return {
                 title: game.name,
@@ -217,8 +228,12 @@ export class IGDBProvider implements MetadataProvider {
         if (res.ok) {
           const game = await res.json();
           const genres = (game.genres || []).map((g: any) => g.name);
-          const developer = game.developers && game.developers.length > 0 ? game.developers[0].name : undefined;
-          const publisher = game.publishers && game.publishers.length > 0 ? game.publishers[0].name : undefined;
+          const developer = game.developers && game.developers.length > 0
+            ? game.developers.map((d: any) => d.name).join(', ')
+            : undefined;
+          const publisher = game.publishers && game.publishers.length > 0
+            ? game.publishers.map((p: any) => p.name).join(', ')
+            : undefined;
 
           return {
             title: game.name,
@@ -274,6 +289,26 @@ export class IGDBProvider implements MetadataProvider {
         backdrop: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=1280&q=80',
         external_id: 'igdb:3040',
         provider: 'IGDB'
+      },
+      {
+        title: 'Cyberpunk 2077',
+        type: 'VideoGame',
+        release_year: 2020,
+        description: 'An open-world, action-adventure story set in Night City, a megalopolis obsessed with power, glamour and body modification.',
+        poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1280&q=80',
+        external_id: 'igdb:1877',
+        provider: 'IGDB'
+      },
+      {
+        title: 'Elden Ring',
+        type: 'VideoGame',
+        release_year: 2022,
+        description: 'THE NEW FANTASY ACTION RPG. Rise, Tarnished, and be guided by grace to brandish the power of the Elden Ring and become an Elden Lord in the Lands Between.',
+        poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=1280&q=80',
+        external_id: 'igdb:119133',
+        provider: 'IGDB'
       }
     ];
 
@@ -290,8 +325,24 @@ export class IGDBProvider implements MetadataProvider {
         genres: ['Action', 'Adventure', 'Open World'],
         poster: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=500&q=80',
         backdrop: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1280&q=80',
-        developer: 'Ubisoft Montreal',
+        developer: 'Ubisoft Montreal, Ubisoft Singapore',
         publisher: 'Ubisoft',
+        metadata_source: 'IGDB',
+        metadata_refreshed_at: new Date().toISOString()
+      };
+    }
+
+    if (externalId.includes('1877') || externalId.toLowerCase().includes('cyberpunk')) {
+      return {
+        title: 'Cyberpunk 2077',
+        type: 'VideoGame',
+        release_year: 2020,
+        description: 'An open-world, action-adventure story set in Night City, a megalopolis obsessed with power, glamour and body modification.',
+        genres: ['Action', 'RPG', 'Open World', 'Sci-Fi'],
+        poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1280&q=80',
+        developer: 'CD Projekt Red',
+        publisher: 'CD Projekt',
         metadata_source: 'IGDB',
         metadata_refreshed_at: new Date().toISOString()
       };

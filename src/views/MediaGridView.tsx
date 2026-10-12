@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MediaCard } from '../components/MediaCard';
+import { AddMediaModal } from '../components/AddMediaModal';
 import { Media, MediaType } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { Search, Filter, Plus } from 'lucide-react';
@@ -23,21 +24,35 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [languageFilter, setLanguageFilter] = useState<string>('All');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [mediaList, setMediaList] = useState<Media[]>(() => dbService.getAllMedia());
 
-  const allMedia = dbService.getAllMedia();
+  const refreshList = () => {
+    setMediaList(dbService.getAllMedia());
+  };
+
+  useEffect(() => {
+    const handleScanned = () => refreshList();
+    window.addEventListener('library-scanned', handleScanned);
+    return () => {
+      window.removeEventListener('library-scanned', handleScanned);
+    };
+  }, []);
 
   // Filter by media type if specified
-  let items = typeFilter ? allMedia.filter(m => m.type === typeFilter) : allMedia;
+  let items = typeFilter ? mediaList.filter(m => m.type === typeFilter) : mediaList;
 
   // Extract unique genres
   const genresSet = new Set<string>();
   items.forEach(m => m.genres?.forEach(g => genresSet.add(g)));
   const availableGenres = ['All', ...Array.from(genresSet)];
 
-  // Extract unique genres
+  // Extract unique languages
   const languageSet = new Set<string>();
-  items.forEach(m => languageSet.add(m.language!!));
-  const availableLanguages  = ['All', ...Array.from(languageSet)];
+  items.forEach(m => {
+    if (m.language) languageSet.add(m.language);
+  });
+  const availableLanguages = ['All', ...Array.from(languageSet)];
 
   // Apply search query
   if (searchQuery.trim()) {
@@ -65,6 +80,14 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
     items = items.filter(m => m.language?.includes(languageFilter));
   }
 
+  const handleAddButtonClick = () => {
+    if (onAddNewMedia) {
+      onAddNewMedia();
+    } else if (typeFilter) {
+      setIsAddModalOpen(true);
+    }
+  };
+
   return (
     <div className="p-8 space-y-6 max-w-7xl mx-auto">
       {/* Header Bar */}
@@ -74,10 +97,10 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
           <p className="text-sm text-rose-400/80 font-medium mt-1">{subtitle}</p>
         </div>
 
-        {onAddNewMedia && (
+        {(onAddNewMedia || typeFilter) && (
           <button
-            onClick={onAddNewMedia}
-            className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-rose-950/30 transition-all self-start md:self-auto"
+            onClick={handleAddButtonClick}
+            className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-rose-950/30 transition-all self-start md:self-auto cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add Entry</span>
@@ -129,17 +152,19 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
         </select>
 
         {/* Language Filter */}
-        <select
-          value={languageFilter}
-          onChange={e => setLanguageFilter(e.target.value)}
-          className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-rose-500"
-        >
-          {availableLanguages.map(g => (
+        {availableLanguages.length > 1 && (
+          <select
+            value={languageFilter}
+            onChange={e => setLanguageFilter(e.target.value)}
+            className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-rose-500"
+          >
+            {availableLanguages.map(g => (
               <option key={g} value={g}>
-                {g}
+                Language: {g}
               </option>
             ))}
-        </select> 
+          </select>
+        )}
       </div>
 
       {/* Grid */}
@@ -165,6 +190,16 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
             );
           })}
         </div>
+      )}
+
+      {/* Add Media Modal */}
+      {typeFilter && (
+        <AddMediaModal
+          type={typeFilter}
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onMediaAdded={() => refreshList()}
+        />
       )}
     </div>
   );
