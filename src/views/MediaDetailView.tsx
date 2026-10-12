@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Media } from '../types/media';
 import { useMediaDetail } from '../hooks/useMediaDetail';
 import { useDominantColor } from '../helper/useDominantColour'
-//import { dbService } from '../services/DatabaseService';
+import { dbService } from '../services/DatabaseService';
 import {
   ArrowLeft,
   Star,
@@ -36,6 +36,28 @@ interface MediaDetailViewProps {
   onBack: () => void;
 }
 
+interface DominantColorExtractorProps {
+  imageSrc: string;
+  onColorCalculated: (color: string) => void;
+}
+
+const DominantColorExtractor: React.FC<DominantColorExtractorProps> = ({
+  imageSrc,
+  onColorCalculated
+}) => {
+  const dominantColor = useDominantColor(imageSrc);
+  const hasReportedColor = useRef(false);
+
+  useEffect(() => {
+    if (!dominantColor || hasReportedColor.current) return;
+
+    hasReportedColor.current = true;
+    onColorCalculated(`rgb(${dominantColor.join(',')})`);
+  }, [dominantColor, onColorCalculated]);
+
+  return null;
+};
+
 export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack }) => {
   const {
     currentMedia,
@@ -52,42 +74,46 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     logSessionHistory,
     addCustomFilePath
   } = useMediaDetail(initialMedia);
-  let accentColorForPage = initialMedia.accent_color;
-  let accentColor: string;
-  let accentBgLight: string;
-  let accentBorderLight: string;
-  let accentColorRgb: string;
+  const [loadedArtworkSrc, setLoadedArtworkSrc] = useState<string>();
+  const [failedBackdropSrc, setFailedBackdropSrc] = useState<string>();
+  const [calculatedAccent, setCalculatedAccent] = useState<{ mediaId: string; color: string }>();
+  const artworkSource = artwork.backdrop && failedBackdropSrc !== artwork.backdrop
+    ? artwork.backdrop
+    : artwork.poster;
+  const accentColorForPage = initialMedia.accent_color
+    || (calculatedAccent?.mediaId === initialMedia.id ? calculatedAccent.color : undefined);
 
-  if (!accentColorForPage) {
-    console.log("The color doesn't exist");
-    const dominantColor = useDominantColor(artwork.backdrop || artwork.poster);
-    accentColor = dominantColor
-      ? `rgb(${dominantColor.join(",")})`
-      : '#e11d48'; // fallback to rose-600
-    accentColorRgb = dominantColor
-      ? dominantColor.join(",")
-      : '225, 29, 72';
-    //initialMedia.accent_color = accentColor;
-    //dbService.saveMedia(initialMedia);
-    
-  } else {
-    accentColor = accentColorForPage;
-    // Extract RGB if it's a hex color, or just use it as is if it's already rgb/rgba
-    // For simplicity and consistency with the existing logic, we try to handle hex to rgb conversion if needed
-    if (accentColor.startsWith('#')) {
-      const r = parseInt(accentColor.slice(1, 3), 16);
-      const g = parseInt(accentColor.slice(3, 5), 16);
-      const b = parseInt(accentColor.slice(5, 7), 16);
-      accentColorRgb = `${r}, ${g}, ${b}`;
-    } else if (accentColor.startsWith('rgb')) {
-      accentColorRgb = accentColor.match(/\d+/g)?.join(', ') || '225, 29, 72';
-    } else {
-      accentColorRgb = '225, 29, 72';
+  const handleDominantColorCalculated = useCallback((color: string) => {
+    setCalculatedAccent({ mediaId: initialMedia.id, color });
+
+    if (initialMedia.accent_color) return;
+
+    try {
+      dbService.saveMedia({
+        ...initialMedia,
+        accent_color: color,
+        updated_at: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to save calculated accent color:', error);
     }
-  }
+  }, [initialMedia]);
 
-  accentBgLight = `rgba(${accentColorRgb}, 0.15)`;
-  accentBorderLight = `rgba(${accentColorRgb}, 0.3)`;
+  const accentColor = accentColorForPage || '#e5dfe1';
+  const accentColorRgb = accentColorForPage
+    ? accentColorForPage.startsWith('#')
+      ? `${parseInt(accentColorForPage.slice(1, 3), 16)}, ${parseInt(accentColorForPage.slice(3, 5), 16)}, ${parseInt(accentColorForPage.slice(5, 7), 16)}`
+      : accentColorForPage.startsWith('rgb')
+        ? accentColorForPage.match(/\d+/g)?.join(', ') || '225, 29, 72'
+        : '225, 29, 72'
+    : '225, 29, 72';
+  const accentBgLight = `rgba(${accentColorRgb}, 0.15)`;
+  const accentBorderLight = `rgba(${accentColorRgb}, 0.3)`;
+  const accentColorText = `rgba(${accentColorRgb}, 0.15)`;
+
+  const highContrastFilter = {
+    filter: "brightness(2) saturate(2)"
+  };
 
   // Season accordion state
   const [expandedSeason, setExpandedSeason] = useState<number | null>(1);
@@ -128,7 +154,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const getTypeIcon = () => {
     switch (currentMedia.type) {
       case 'Film':
-        return <Film className="w-4 h-4" style={{ color: accentColor }} />;
+        return <Film className="w-4 h-4" style={{ color: accentColor, ...highContrastFilter}} />;
       case 'TV Series':
         return <Tv className="w-4 h-4 text-sky-400" />;
       case 'VideoGame':
@@ -151,11 +177,18 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         className="relative w-full h-[520px] border-b border-black/20"
         style={{ backgroundColor: accentColor }}
       >
-        {artwork.backdrop ? (
+        {artwork.backdrop && failedBackdropSrc !== artwork.backdrop ? (
           <img
             src={artwork.backdrop}
             alt={currentMedia.title}
             className="w-full h-full object-cover object-center opacity-45"
+            onLoad={() => setLoadedArtworkSrc(artwork.backdrop)}
+            onError={() => {
+              setFailedBackdropSrc(artwork.backdrop);
+              setLoadedArtworkSrc(loadedSrc =>
+                loadedSrc === artwork.backdrop ? undefined : loadedSrc
+              );
+            }}
           />
         ) : (
           <div
@@ -163,6 +196,25 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             style={{
               background: `linear-gradient(to bottom right, ${accentColor}, rgba(0, 0, 0, 0.3))`
             }}
+          />
+        )}
+        {(!artwork.backdrop || failedBackdropSrc === artwork.backdrop) && artwork.poster && (
+          <img
+            src={artwork.poster}
+            alt=""
+            aria-hidden="true"
+            className="hidden"
+            onLoad={() => setLoadedArtworkSrc(artwork.poster)}
+            onError={() => setLoadedArtworkSrc(loadedSrc =>
+              loadedSrc === artwork.poster ? undefined : loadedSrc
+            )}
+          />
+        )}
+        {!accentColorForPage && artworkSource && loadedArtworkSrc === artworkSource && (
+          <DominantColorExtractor
+            key={`${initialMedia.id}:${artworkSource}`}
+            imageSrc={artworkSource}
+            onColorCalculated={handleDominantColorCalculated}
           />
         )}
 
@@ -250,14 +302,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
               {currentMedia.release_year && (
                 <span className="bg-[#1b1e2b] text-gray-300 border border-[#2d3248] text-xs font-semibold px-2.5 py-1 rounded-full flex items-center space-x-1">
-                  <Calendar className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                  <Calendar className="w-3.5 h-3.5" style={{ color: accentColor, ...highContrastFilter}} />
                   <span>{currentMedia.release_year}</span>
                 </span>
               )}
 
               {currentMedia.runtime && (
                 <span className="bg-[#1b1e2b] text-gray-300 border border-[#2d3248] text-xs font-semibold px-2.5 py-1 rounded-full flex items-center space-x-1">
-                  <Clock className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                  <Clock className="w-3.5 h-3.5" style={{ color: accentColor, ...highContrastFilter}} />
                   <span>{currentMedia.runtime} mins</span>
                 </span>
               )}
@@ -331,7 +383,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           {/* Overview */}
           <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
             <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-              <FileText className="w-5 h-5" style={{ color: accentColor }} />
+              <FileText className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter}} />
               <span>Overview & Synopsis</span>
             </h2>
             <p className="text-sm text-gray-300 leading-relaxed">
@@ -348,7 +400,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           {currentMedia.cast && currentMedia.cast.length > 0 && (
             <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
               <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                <User className="w-5 h-5" style={{ color: accentColor }} />
+                <User className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter}} />
                 <span>Top Cast Members</span>
               </h2>
 
@@ -378,7 +430,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           {currentMedia.type === 'TV Series' && currentMedia.seasons && currentMedia.seasons.length > 0 && (
             <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
               <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                <Layers className="w-5 h-5" style={{ color: accentColor }} />
+                <Layers className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter }} />
                 <span>Seasons & Episode Guide ({currentMedia.seasons.length} Seasons)</span>
               </h2>
 
@@ -403,7 +455,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                           </div>
                         </div>
 
-                        {isExpanded ? <ChevronUp className="w-5 h-5" style={{ color: accentColor }} /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                        {isExpanded ? <ChevronUp className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter}} /> : <ChevronDown className="w-5 h-5 text-gray-400" style={{ color: accentColor, ...highContrastFilter}}/>}
                       </button>
 
                       {isExpanded && (
@@ -448,13 +500,13 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           {/* Derived State & Session Summary */}
           <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-              <Tag className="w-5 h-5" style={{ color: accentColor }} />
+              <Tag className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter }} />
               <span>Derived Library Statistics</span>
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-[#1a1d29] p-3.5 rounded-xl border border-[#2d3145]">
                 <span className="text-xs text-gray-400 font-medium">Current Status</span>
-                <p className="text-sm font-bold mt-1" style={{ color: accentColor }}>{state.current_status}</p>
+                <p className="text-sm font-bold mt-1" style={{ color: accentColor, ...highContrastFilter }}>{state.current_status}</p>
               </div>
               <div className="bg-[#1a1d29] p-3.5 rounded-xl border border-[#2d3145]">
                 <span className="text-xs text-gray-400 font-medium">Total Sessions</span>
@@ -477,7 +529,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                <History className="w-5 h-5" style={{ color: accentColor }} />
+                <History className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter }} />
                 <span>Interaction Journal ({historyList.length})</span>
               </h2>
               <button
@@ -506,6 +558,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                           style={{
                             backgroundColor: accentBgLight,
                             color: accentColor,
+                            ...highContrastFilter,
                             borderColor: accentBorderLight
                           }}
                         >
@@ -551,7 +604,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-white flex items-center space-x-2">
-                <FolderCheck className="w-4 h-4" style={{ color: accentColor }} />
+                <FolderCheck className="w-4 h-4" style={{ color: accentColor, ...highContrastFilter }} />
                 <span>Local System Files</span>
               </h2>
 
@@ -560,12 +613,16 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 style={{
                   color: accentColor,
                   backgroundColor: accentBgLight,
-                  borderColor: accentBorderLight
+                  borderColor: accentBorderLight,
+                  ...highContrastFilter
                 }}
                 className="text-xs hover:opacity-90 font-semibold flex items-center space-x-1 border px-2.5 py-1 rounded-lg cursor-pointer transition-colors"
               >
                 <Edit3 className="w-3 h-3" />
-                <span>Configure Path</span>
+                <span
+                style={{
+                  color: accentColor
+                }}>Configure Path</span>
               </button>
             </div>
 
@@ -610,7 +667,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           {/* Streaming & Provider Availability */}
           <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
             <h2 className="text-base font-bold text-white flex items-center space-x-2">
-              <Globe className="w-4 h-4" style={{ color: accentColor }} />
+              <Globe className="w-4 h-4" style={{ color: accentColor, ...highContrastFilter }} />
               <span>Streaming & Availability</span>
             </h2>
             {availabilities.length === 0 ? (
@@ -633,7 +690,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                         href={av.url}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: accentColor }}
+                        style={{ color: accentColor, ...highContrastFilter }}
                         className="text-xs hover:underline font-medium"
                       >
                         Open
