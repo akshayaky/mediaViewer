@@ -3,17 +3,26 @@ import { MetadataProvider, MetadataSearchResult } from './interfaces';
 import { dbService } from '../services/DatabaseService';
 
 async function smartFetch(url: string, options?: RequestInit): Promise<Response> {
-  try {
-    const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
-    return await tauriFetch(url, options);
-  } catch {
+  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
+  if (isTauri) {
     try {
-      return await fetch(url, options);
-    } catch {
-      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-      return await fetch(proxyUrl, options);
+      const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
+      return await tauriFetch(url, options);
+    } catch (err) {
+      console.warn('Tauri native fetch failed, falling back to browser proxy fetch:', err);
     }
   }
+
+  // Web Browser / Vite dev mode: route requests through Vite dev server proxy to avoid CORS
+  let targetUrl = url;
+  if (url.startsWith('https://api.igdb.com/v4')) {
+    targetUrl = url.replace('https://api.igdb.com/v4', '/igdb-api');
+  } else if (url.startsWith('https://id.twitch.tv/oauth2/token')) {
+    targetUrl = url.replace('https://id.twitch.tv/oauth2/token', '/twitch-oauth');
+  }
+
+  return await fetch(targetUrl, options);
 }
 
 export class IGDBProvider implements MetadataProvider {

@@ -28,5 +28,17 @@ export default defineConfig(() => ({
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
+    proxy: {
+      '/igdb-api': {
+        target: 'https://api.igdb.com/v4',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/igdb-api/, ''),
+      },
+      '/twitch-oauth': {
+        target: 'https://id.twitch.tv/oauth2/token',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/twitch-oauth/, ''),
+      },
+    },
   },
 }));
