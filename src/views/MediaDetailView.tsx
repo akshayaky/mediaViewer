@@ -109,7 +109,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     : '225, 29, 72';
   const accentBgLight = `rgba(${accentColorRgb}, 0.15)`;
   const accentBorderLight = `rgba(${accentColorRgb}, 0.3)`;
-  const accentColorText = `rgba(${accentColorRgb}, 0.15)`;
 
   const highContrastFilter = {
     filter: "brightness(2) saturate(2)"
@@ -173,14 +172,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     >
       {/* Top Backdrop Header */}
       <div
-        className="relative w-full h-[520px] overflow-hidden"
+        className="relative w-full h-[700px] overflow-hidden"
         style={{ backgroundColor: accentColor }}
       >
         {artwork.backdrop && failedBackdropSrc !== artwork.backdrop ? (
           <img
             src={artwork.backdrop}
             alt={currentMedia.title}
-            className="w-full h-full object-cover object-center opacity-45"
+            className="w-full h-full object-cover opacity-45"
             onLoad={() => setLoadedArtworkSrc(artwork.backdrop)}
             onError={() => {
               setFailedBackdropSrc(artwork.backdrop);
