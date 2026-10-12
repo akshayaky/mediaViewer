@@ -77,6 +77,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const [loadedArtworkSrc, setLoadedArtworkSrc] = useState<string>();
   const [failedBackdropSrc, setFailedBackdropSrc] = useState<string>();
   const [calculatedAccent, setCalculatedAccent] = useState<{ mediaId: string; color: string }>();
+  const [isPlayButtonStuck, setIsPlayButtonStuck] = useState(false);
+  const playButtonRowRef = useRef<HTMLDivElement>(null);
   const artworkSource = artwork.backdrop && failedBackdropSrc !== artwork.backdrop
     ? artwork.backdrop
     : artwork.poster;
@@ -131,6 +133,33 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const isAvailableLocally = localFiles.some(lf => lf.exists);
   const isLocalMissing = localFiles.length > 0 && !isAvailableLocally;
 
+  useEffect(() => {
+    const playButtonRow = playButtonRowRef.current;
+    if (!playButtonRow) return;
+
+    let scrollContainer: HTMLElement | null = playButtonRow.parentElement;
+    while (scrollContainer && scrollContainer !== document.body) {
+      const overflowY = window.getComputedStyle(scrollContainer).overflowY;
+      if (overflowY === 'auto' || overflowY === 'scroll') break;
+      scrollContainer = scrollContainer.parentElement;
+    }
+    if (!scrollContainer || scrollContainer === document.body) return;
+
+    const updateStickyState = () => {
+      const isStuck = playButtonRow.getBoundingClientRect().top <= 24;
+      setIsPlayButtonStuck(previousState => previousState === isStuck ? previousState : isStuck);
+    };
+
+    scrollContainer.addEventListener('scroll', updateStickyState, { passive: true });
+    window.addEventListener('resize', updateStickyState);
+    updateStickyState();
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', updateStickyState);
+      window.removeEventListener('resize', updateStickyState);
+    };
+  }, [activeLocalFile, isAvailableLocally]);
+
   const handleAddHistorySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     logSessionHistory({
@@ -170,9 +199,9 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         '--accent-rgb': accentColorRgb,
       } as React.CSSProperties}
     >
-      {/* Top Backdrop Header */}
+      {/* Pinned Backdrop */}
       <div
-        className="relative w-full h-[700px] overflow-hidden"
+        className="sticky top-0 z-0 -mb-[700px] h-[700px] w-full overflow-hidden pointer-events-none"
         style={{ backgroundColor: accentColor }}
       >
         {artwork.backdrop && failedBackdropSrc !== artwork.backdrop ? (
@@ -223,9 +252,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             background: `linear-gradient(to top, ${accentColor} 0%, ${accentColor} 10%, rgba(${accentColorRgb}, 0.8) 30%, rgba(0, 0, 0, 0.4) 100%)`
           }}
         />
+      </div>
 
-        {/* Header Bar Actions */}
-        <div className="absolute top-6 left-6 right-6 z-20 flex items-center justify-between">
+      {/* Pinned Header Bar Actions */}
+      <div className={`sticky top-0 z-30 -mb-16 h-16 pointer-events-none transition-all duration-500 ease-in-out ${isPlayButtonStuck ? 'bg-black/25 backdrop-blur-md' : 'bg-transparent backdrop-blur-none'}`}>
+        <div className="absolute top-6 left-6 right-6 flex items-center justify-between pointer-events-auto">
           <button
             onClick={onBack}
             className="flex items-center space-x-2 bg-black/60 hover:bg-black/80 text-white font-medium text-xs px-3.5 py-2 rounded-xl backdrop-blur-md border border-white/10 transition-all shadow-lg cursor-pointer"
@@ -253,7 +284,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             )}
           </button>
         </div>
+      </div>
 
+      {/* Scrollable Hero Content */}
+      <div className="relative z-10 h-[700px]">
         {/* Floating Poster & Title Overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-8 max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-end gap-6 z-10">
           {/* Poster */}
@@ -345,18 +379,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
               </div>
             )}
 
-            {/* Play Button & Feedback messages */}
+            {/* Feedback messages */}
             <div className="flex items-center space-x-3 pt-2">
-              {activeLocalFile && isAvailableLocally && (
-                <button
-                  onClick={() => handlePlayFile(activeLocalFile)}
-                  className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm px-6 py-3 rounded-xl shadow-xl shadow-emerald-950/40 transition-all transform hover:-translate-y-0.5 cursor-pointer"
-                >
-                  <Play className="w-5 h-5 fill-current" />
-                  <span>PLAY {currentMedia.type === 'VideoGame' ? 'GAME' : 'MEDIA'}</span>
-                </button>
-              )}
-
               {launchMessage && (
                 <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-3 py-2 rounded-lg animate-fadeIn">
                   {launchMessage}
@@ -374,8 +398,23 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         </div>
       </div>
 
+      {activeLocalFile && isAvailableLocally && (
+        <div
+          ref={playButtonRowRef}
+          className="sticky top-6 z-30 mx-auto -mt-14 flex h-14 max-w-7xl items-center pr-8 pl-44 pointer-events-none"
+        >
+          <button
+            onClick={() => handlePlayFile(activeLocalFile)}
+            className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm px-6 py-3 rounded-xl shadow-xl shadow-emerald-950/40 transition-all transform hover:-translate-y-0.5 cursor-pointer pointer-events-auto"
+          >
+            <Play className="w-5 h-5 fill-current" />
+            <span>PLAY {currentMedia.type === 'VideoGame' ? 'GAME' : 'MEDIA'}</span>
+          </button>
+        </div>
+      )}
+
       {/* Main Content Layout */}
-      <div className="p-8 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="relative z-10 p-8 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Overview, Seasons, Cast, Journal */}
         <div className="lg:col-span-2 space-y-8">
           {/* Overview */}
