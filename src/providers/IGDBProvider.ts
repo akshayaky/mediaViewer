@@ -2,6 +2,20 @@ import { Media, MediaType } from '../types/media';
 import { MetadataProvider, MetadataSearchResult } from './interfaces';
 import { dbService } from '../services/DatabaseService';
 
+async function smartFetch(url: string, options?: RequestInit): Promise<Response> {
+  try {
+    const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
+    return await tauriFetch(url, options);
+  } catch {
+    try {
+      return await fetch(url, options);
+    } catch {
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+      return await fetch(proxyUrl, options);
+    }
+  }
+}
+
 export class IGDBProvider implements MetadataProvider {
   public name = 'IGDB';
   private twitchOAuthUrl = 'https://id.twitch.tv/oauth2/token';
@@ -13,9 +27,9 @@ export class IGDBProvider implements MetadataProvider {
   private getTwitchCredentials() {
     const settings = dbService.getSettings();
     return {
-      clientId: settings.twitch_client_id,
-      clientSecret: settings.twitch_client_secret,
-      rawgApiKey: settings.rawg_api_key
+      clientId: settings.twitch_client_id?.trim(),
+      clientSecret: settings.twitch_client_secret?.trim(),
+      rawgApiKey: settings.rawg_api_key?.trim()
     };
   }
 
@@ -25,11 +39,12 @@ export class IGDBProvider implements MetadataProvider {
     }
 
     try {
-      const res = await fetch(
-        `${this.twitchOAuthUrl}?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
-        { method: 'POST' }
-      );
-      if (!res.ok) return null;
+      const tokenUrl = `${this.twitchOAuthUrl}?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`;
+      const res = await smartFetch(tokenUrl, { method: 'POST' });
+      if (!res.ok) {
+        console.warn(`Twitch OAuth returned status ${res.status}:`, await res.text());
+        return null;
+      }
       const data = await res.json();
       if (data.access_token) {
         this.cachedAccessToken = {
@@ -69,7 +84,7 @@ export class IGDBProvider implements MetadataProvider {
           const searchStr = words.slice(0, len).join(' ');
           try {
             const body = `search "${searchStr.replace(/"/g, '')}"; fields name, summary, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher; limit 8;`;
-            const res = await fetch(`${this.igdbBaseUrl}/games`, {
+            const res = await smartFetch(`${this.igdbBaseUrl}/games`, {
               method: 'POST',
               headers: {
                 'Client-ID': clientId,
@@ -107,12 +122,16 @@ export class IGDBProvider implements MetadataProvider {
                   };
                 });
               }
+            } else {
+              console.warn(`IGDB search HTTP ${res.status}:`, await res.text());
             }
           } catch (err) {
             console.error('IGDB search failed:', err);
           }
         }
       }
+    } else {
+      console.info('Twitch Client ID / Secret not set in Settings. To search live IGDB data, configure Twitch Client ID & Secret in Settings.');
     }
 
     // 2. Try RAWG API fallback if RAWG key is set with progressive word trimming
@@ -120,7 +139,7 @@ export class IGDBProvider implements MetadataProvider {
       for (let len = words.length; len >= 1; len--) {
         const searchStr = words.slice(0, len).join(' ');
         try {
-          const res = await fetch(`${this.rawgBaseUrl}/games?key=${rawgApiKey}&search=${encodeURIComponent(searchStr)}&page_size=8`);
+          const res = await smartFetch(`${this.rawgBaseUrl}/games?key=${rawgApiKey}&search=${encodeURIComponent(searchStr)}&page_size=8`);
           if (res.ok) {
             const data = await res.json();
             if (data.results && data.results.length > 0) {
@@ -155,7 +174,7 @@ export class IGDBProvider implements MetadataProvider {
       if (token) {
         try {
           const body = `where id = ${igdbId}; fields name, summary, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher;`;
-          const res = await fetch(`${this.igdbBaseUrl}/games`, {
+          const res = await smartFetch(`${this.igdbBaseUrl}/games`, {
             method: 'POST',
             headers: {
               'Client-ID': clientId,
@@ -224,7 +243,7 @@ export class IGDBProvider implements MetadataProvider {
     if (externalId.startsWith('rawg:') && rawgApiKey) {
       const rawgId = externalId.replace('rawg:', '');
       try {
-        const res = await fetch(`${this.rawgBaseUrl}/games/${rawgId}?key=${rawgApiKey}`);
+        const res = await smartFetch(`${this.rawgBaseUrl}/games/${rawgId}?key=${rawgApiKey}`);
         if (res.ok) {
           const game = await res.json();
           const genres = (game.genres || []).map((g: any) => g.name);
