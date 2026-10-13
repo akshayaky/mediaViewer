@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Media } from '../types/media';
 import { useMediaDetail } from '../hooks/useMediaDetail';
-import { useDominantColor } from '../helper/useDominantColour'
+import { useDominantColor, getCardColor } from '../helper/useDominantColour'
 import { dbService } from '../services/DatabaseService';
 import {
   ArrowLeft,
@@ -74,6 +74,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     logSessionHistory,
     addCustomFilePath
   } = useMediaDetail(initialMedia);
+  console.log("Detailed view");
   const [loadedArtworkSrc, setLoadedArtworkSrc] = useState<string>();
   const [failedBackdropSrc, setFailedBackdropSrc] = useState<string>();
   const [calculatedAccent, setCalculatedAccent] = useState<{ mediaId: string; color: string }>();
@@ -101,7 +102,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     }
   }, [initialMedia]);
 
-  const accentColor = accentColorForPage || '#e5dfe1';
+  const accentColor = accentColorForPage || '#cd285c';
   const accentColorRgb = accentColorForPage
     ? accentColorForPage.startsWith('#')
       ? `${parseInt(accentColorForPage.slice(1, 3), 16)}, ${parseInt(accentColorForPage.slice(3, 5), 16)}, ${parseInt(accentColorForPage.slice(5, 7), 16)}`
@@ -418,7 +419,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         {/* Left Column: Overview, Seasons, Cast, Journal */}
         <div className="lg:col-span-2 space-y-8">
           {/* Overview */}
-          <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
+          <section className="bg-[backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
             <h2 className="text-lg font-bold text-white flex items-center space-x-2">
               <FileText className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter}} />
               <span>Overview & Synopsis</span>
@@ -435,7 +436,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
           {/* Cast Rail */}
           {currentMedia.cast && currentMedia.cast.length > 0 && (
-            <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
+            <section className="bg-backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
               <h2 className="text-lg font-bold text-white flex items-center space-x-2">
                 <User className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter}} />
                 <span>Top Cast Members</span>
@@ -535,7 +536,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           )}
 
           {/* Derived State & Session Summary */}
-          <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
+          <section className="bg-backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-white flex items-center space-x-2">
               <Tag className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter }} />
               <span>Derived Library Statistics</span>
@@ -563,7 +564,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           </section>
 
           {/* History Timeline */}
-          <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
+          <section className="bg- backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white flex items-center space-x-2">
                 <History className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter }} />
@@ -638,7 +639,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         {/* Right Column: Local Files & Availability */}
         <div className="space-y-6">
           {/* Local Storage & Executable Files */}
-          <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
+          <section className="bg-backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-white flex items-center space-x-2">
                 <FolderCheck className="w-4 h-4" style={{ color: accentColor, ...highContrastFilter }} />
@@ -702,7 +703,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           </section>
 
           {/* Streaming & Provider Availability */}
-          <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
+          <section className="bg-backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3" 
+          style={{ color: getCardColor(accentColorRgb)}}>
             <h2 className="text-base font-bold text-white flex items-center space-x-2">
               <Globe className="w-4 h-4" style={{ color: accentColor, ...highContrastFilter }} />
               <span>Streaming & Availability</span>
