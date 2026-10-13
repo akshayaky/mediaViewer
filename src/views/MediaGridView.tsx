@@ -11,6 +11,7 @@ interface MediaGridViewProps {
   subtitle: string;
   onSelectMedia: (media: Media) => void;
   onAddNewMedia?: () => void;
+  isCollapsed?: boolean;
 }
 
 export const MediaGridView: React.FC<MediaGridViewProps> = ({
@@ -18,7 +19,8 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   title,
   subtitle,
   onSelectMedia,
-  onAddNewMedia
+  onAddNewMedia,
+  isCollapsed
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
@@ -89,7 +91,7 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl mx-auto">
+    <div className={`p-8 space-y-6 mx-auto ${isCollapsed ? 'max-w-none' : 'max-w-7xl'}`}>
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1f222e] pb-6">
         <div>
@@ -173,7 +175,11 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
           <p className="text-base font-medium">No media found matching your filter criteria.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
+        <div className={`grid gap-5 ${
+          isCollapsed 
+            ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-8' 
+            : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'
+        }`}>
           {items.map(media => {
             const state = dbService.getMediaState(media.id);
             const history = dbService.getHistoryForMedia(media.id);

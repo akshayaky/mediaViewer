@@ -15,6 +15,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [selectedMedia, setSelectedMedia] = useState<Media | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
     async function initApp() {
@@ -71,6 +72,7 @@ export function App() {
             title="Movies & Films"
             subtitle="Explore your personal feature film library"
             onSelectMedia={handleSelectMedia}
+            isCollapsed={isCollapsed}
           />
         );
       case 'tv':
@@ -80,6 +82,7 @@ export function App() {
             title="TV Shows & Series"
             subtitle="Track your watched seasons, episodes, and series history"
             onSelectMedia={handleSelectMedia}
+            isCollapsed={isCollapsed}
           />
         );
       case 'games':
@@ -89,6 +92,7 @@ export function App() {
             title="Video Games"
             subtitle="Catalog and history of PC, console, and handheld games"
             onSelectMedia={handleSelectMedia}
+            isCollapsed={isCollapsed}
           />
         );
       case 'wishlist':
@@ -107,7 +111,7 @@ export function App() {
   return (
     <div className="flex h-screen bg-[#0c0d10] text-gray-100 font-sans overflow-hidden">
       {/* Navigation Sidebar */}
-      <Sidebar activeTab={activeTab} onSelectTab={handleSelectTab} />
+      <Sidebar activeTab={activeTab} onSelectTab={handleSelectTab} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
 
       {/* Main View Area */}
       <main className="flex-1 overflow-y-auto bg-[#0c0d10]">
