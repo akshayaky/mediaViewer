@@ -39,6 +39,11 @@ export default defineConfig(() => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/twitch-oauth/, ''),
       },
+      '/steam-search': {
+        target: 'https://store.steampowered.com/api/storesearch',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/steam-search/, ''),
+      },
     },
   },
 }));
