@@ -1,14 +1,14 @@
 import { Media, MediaType } from '../types/media';
 import { ArtworkProvider } from './interfaces';
 import { tmdbProvider } from './TMDBProvider';
-import { igdbProvider } from './IGDBProvider';
+import { igdbProvider, fetchSteamLogo } from './IGDBProvider';
 import { STORAGE_KEYS } from '../constants/appConstants';
 
 /**
  * Caches artwork results in memory and persists them to LocalStorage.
  * Resolves media artwork using a 3-tier priority sequence:
  * 1. Local Cache / Existing Database Artwork
- * 2. External Provider Lookup (TMDB / IGDB)
+ * 2. External Provider Lookup (TMDB / IGDB / Steam)
  * 3. Dynamic SVG Placeholder Artwork
  */
 
@@ -108,12 +108,12 @@ export class ArtworkCacheProvider implements ArtworkProvider {
 
     // Priority 1: Check local cached artwork (excluding placeholders)
     const cached = this.getCachedArtwork(cacheKey);
-    if (cached && cached.source !== 'placeholder' && (cached.poster || cached.backdrop)) {
+    if (cached && cached.source !== 'placeholder' && (cached.poster || cached.backdrop || cached.logo)) {
       return cached;
     }
 
-    // Priority 1.5: If media object already has poster/backdrop from database
-    if (media.poster || media.backdrop) {
+    // Priority 1.5: If media object already has poster/backdrop/logo from database
+    if (media.poster || media.backdrop || media.logo) {
       const dbResult: ArtworkResult = {
         poster: media.poster,
         backdrop: media.backdrop,
@@ -127,7 +127,7 @@ export class ArtworkCacheProvider implements ArtworkProvider {
     // Priority 2: Fetch from Metadata provider
     try {
       const providerArtwork = await this.getArtwork(media.title, media.type);
-      if (providerArtwork.poster || providerArtwork.backdrop) {
+      if (providerArtwork.poster || providerArtwork.backdrop || providerArtwork.logo) {
         const result: ArtworkResult = {
           ...providerArtwork,
           source: 'metadata_provider'
@@ -149,13 +149,16 @@ export class ArtworkCacheProvider implements ArtworkProvider {
   ): Promise<{ poster?: string; backdrop?: string; logo?: string }> {
     if (type === 'VideoGame') {
       const searchRes = await igdbProvider.searchMedia(mediaTitle, 'VideoGame');
+      const logo = await fetchSteamLogo(mediaTitle);
       if (searchRes.length > 0) {
         const match = searchRes[0];
         return {
           poster: match.poster,
-          backdrop: match.backdrop
+          backdrop: match.backdrop,
+          logo
         };
       }
+      return { logo };
     } else {
       const searchRes = await tmdbProvider.searchMedia(mediaTitle, type);
       if (searchRes.length > 0) {

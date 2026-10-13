@@ -2,6 +2,33 @@ import { Media, MediaType } from '../types/media';
 import { MetadataProvider, MetadataSearchResult } from './interfaces';
 import { dbService } from '../services/DatabaseService';
 
+export async function fetchSteamLogo(gameTitle: string): Promise<string | undefined> {
+  try {
+    const cleanTitle = gameTitle.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ').trim();
+    if (!cleanTitle) return undefined;
+
+    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    let targetUrl = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(cleanTitle)}&l=english&cc=US`;
+    if (!isTauri && typeof window !== 'undefined') {
+      targetUrl = `/steam-search?term=${encodeURIComponent(cleanTitle)}&l=english&cc=US`;
+    }
+
+    const res = await fetch(targetUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.items && data.items.length > 0) {
+        const appId = data.items[0].id;
+        if (appId) {
+          return `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/logo.png`;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`Failed to fetch Steam logo for game "${gameTitle}":`, err);
+  }
+  return undefined;
+}
+
 async function smartFetch(url: string, options?: RequestInit): Promise<Response> {
   const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -228,6 +255,9 @@ export class IGDBProvider implements MetadataProvider {
               const developer = developers.length > 0 ? developers.join(', ') : undefined;
               const publisher = publishers.length > 0 ? publishers.join(', ') : undefined;
 
+              // Fetch Steam logo for video game
+              const logo = await fetchSteamLogo(game.name);
+
               return {
                 title: game.name,
                 type: 'VideoGame',
@@ -236,6 +266,7 @@ export class IGDBProvider implements MetadataProvider {
                 genres,
                 poster: coverUrl,
                 backdrop: backdropUrl,
+                logo,
                 developer,
                 publisher,
                 metadata_source: 'IGDB',
@@ -263,6 +294,8 @@ export class IGDBProvider implements MetadataProvider {
             ? game.publishers.map((p: any) => p.name).join(', ')
             : undefined;
 
+          const logo = await fetchSteamLogo(game.name);
+
           return {
             title: game.name,
             type: 'VideoGame',
@@ -271,6 +304,7 @@ export class IGDBProvider implements MetadataProvider {
             genres,
             poster: game.background_image,
             backdrop: game.background_image_additional || game.background_image,
+            logo,
             developer,
             publisher,
             metadata_source: 'RAWG',
@@ -353,6 +387,7 @@ export class IGDBProvider implements MetadataProvider {
         genres: ['Action', 'Adventure', 'Open World'],
         poster: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=500&q=80',
         backdrop: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1280&q=80',
+        logo: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/242050/logo.png',
         developer: 'Ubisoft Montreal, Ubisoft Singapore',
         publisher: 'Ubisoft',
         metadata_source: 'IGDB',
@@ -369,6 +404,7 @@ export class IGDBProvider implements MetadataProvider {
         genres: ['Action', 'RPG', 'Open World', 'Sci-Fi'],
         poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80',
         backdrop: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1280&q=80',
+        logo: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1091500/logo.png',
         developer: 'CD Projekt Red',
         publisher: 'CD Projekt',
         metadata_source: 'IGDB',
@@ -384,6 +420,7 @@ export class IGDBProvider implements MetadataProvider {
       genres: ['Co-op', 'Simulation', 'Casual', 'Strategy'],
       poster: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&q=80',
       backdrop: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1280&q=80',
+      logo: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/448510/logo.png',
       developer: 'Ghost Town Games',
       publisher: 'Team17',
       metadata_source: 'IGDB',

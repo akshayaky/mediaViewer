@@ -41,8 +41,26 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ media, onSelectMedia
           <span className="text-xs text-gray-400 font-medium">{media.type}</span>
         </div>
 
-        {/* Title */}
-        <h1 className="text-4xl font-extrabold text-white tracking-tight drop-shadow-md leading-none">
+        {/* Title Logo or Text */}
+        {media.logo ? (
+          <div className="py-1">
+            <img
+              src={media.logo}
+              alt={media.title}
+              className="h-16 max-w-md object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const titleEl = document.getElementById(`hero-title-text-${media.id}`);
+                if (titleEl) titleEl.classList.remove('hidden');
+              }}
+            />
+          </div>
+        ) : null}
+
+        <h1
+          id={`hero-title-text-${media.id}`}
+          className={`text-4xl font-extrabold text-white tracking-tight drop-shadow-md leading-none ${media.logo ? 'hidden' : ''}`}
+        >
           {media.title}
         </h1>
 
@@ -82,14 +100,14 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ media, onSelectMedia
         <div className="flex items-center space-x-3 pt-2">
           <button
             onClick={() => onSelectMedia(media)}
-            className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-rose-900/40 transition-all transform hover:-translate-y-0.5"
+            className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-rose-900/40 transition-all transform hover:-translate-y-0.5 cursor-pointer"
           >
             <Play className="w-4 h-4 fill-current" />
             <span>View Details</span>
           </button>
           <button
             onClick={() => onSelectMedia(media)}
-            className="flex items-center space-x-2 bg-gray-800/80 hover:bg-gray-700/80 text-gray-200 font-semibold text-sm px-4 py-2.5 rounded-xl border border-gray-700 backdrop-blur-md transition-all"
+            className="flex items-center space-x-2 bg-gray-800/80 hover:bg-gray-700/80 text-gray-200 font-semibold text-sm px-4 py-2.5 rounded-xl border border-gray-700 backdrop-blur-md transition-all cursor-pointer"
           >
             <Info className="w-4 h-4" />
             <span>History ({state.total_watch_play_count || history.length})</span>

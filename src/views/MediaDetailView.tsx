@@ -181,6 +181,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     }
   };
 
+  const logoUrl = artwork.logo || currentMedia.logo;
+
   return (
     <div
       className="mdv-page"
@@ -323,7 +325,26 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
               )}
             </div>
 
-            <h1 className="mdv-title">
+            {/* Logo Image or Fallback Title Text */}
+            {logoUrl ? (
+              <div className="py-1">
+                <img
+                  src={logoUrl}
+                  alt={currentMedia.title}
+                  className="h-16 md:h-24 max-w-xs md:max-w-md object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    const titleEl = document.getElementById(`media-title-text-${currentMedia.id}`);
+                    if (titleEl) titleEl.classList.remove('hidden');
+                  }}
+                />
+              </div>
+            ) : null}
+
+            <h1
+              id={`media-title-text-${currentMedia.id}`}
+              className={`text-4xl md:text-5xl font-black text-white tracking-tight drop-shadow-lg flex items-center space-x-3 ${logoUrl ? 'hidden' : ''}`}
+            >
               <span>{currentMedia.title}</span>
             </h1>
 
