@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Media } from '../types/media';
 import { useMediaDetail } from '../hooks/useMediaDetail';
-import { useDominantColor } from '../helper/useDominantColour'
+import { useDominantColor } from '../helper/useDominantColour';
+import { getMediaTheme } from '../helper/mediaDetailTheme';
 import { dbService } from '../services/DatabaseService';
+import './MediaDetailView.css';
 import {
   ArrowLeft,
   Star,
@@ -74,6 +76,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     logSessionHistory,
     addCustomFilePath
   } = useMediaDetail(initialMedia);
+  console.log("Detailed view");
   const [loadedArtworkSrc, setLoadedArtworkSrc] = useState<string>();
   const [failedBackdropSrc, setFailedBackdropSrc] = useState<string>();
   const [calculatedAccent, setCalculatedAccent] = useState<{ mediaId: string; color: string }>();
@@ -101,20 +104,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     }
   }, [initialMedia]);
 
-  const accentColor = accentColorForPage || '#e5dfe1';
-  const accentColorRgb = accentColorForPage
-    ? accentColorForPage.startsWith('#')
-      ? `${parseInt(accentColorForPage.slice(1, 3), 16)}, ${parseInt(accentColorForPage.slice(3, 5), 16)}, ${parseInt(accentColorForPage.slice(5, 7), 16)}`
-      : accentColorForPage.startsWith('rgb')
-        ? accentColorForPage.match(/\d+/g)?.join(', ') || '225, 29, 72'
-        : '225, 29, 72'
-    : '225, 29, 72';
-  const accentBgLight = `rgba(${accentColorRgb}, 0.15)`;
-  const accentBorderLight = `rgba(${accentColorRgb}, 0.3)`;
-
-  const highContrastFilter = {
-    filter: "brightness(2) saturate(2)"
-  };
+  // Light/dark tone + accent-derived colours. All other styling lives in MediaDetailView.css
+  const theme = getMediaTheme(accentColorForPage);
 
   // Season accordion state
   const [expandedSeason, setExpandedSeason] = useState<number | null>(1);
@@ -182,11 +173,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const getTypeIcon = () => {
     switch (currentMedia.type) {
       case 'Film':
-        return <Film className="w-4 h-4" style={{ color: accentColor, ...highContrastFilter}} />;
+        return <Film className="mdv-icon-md mdv-icon-film" />;
       case 'TV Series':
-        return <Tv className="w-4 h-4 text-sky-400" />;
+        return <Tv className="mdv-icon-md mdv-icon-tv" />;
       case 'VideoGame':
-        return <Gamepad2 className="w-4 h-4 text-purple-400" />;
+        return <Gamepad2 className="mdv-icon-md mdv-icon-game" />;
     }
   };
 
@@ -194,23 +185,17 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
   return (
     <div
-      className="relative min-h-screen text-gray-100 pb-12 transition-colors duration-500"
-      style={{
-        backgroundColor: accentColor,
-        '--accent-color': accentColor,
-        '--accent-rgb': accentColorRgb,
-      } as React.CSSProperties}
+      className="mdv-page"
+      data-tone={theme.tone}
+      style={theme.cssVars}
     >
       {/* Pinned Backdrop */}
-      <div
-        className="sticky top-0 z-0 -mb-[700px] h-[700px] w-full overflow-hidden pointer-events-none"
-        style={{ backgroundColor: accentColor }}
-      >
+      <div className="mdv-backdrop">
         {artwork.backdrop && failedBackdropSrc !== artwork.backdrop ? (
           <img
             src={artwork.backdrop}
             alt={currentMedia.title}
-            className="w-full h-full object-cover opacity-45"
+            className="mdv-backdrop-img"
             onLoad={() => setLoadedArtworkSrc(artwork.backdrop)}
             onError={() => {
               setFailedBackdropSrc(artwork.backdrop);
@@ -220,19 +205,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             }}
           />
         ) : (
-          <div
-            className="w-full h-full"
-            style={{
-              background: `linear-gradient(to bottom right, ${accentColor}, rgba(0, 0, 0, 0.3))`
-            }}
-          />
+          <div className="mdv-backdrop-fallback" />
         )}
         {(!artwork.backdrop || failedBackdropSrc === artwork.backdrop) && artwork.poster && (
           <img
             src={artwork.poster}
             alt=""
             aria-hidden="true"
-            className="hidden"
+            className="mdv-hidden-img"
             onLoad={() => setLoadedArtworkSrc(artwork.poster)}
             onError={() => setLoadedArtworkSrc(loadedSrc =>
               loadedSrc === artwork.poster ? undefined : loadedSrc
@@ -248,39 +228,30 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         )}
 
         {/* Backdrop Gradient Overlays */}
-        <div
-          className="absolute inset-0 z-10"
-          style={{
-            background: `linear-gradient(to top, ${accentColor} 0%, ${accentColor} 10%, rgba(${accentColorRgb}, 0.8) 30%, rgba(0, 0, 0, 0.4) 100%)`
-          }}
-        />
+        <div className="mdv-backdrop-overlay" />
       </div>
 
       {/* Pinned Header Bar Actions */}
-      <div className={`sticky top-0 z-30 -mb-16 h-16 pointer-events-none transition-all duration-500 ease-in-out ${isPlayButtonStuck ? 'bg-black/25 backdrop-blur-md' : 'bg-transparent backdrop-blur-none'}`}>
-        <div className="absolute top-6 left-6 right-6 flex items-center justify-between pointer-events-auto">
-          <button
-            onClick={onBack}
-            className="flex items-center space-x-2 bg-black/60 hover:bg-black/80 text-white font-medium text-xs px-3.5 py-2 rounded-xl backdrop-blur-md border border-white/10 transition-all shadow-lg cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" />
+      <div className={`mdv-header ${isPlayButtonStuck ? 'mdv-header--stuck' : ''}`}>
+        <div className="mdv-header-actions">
+          <button onClick={onBack} className="mdv-btn mdv-btn-glass">
+            <ArrowLeft className="mdv-icon-md" />
             <span>Back to Library</span>
           </button>
 
           <button
             onClick={handleManualMetadataRefresh}
             disabled={isRefreshingMetadata}
-            style={{ backgroundColor: accentColor }}
-            className="flex items-center space-x-2 hover:opacity-90 disabled:opacity-50 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-lg transition-all cursor-pointer"
+            className="mdv-btn mdv-btn-accent mdv-btn-refresh"
           >
             {isRefreshingMetadata ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="mdv-icon-md mdv-spin" />
                 <span>Re-syncing Provider...</span>
               </>
             ) : (
               <>
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="mdv-icon-md" />
                 <span>Refresh Metadata</span>
               </>
             )}
@@ -289,75 +260,66 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       </div>
 
       {/* Scrollable Hero Content */}
-      <div className="relative z-10 h-[700px]">
+      <div className="mdv-hero">
         {/* Floating Poster & Title Overlay */}
-        <div className="absolute bottom-0 left-0 right-0 p-8 max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-end gap-6 z-10">
+        <div className="mdv-hero-inner">
           {/* Poster */}
-          <div
-            className="w-48 aspect-[2/3] rounded-2xl overflow-hidden border-2 shadow-2xl bg-[#1b1e2b] shrink-0"
-            style={{
-              borderColor: accentBorderLight,
-              boxShadow: `0 20px 40px -15px rgba(${accentColorRgb}, 0.3)`
-            }}
-          >
+          <div className="mdv-poster">
             {artwork.poster ? (
-              <img src={artwork.poster} alt={currentMedia.title} className="w-full h-full object-cover" />
+              <img src={artwork.poster} alt={currentMedia.title} />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
+              <div className="mdv-poster-fallback">
                 {getTypeIcon()}
-                <span className="text-xs text-gray-400 mt-2">{currentMedia.title}</span>
+                <span>{currentMedia.title}</span>
               </div>
             )}
           </div>
 
           {/* Title & Core Badges */}
-          <div className="space-y-3 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                style={{ backgroundColor: accentColor }}
-                className="text-white text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 uppercase tracking-wider shadow-sm"
-              >
+          <div className="mdv-title-block">
+            <div className="mdv-badges">
+              <span className="mdv-type-badge">
                 {getTypeIcon()}
                 <span>{currentMedia.type}</span>
               </span>
 
               {/* Local Availability Badge */}
               {isAvailableLocally ? (
-                <span className="bg-emerald-950/90 text-emerald-400 border border-emerald-500/40 text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 shadow-md">
-                  <FolderCheck className="w-4 h-4" />
+                <span className="mdv-status-badge mdv-status-badge--ok">
+                  <FolderCheck className="mdv-icon-md" />
                   <span>🖥 Available Locally</span>
                 </span>
               ) : isLocalMissing ? (
-                <span className="bg-amber-950/90 text-amber-400 border border-amber-500/40 text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 shadow-md">
-                  <FolderX className="w-4 h-4" />
+                <span className="mdv-status-badge mdv-status-badge--warn">
+                  <FolderX className="mdv-icon-md" />
                   <span>⚠ Local file missing</span>
                 </span>
               ) : null}
 
               {currentMedia.release_year && (
-                <span className="bg-[#1b1e2b] text-gray-300 border border-[#2d3248] text-xs font-semibold px-2.5 py-1 rounded-full flex items-center space-x-1">
-                  <Calendar className="w-3.5 h-3.5" style={{ color: accentColor, ...highContrastFilter}} />
+                <span className="mdv-pill">
+                  <Calendar className="mdv-icon-sm mdv-icon-accent-on-dark" />
                   <span>{currentMedia.release_year}</span>
                 </span>
               )}
 
               {currentMedia.runtime && (
-                <span className="bg-[#1b1e2b] text-gray-300 border border-[#2d3248] text-xs font-semibold px-2.5 py-1 rounded-full flex items-center space-x-1">
-                  <Clock className="w-3.5 h-3.5" style={{ color: accentColor, ...highContrastFilter}} />
+                <span className="mdv-pill">
+                  <Clock className="mdv-icon-sm mdv-icon-accent-on-dark" />
                   <span>{currentMedia.runtime} mins</span>
                 </span>
               )}
 
               {currentMedia.publisher && (
-                <span className="bg-[#1b1e2b] text-gray-300 border border-[#2d3248] text-xs font-semibold px-2.5 py-1 rounded-full flex items-center space-x-1">
-                  <Building className="w-3.5 h-3.5 text-amber-400" />
+                <span className="mdv-pill">
+                  <Building className="mdv-icon-sm mdv-icon-amber" />
                   <span>{currentMedia.publisher}</span>
                 </span>
               )}
 
               {currentMedia.developer && (
-                <span className="bg-[#1b1e2b] text-gray-300 border border-[#2d3248] text-xs font-semibold px-2.5 py-1 rounded-full flex items-center space-x-1">
-                  <Code className="w-3.5 h-3.5 text-purple-400" />
+                <span className="mdv-pill">
+                  <Code className="mdv-icon-sm mdv-icon-purple" />
                   <span>{currentMedia.developer}</span>
                 </span>
               )}
@@ -388,12 +350,9 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
             {/* Genres list */}
             {currentMedia.genres && currentMedia.genres.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-0.5">
+              <div className="mdv-genres">
                 {currentMedia.genres.map(g => (
-                  <span
-                    key={g}
-                    className="bg-[#1c1f2e] text-gray-300 border border-[#2e334a] text-[11px] font-semibold px-2.5 py-0.5 rounded-md"
-                  >
+                  <span key={g} className="mdv-genre">
                     {g}
                   </span>
                 ))}
@@ -401,16 +360,16 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             )}
 
             {/* Feedback messages */}
-            <div className="flex items-center space-x-3 pt-2">
+            <div className="mdv-feedback">
               {launchMessage && (
-                <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-3 py-2 rounded-lg animate-fadeIn">
+                <span className="mdv-message mdv-fade-in">
                   {launchMessage}
                 </span>
               )}
 
               {refreshMessage && (
-                <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-3 py-2 rounded-lg flex items-center space-x-1 animate-fadeIn">
-                  <CheckCircle2 className="w-4 h-4" />
+                <span className="mdv-message mdv-fade-in">
+                  <CheckCircle2 className="mdv-icon-md" />
                   <span>{refreshMessage}</span>
                 </span>
               )}
@@ -420,35 +379,32 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       </div>
 
       {activeLocalFile && isAvailableLocally && (
-        <div
-          ref={playButtonRowRef}
-          className="sticky top-6 z-30 mx-auto -mt-14 flex h-14 max-w-7xl items-center pr-8 pl-44 pointer-events-none"
-        >
+        <div ref={playButtonRowRef} className="mdv-play-row">
           <button
             onClick={() => handlePlayFile(activeLocalFile)}
-            className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm px-6 py-3 rounded-xl shadow-xl shadow-emerald-950/40 transition-all transform hover:-translate-y-0.5 cursor-pointer pointer-events-auto"
+            className="mdv-btn mdv-btn-play"
           >
-            <Play className="w-5 h-5 fill-current" />
+            <Play className="mdv-icon-lg" fill="currentColor" />
             <span>PLAY {currentMedia.type === 'VideoGame' ? 'GAME' : 'MEDIA'}</span>
           </button>
         </div>
       )}
 
       {/* Main Content Layout */}
-      <div className="relative z-10 p-8 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="mdv-main">
         {/* Left Column: Overview, Seasons, Cast, Journal */}
-        <div className="lg:col-span-2 space-y-8">
+        <div className="mdv-col mdv-col--main">
           {/* Overview */}
-          <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
-            <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-              <FileText className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter}} />
+          <section className="mdv-card">
+            <h2 className="mdv-card-title">
+              <FileText className="mdv-icon-lg mdv-icon-accent" />
               <span>Overview & Synopsis</span>
             </h2>
-            <p className="text-sm text-gray-300 leading-relaxed">
+            <p className="mdv-synopsis">
               {currentMedia.description || 'No detailed synopsis recorded yet for this entry.'}
             </p>
             {currentMedia.metadata_refreshed_at && (
-              <p className="text-[11px] text-gray-500 pt-2 border-t border-[#1f222e]">
+              <p className="mdv-meta-note">
                 Metadata Last Refreshed: {new Date(currentMedia.metadata_refreshed_at).toLocaleString()} ({currentMedia.metadata_source || 'TMDB/IGDB'})
               </p>
             )}
@@ -456,27 +412,27 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
           {/* Cast Rail */}
           {currentMedia.cast && currentMedia.cast.length > 0 && (
-            <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
-              <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                <User className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter}} />
+            <section className="mdv-card mdv-card--roomy">
+              <h2 className="mdv-card-title">
+                <User className="mdv-icon-lg mdv-icon-accent" />
                 <span>Top Cast Members</span>
               </h2>
 
-              <div className="flex space-x-4 overflow-x-auto pb-2 scrollbar-none">
+              <div className="mdv-cast-rail">
                 {currentMedia.cast.map(member => (
-                  <div key={member.id} className="w-28 shrink-0 space-y-1.5 text-center group">
-                    <div className="w-24 h-24 mx-auto rounded-full overflow-hidden bg-[#1d202e] border-2 border-[#2e3347] group-hover:border-[var(--accent-color)] transition-all">
+                  <div key={member.id} className="mdv-cast-member">
+                    <div className="mdv-cast-avatar">
                       {member.profile_path ? (
-                        <img src={member.profile_path} alt={member.name} className="w-full h-full object-cover" />
+                        <img src={member.profile_path} alt={member.name} />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-500">
-                          <User className="w-8 h-8" />
+                        <div className="mdv-cast-avatar-empty">
+                          <User className="mdv-icon-xl" />
                         </div>
                       )}
                     </div>
-                    <p className="text-xs font-bold text-white truncate" title={member.name}>{member.name}</p>
+                    <p className="mdv-cast-name" title={member.name}>{member.name}</p>
                     {member.character && (
-                      <p className="text-[10px] text-gray-400 truncate" title={member.character}>{member.character}</p>
+                      <p className="mdv-cast-role" title={member.character}>{member.character}</p>
                     )}
                   </div>
                 ))}
@@ -486,65 +442,67 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
           {/* TV Series Seasons & Episodes Accordion */}
           {currentMedia.type === 'TV Series' && currentMedia.seasons && currentMedia.seasons.length > 0 && (
-            <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
-              <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                <Layers className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter }} />
+            <section className="mdv-card mdv-card--roomy">
+              <h2 className="mdv-card-title">
+                <Layers className="mdv-icon-lg mdv-icon-accent" />
                 <span>Seasons & Episode Guide ({currentMedia.seasons.length} Seasons)</span>
               </h2>
 
-              <div className="space-y-3">
+              <div className="mdv-seasons">
                 {currentMedia.seasons.map(season => {
                   const isExpanded = expandedSeason === season.season_number;
                   return (
-                    <div key={season.season_number} className="bg-[#1a1d29] rounded-xl border border-[#2d3145] overflow-hidden">
+                    <div key={season.season_number} className="mdv-tile mdv-season">
                       <button
                         onClick={() => setExpandedSeason(isExpanded ? null : season.season_number)}
-                        className="w-full p-4 flex items-center justify-between text-left hover:bg-[#202434] transition-colors cursor-pointer"
+                        className="mdv-season-toggle"
                       >
-                        <div className="flex items-center space-x-3">
+                        <div className="mdv-season-info">
                           {season.poster_path && (
-                            <img src={season.poster_path} alt={season.name} className="w-10 h-14 object-cover rounded border border-[#30354b]" />
+                            <img src={season.poster_path} alt={season.name} className="mdv-season-poster" />
                           )}
                           <div>
-                            <h3 className="font-bold text-sm text-white">{season.name}</h3>
-                            <p className="text-xs text-gray-400">
+                            <h3 className="mdv-season-name">{season.name}</h3>
+                            <p className="mdv-season-count">
                               {season.episode_count || (season.episodes ? season.episodes.length : 0)} Episodes
                             </p>
                           </div>
                         </div>
 
-                        {isExpanded ? <ChevronUp className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter}} /> : <ChevronDown className="w-5 h-5 text-gray-400" style={{ color: accentColor, ...highContrastFilter}}/>}
+                        {isExpanded
+                          ? <ChevronUp className="mdv-icon-lg mdv-icon-accent" />
+                          : <ChevronDown className="mdv-icon-lg mdv-icon-accent" />}
                       </button>
 
                       {isExpanded && (
-                        <div className="p-4 border-t border-[#2a2e42] bg-[#13151f] space-y-3">
+                        <div className="mdv-season-body">
                           {season.overview && (
-                            <p className="text-xs text-gray-300 italic mb-2">{season.overview}</p>
+                            <p className="mdv-season-overview">{season.overview}</p>
                           )}
 
                           {season.episodes && season.episodes.length > 0 ? (
-                            <div className="space-y-2">
+                            <div className="mdv-episodes">
                               {season.episodes.map(ep => (
-                                <div key={ep.episode_number} className="bg-[#1a1d2b] p-3 rounded-lg border border-[#282c3f] flex space-x-3">
+                                <div key={ep.episode_number} className="mdv-tile mdv-tile--sm mdv-episode">
                                   {ep.still_path && (
-                                    <img src={ep.still_path} alt={ep.name} className="w-20 aspect-video object-cover rounded border border-[#31364d]" />
+                                    <img src={ep.still_path} alt={ep.name} className="mdv-episode-still" />
                                   )}
-                                  <div className="min-w-0 flex-1 space-y-0.5">
-                                    <div className="flex items-center justify-between">
-                                      <h4 className="font-bold text-xs text-white">
+                                  <div className="mdv-episode-info">
+                                    <div className="mdv-episode-head">
+                                      <h4 className="mdv-episode-title">
                                         E{ep.episode_number}. {ep.name}
                                       </h4>
-                                      {ep.air_date && <span className="text-[10px] text-gray-400">{ep.air_date}</span>}
+                                      {ep.air_date && <span className="mdv-episode-date">{ep.air_date}</span>}
                                     </div>
                                     {ep.overview && (
-                                      <p className="text-[11px] text-gray-400 line-clamp-2">{ep.overview}</p>
+                                      <p className="mdv-episode-overview">{ep.overview}</p>
                                     )}
                                   </div>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-xs text-gray-500">No individual episode listing downloaded.</p>
+                            <p className="mdv-empty mdv-empty--sm">No individual episode listing downloaded.</p>
                           )}
                         </div>
                       )}
@@ -556,27 +514,27 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           )}
 
           {/* Derived State & Session Summary */}
-          <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-              <Tag className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter }} />
+          <section className="mdv-card mdv-card--roomy">
+            <h2 className="mdv-card-title">
+              <Tag className="mdv-icon-lg mdv-icon-accent" />
               <span>Derived Library Statistics</span>
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="bg-[#1a1d29] p-3.5 rounded-xl border border-[#2d3145]">
-                <span className="text-xs text-gray-400 font-medium">Current Status</span>
-                <p className="text-sm font-bold mt-1" style={{ color: accentColor, ...highContrastFilter }}>{state.current_status}</p>
+            <div className="mdv-stats">
+              <div className="mdv-tile mdv-stat">
+                <span className="mdv-stat-label">Current Status</span>
+                <p className="mdv-stat-value mdv-stat-value--accent">{state.current_status}</p>
               </div>
-              <div className="bg-[#1a1d29] p-3.5 rounded-xl border border-[#2d3145]">
-                <span className="text-xs text-gray-400 font-medium">Total Sessions</span>
-                <p className="text-sm font-bold text-white mt-1">{historyList.length}</p>
+              <div className="mdv-tile mdv-stat">
+                <span className="mdv-stat-label">Total Sessions</span>
+                <p className="mdv-stat-value">{historyList.length}</p>
               </div>
-              <div className="bg-[#1a1d29] p-3.5 rounded-xl border border-[#2d3145]">
-                <span className="text-xs text-gray-400 font-medium">Rewatch / Replays</span>
-                <p className="text-sm font-bold text-white mt-1">{state.rewatch_count}</p>
+              <div className="mdv-tile mdv-stat">
+                <span className="mdv-stat-label">Rewatch / Replays</span>
+                <p className="mdv-stat-value">{state.rewatch_count}</p>
               </div>
-              <div className="bg-[#1a1d29] p-3.5 rounded-xl border border-[#2d3145]">
-                <span className="text-xs text-gray-400 font-medium">Last Watched/Played</span>
-                <p className="text-sm font-bold text-white mt-1">
+              <div className="mdv-tile mdv-stat">
+                <span className="mdv-stat-label">Last Watched/Played</span>
+                <p className="mdv-stat-value">
                   {state.last_watched_played || 'N/A'}
                 </p>
               </div>
@@ -584,55 +542,43 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           </section>
 
           {/* History Timeline */}
-          <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                <History className="w-5 h-5" style={{ color: accentColor, ...highContrastFilter }} />
+          <section className="mdv-card mdv-card--roomy">
+            <div className="mdv-card-header">
+              <h2 className="mdv-card-title">
+                <History className="mdv-icon-lg mdv-icon-accent" />
                 <span>Interaction Journal ({historyList.length})</span>
               </h2>
               <button
                 onClick={() => setShowAddHistoryModal(true)}
-                style={{ backgroundColor: accentColor }}
-                className="flex items-center space-x-1.5 hover:opacity-90 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-all shadow-md cursor-pointer"
+                className="mdv-btn mdv-btn-accent mdv-btn-log"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="mdv-icon-sm" />
                 <span>Log Session</span>
               </button>
             </div>
 
             {historyList.length === 0 ? (
-              <p className="text-sm text-gray-400">No history sessions recorded yet.</p>
+              <p className="mdv-empty">No history sessions recorded yet.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="mdv-history-list">
                 {historyList.map(h => (
-                  <div
-                    key={h.id}
-                    className="bg-[#1a1d2b] p-4 rounded-xl border border-[#282c3f] space-y-2 relative"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span
-                          className="text-xs font-bold px-2 py-0.5 rounded border"
-                          style={{
-                            backgroundColor: accentBgLight,
-                            color: accentColor,
-                            ...highContrastFilter,
-                            borderColor: accentBorderLight
-                          }}
-                        >
+                  <div key={h.id} className="mdv-tile mdv-history-item">
+                    <div className="mdv-history-row">
+                      <div className="mdv-history-tags">
+                        <span className="mdv-chip mdv-chip--status">
                           {h.status}
                         </span>
                         {h.context && (
-                          <span className="text-xs font-medium px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-500/30">
+                          <span className="mdv-chip mdv-chip--context">
                             Context: {h.context}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center space-x-3 text-xs text-gray-400">
+                      <div className="mdv-history-meta">
                         {h.score && (
-                          <span className="flex items-center space-x-1 text-amber-400 font-bold">
-                            <Star className="w-3.5 h-3.5 fill-amber-400" />
+                          <span className="mdv-score">
+                            <Star className="mdv-icon-sm" />
                             <span>{h.score} / 5</span>
                           </span>
                         )}
@@ -641,12 +587,12 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                     </div>
 
                     {h.thoughts && (
-                      <p className="text-xs text-gray-300 italic pt-1 border-t border-[#25293b]">
+                      <p className="mdv-thoughts">
                         "{h.thoughts}"
                       </p>
                     )}
 
-                    <div className="text-[10px] text-gray-500 pt-1">
+                    <div className="mdv-source">
                       Source: {h.source} {h.original_source_record_id ? `(ID: ${h.original_source_record_id})` : ''}
                     </div>
                   </div>
@@ -657,62 +603,49 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         </div>
 
         {/* Right Column: Local Files & Availability */}
-        <div className="space-y-6">
+        <div className="mdv-col mdv-col--side">
           {/* Local Storage & Executable Files */}
-          <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-white flex items-center space-x-2">
-                <FolderCheck className="w-4 h-4" style={{ color: accentColor, ...highContrastFilter }} />
+          <section className="mdv-card">
+            <div className="mdv-card-header">
+              <h2 className="mdv-card-title mdv-card-title--sm">
+                <FolderCheck className="mdv-icon-md mdv-icon-accent" />
                 <span>Local System Files</span>
               </h2>
 
               <button
                 onClick={() => setShowFilePickerModal(true)}
-                style={{
-                  color: accentColor,
-                  backgroundColor: accentBgLight,
-                  borderColor: accentBorderLight,
-                  ...highContrastFilter
-                }}
-                className="text-xs hover:opacity-90 font-semibold flex items-center space-x-1 border px-2.5 py-1 rounded-lg cursor-pointer transition-colors"
+                className="mdv-btn mdv-btn-configure"
               >
-                <Edit3 className="w-3 h-3" />
-                <span
-                style={{
-                  color: accentColor
-                }}>Configure Path</span>
+                <Edit3 className="mdv-icon-xs" />
+                <span>Configure Path</span>
               </button>
             </div>
 
             {localFiles.length === 0 ? (
-              <p className="text-xs text-gray-400">No local file detected for this media item.</p>
+              <p className="mdv-empty mdv-empty--sm">No local file detected for this media item.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="mdv-list">
                 {localFiles.map(lf => (
-                  <div key={lf.id} className="bg-[#1a1d29] p-3 rounded-lg border border-[#2d3145] text-xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-gray-200 truncate" title={lf.path}>
+                  <div key={lf.id} className="mdv-tile mdv-tile--sm mdv-file">
+                    <div className="mdv-file-head">
+                      <p className="mdv-file-name" title={lf.path}>
                         {lf.filename}
                       </p>
                       {lf.exists ? (
-                        <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded">
-                          Available
-                        </span>
+                        <span className="mdv-tag mdv-tag--ok">Available</span>
                       ) : (
-                        <span className="text-[10px] text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded">
-                          Missing
-                        </span>
+                        <span className="mdv-tag mdv-tag--warn">Missing</span>
                       )}
                     </div>
 
-                    <p className="text-[10px] text-gray-400 font-mono truncate">{lf.path}</p>
+                    <p className="mdv-file-path">{lf.path}</p>
 
                     {lf.exists && (
                       <button
                         onClick={() => handlePlayFile(lf)}
-                        className="w-full bg-emerald-600/90 hover:bg-emerald-500 text-white font-bold text-xs py-1.5 rounded-lg flex items-center justify-center space-x-1.5 shadow-sm transition-all cursor-pointer"
+                        className="mdv-btn mdv-btn-launch"
                       >
-                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <Play className="mdv-icon-sm" fill="currentColor" />
                         <span>Launch File</span>
                       </button>
                     )}
@@ -723,33 +656,29 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           </section>
 
           {/* Streaming & Provider Availability */}
-          <section className="bg-[#14161f]/95 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-3">
-            <h2 className="text-base font-bold text-white flex items-center space-x-2">
-              <Globe className="w-4 h-4" style={{ color: accentColor, ...highContrastFilter }} />
+          <section className="mdv-card">
+            <h2 className="mdv-card-title mdv-card-title--sm">
+              <Globe className="mdv-icon-md mdv-icon-accent" />
               <span>Streaming & Availability</span>
             </h2>
             {availabilities.length === 0 ? (
-              <div className="bg-[#1a1d29] p-3 rounded-lg border border-[#2d3145] text-xs text-gray-400">
+              <div className="mdv-tile mdv-tile--sm mdv-availability mdv-availability--empty">
                 Streaming availability provider ready. Configure regional options in Settings.
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="mdv-list">
                 {availabilities.map(av => (
-                  <div
-                    key={av.id}
-                    className="bg-[#1a1d29] p-3 rounded-lg border border-[#2d3145] flex items-center justify-between text-xs"
-                  >
+                  <div key={av.id} className="mdv-tile mdv-tile--sm mdv-availability">
                     <div>
-                      <p className="font-semibold text-gray-100">{av.provider}</p>
-                      <p className="text-[10px] text-gray-400">{av.availability_type} ({av.country || 'Global'})</p>
+                      <p className="mdv-availability-provider">{av.provider}</p>
+                      <p className="mdv-availability-type">{av.availability_type} ({av.country || 'Global'})</p>
                     </div>
                     {av.url && (
                       <a
                         href={av.url}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: accentColor, ...highContrastFilter }}
-                        className="text-xs hover:underline font-medium"
+                        className="mdv-link"
                       >
                         Open
                       </a>
@@ -764,16 +693,16 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
       {/* Log History Modal */}
       {showAddHistoryModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Log Interaction Session</h3>
-            <form onSubmit={handleAddHistorySubmit} className="space-y-3">
+        <div className="mdv-modal-backdrop">
+          <div className="mdv-modal">
+            <h3 className="mdv-modal-title">Log Interaction Session</h3>
+            <form onSubmit={handleAddHistorySubmit} className="mdv-form">
               <div>
-                <label className="text-xs text-gray-400 font-medium block mb-1">Status</label>
+                <label className="mdv-label">Status</label>
                 <select
                   value={newStatus}
                   onChange={e => setNewStatus(e.target.value)}
-                  className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2 text-sm text-gray-100"
+                  className="mdv-input"
                 >
                   <option value="Finished">Finished</option>
                   <option value="Currently">Currently Active</option>
@@ -782,52 +711,48 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
               </div>
 
               <div>
-                <label className="text-xs text-gray-400 font-medium block mb-1">Score (1 - 5)</label>
+                <label className="mdv-label">Score (1 - 5)</label>
                 <input
                   type="number"
                   min="1"
                   max="5"
                   value={newScore}
                   onChange={e => setNewScore(Number(e.target.value))}
-                  className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2 text-sm text-gray-100"
+                  className="mdv-input"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-gray-400 font-medium block mb-1">Context Tag</label>
+                <label className="mdv-label">Context Tag</label>
                 <input
                   type="text"
                   placeholder="e.g. 2+ Rewatch, restart, Season 1-2 rewatch"
                   value={newContext}
                   onChange={e => setNewContext(e.target.value)}
-                  className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2 text-sm text-gray-100 placeholder-gray-500"
+                  className="mdv-input"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-gray-400 font-medium block mb-1">Thoughts / Review</label>
+                <label className="mdv-label">Thoughts / Review</label>
                 <textarea
                   rows={3}
                   placeholder="Your personal review or notes..."
                   value={newThoughts}
                   onChange={e => setNewThoughts(e.target.value)}
-                  className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2 text-sm text-gray-100 placeholder-gray-500"
+                  className="mdv-input"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2">
+              <div className="mdv-modal-actions">
                 <button
                   type="button"
                   onClick={() => setShowAddHistoryModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white"
+                  className="mdv-btn mdv-btn-cancel"
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  style={{ backgroundColor: accentColor }}
-                  className="px-4 py-2 text-xs font-semibold hover:opacity-90 text-white rounded-lg shadow-md"
-                >
+                <button type="submit" className="mdv-btn mdv-btn-accent mdv-btn-save">
                   Save Log
                 </button>
               </div>
@@ -838,12 +763,12 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
       {/* File / Executable Selector Modal */}
       {showFilePickerModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Configure Executable or Video File</h3>
-            <form onSubmit={handleCustomPathSubmit} className="space-y-3">
+        <div className="mdv-modal-backdrop">
+          <div className="mdv-modal">
+            <h3 className="mdv-modal-title">Configure Executable or Video File</h3>
+            <form onSubmit={handleCustomPathSubmit} className="mdv-form">
               <div>
-                <label className="text-xs text-gray-400 font-medium block mb-1">
+                <label className="mdv-label">
                   Local File Path / Shortcut (.exe, .lnk, .mkv)
                 </label>
                 <input
@@ -852,23 +777,19 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                   placeholder={currentMedia.type === 'VideoGame' ? 'D:\\Games\\Game.lnk or .exe' : 'D:\\Movies\\Film.mkv'}
                   value={customPath}
                   onChange={e => setCustomPath(e.target.value)}
-                  className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
+                  className="mdv-input mdv-input--mono"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2">
+              <div className="mdv-modal-actions">
                 <button
                   type="button"
                   onClick={() => setShowFilePickerModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white"
+                  className="mdv-btn mdv-btn-cancel"
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  style={{ backgroundColor: accentColor }}
-                  className="px-4 py-2 text-xs font-semibold hover:opacity-90 text-white rounded-lg shadow-md"
-                >
+                <button type="submit" className="mdv-btn mdv-btn-accent mdv-btn-save">
                   Save File Path
                 </button>
               </div>

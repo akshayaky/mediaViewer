@@ -1,0 +1,956 @@
+/* ==========================================================================
+   MediaDetailView styles
+   --------------------------------------------------------------------------
+   1. TOKENS   - colours, sizes. Edit these first; most tweaks live here.
+   2. LAYOUT   - page structure, hero, columns.
+   3. COMPONENTS - cards, pills, buttons, lists, modals.
+
+   The page background is the accent colour taken from the poster. The
+   component sets data-tone="light" or "dark" on .mdv-page depending on how
+   bright that colour is, and the matching token block below is applied.
+   Set by JS (do not hardcode): --accent-color, --accent-rgb,
+   --mdv-accent-text, --mdv-accent-on-dark, --mdv-on-accent.
+   ========================================================================== */
+
+
+/* ==========================================================================
+   1. TOKENS
+   ========================================================================== */
+
+.mdv-page {
+  /* Sizes */
+  --mdv-hero-height: 700px;
+  --mdv-max-width: 80rem;
+
+  /* Always-dark UI (pills, genre tags, glass buttons) - same in both tones */
+  --mdv-pill-bg: #1b1e2b;
+  --mdv-pill-text: #d1d5db;
+  --mdv-pill-border: #2d3248;
+  --mdv-glass-bg: rgba(0, 0, 0, 0.6);
+  --mdv-glass-bg-hover: rgba(0, 0, 0, 0.8);
+
+  /* Accent-derived */
+  --mdv-accent-bg-soft: rgba(var(--accent-rgb), 0.15);
+  --mdv-accent-border-soft: rgba(var(--accent-rgb), 0.3);
+
+  /* Play / launch buttons */
+  --mdv-play-bg: #059669;
+  --mdv-play-bg-hover: #10b981;
+  --mdv-play-text: #ffffff;
+}
+
+/* ---- Dark page background -> light text ---- */
+.mdv-page[data-tone="dark"] {
+  --mdv-heading: #ffffff;
+  --mdv-text: #e5e7eb;
+  --mdv-text-muted: rgba(255, 255, 255, 0.72);
+  --mdv-text-faint: rgba(255, 255, 255, 0.5);
+
+  --mdv-card-bg: rgba(0, 0, 0, 0.25);
+  --mdv-card-blur: blur(12px);
+  --mdv-card-border: rgba(255, 255, 255, 0.1);
+  --mdv-card-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  --mdv-divider: rgba(255, 255, 255, 0.15);
+
+  --mdv-surface: #1a1d29;          /* inner tiles */
+  --mdv-surface-hover: #242425;
+
+  --mdv-surface-border: #2d3145;
+
+  --mdv-title-shadow: 0 10px 15px rgba(0, 0, 0, 0.4);
+
+  --mdv-success-text: #34d399;
+  --mdv-success-bg: rgba(2, 44, 34, 0.85);
+  --mdv-success-border: rgba(16, 185, 129, 0.4);
+  --mdv-warn-text: #fbbf24;
+  --mdv-warn-bg: rgba(69, 26, 3, 0.85);
+  --mdv-warn-border: rgba(245, 158, 11, 0.4);
+  --mdv-purple-text: #d8b4fe;
+  --mdv-purple-bg: rgba(59, 7, 100, 0.8);
+  --mdv-purple-border: rgba(168, 85, 247, 0.3);
+   --mdv-episode-tint: transparent; 
+}
+
+/* ---- Light page background -> dark text ---- */
+.mdv-page[data-tone="light"] {
+  --mdv-heading: #14141a;
+  --mdv-text: #1f2430;
+  --mdv-text-muted: rgba(20, 20, 26, 0.78);
+  --mdv-text-faint: rgba(20, 20, 26, 0.6);
+
+  --mdv-card-bg: rgba(255, 255, 255, 0.16);   /* keep low so the blurred backdrop shows through */
+  --mdv-card-blur: blur(18px) saturate(1.2);
+  --mdv-card-border: rgba(0, 0, 0, 0.12);
+  --mdv-card-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.25);
+  --mdv-divider: rgba(0, 0, 0, 0.18);
+
+  --mdv-surface: rgba(255, 255, 255, 0.6);
+  --mdv-surface-hover: rgba(255, 255, 255, 0.78);
+  --mdv-surface-deep: rgba(255, 255, 255, 0.4);
+  --mdv-surface-border: rgba(0, 0, 0, 0.12);
+
+  --mdv-title-shadow: none;
+
+  --mdv-success-text: #065f46;
+  --mdv-success-bg: rgba(16, 185, 129, 0.2);
+  --mdv-success-border: rgba(5, 150, 105, 0.5);
+  --mdv-warn-text: #92400e;
+  --mdv-warn-bg: rgba(245, 158, 11, 0.25);
+  --mdv-warn-border: rgba(180, 83, 9, 0.5);
+  --mdv-purple-text: #581c87;
+  --mdv-purple-bg: rgba(168, 85, 247, 0.18);
+  --mdv-purple-border: rgba(126, 34, 206, 0.4);
+  --mdv-episode-tint: rgba(255, 255, 255, 0.08); 
+}
+
+
+/* ==========================================================================
+   2. LAYOUT
+   ========================================================================== */
+
+.mdv-page {
+  position: relative;
+  min-height: 100vh;
+  padding-bottom: 3rem;
+  color: var(--mdv-text);
+  background-color: var(--accent-color);
+  transition: background-color 0.5s;
+}
+
+/* ---- Pinned backdrop ---- */
+.mdv-backdrop {
+  position: sticky;
+  top: 0;
+  z-index: 0;
+  width: 100%;
+  height: var(--mdv-hero-height);
+  margin-bottom: calc(var(--mdv-hero-height) * -1);
+  overflow: hidden;
+  pointer-events: none;
+  background-color: var(--accent-color);
+}
+
+.mdv-backdrop-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.45;
+}
+
+.mdv-backdrop-fallback {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to bottom right, var(--accent-color), rgba(0, 0, 0, 0.3));
+}
+
+.mdv-hidden-img {
+  display: none;
+}
+
+/* Fades the backdrop into the page colour */
+.mdv-backdrop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: linear-gradient(
+    to top,
+    var(--accent-color) 0%,
+    var(--accent-color) 10%,
+    rgba(var(--accent-rgb), 0.8) 30%,
+    rgba(0, 0, 0, 0.4) 100%
+  );
+}
+
+/* ---- Pinned header bar ---- */
+.mdv-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 4rem;
+  margin-bottom: -4rem;
+  pointer-events: none;
+  background: transparent;
+  transition: all 0.5s ease-in-out;
+}
+
+.mdv-header--stuck {
+  background: rgba(0, 0, 0, 0.25);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.mdv-header-actions {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: auto;
+}
+
+/* ---- Hero ---- */
+.mdv-hero {
+  position: relative;
+  z-index: 10;
+  height: var(--mdv-hero-height);
+}
+
+.mdv-hero-inner {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.5rem;
+  max-width: var(--mdv-max-width);
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+@media (min-width: 768px) {
+  .mdv-hero-inner {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+}
+
+.mdv-title-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ---- Sticky play button row ---- */
+.mdv-play-row {
+  position: sticky;
+  top: 1.5rem;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  height: 3.5rem;
+  max-width: var(--mdv-max-width);
+  margin: -3.5rem auto 0;
+  padding-left: 11rem;
+  padding-right: 2rem;
+  pointer-events: none;
+}
+
+/* ---- Main content grid ---- */
+.mdv-main {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  max-width: var(--mdv-max-width);
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.mdv-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.mdv-col--main { gap: 2rem; }
+.mdv-col--side { gap: 1.5rem; }
+
+@media (min-width: 1024px) {
+  .mdv-main { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mdv-col--main { grid-column: span 2 / span 2; }
+}
+
+
+/* ==========================================================================
+   3. COMPONENTS
+   ========================================================================== */
+
+/* ---- Icons ---- */
+.mdv-icon-xs { width: 0.75rem; height: 0.75rem; }
+.mdv-icon-sm { width: 0.875rem; height: 0.875rem; }
+.mdv-icon-md { width: 1rem; height: 1rem; }
+.mdv-icon-lg { width: 1.25rem; height: 1.25rem; }
+.mdv-icon-xl { width: 2rem; height: 2rem; }
+
+.mdv-icon-accent { color: var(--mdv-accent-text); }
+.mdv-icon-accent-on-dark { color: var(--mdv-accent-on-dark); }
+.mdv-icon-film { color: var(--mdv-accent-on-dark); }
+.mdv-icon-tv { color: #38bdf8; }
+.mdv-icon-game { color: #c084fc; }
+.mdv-icon-amber { color: #fbbf24; }
+.mdv-icon-purple { color: #c084fc; }
+.mdv-spin { animation: mdv-spin 1s linear infinite; }
+
+@keyframes mdv-spin { to { transform: rotate(360deg); } }
+@keyframes mdv-fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+.mdv-fade-in { animation: mdv-fade-in 0.3s ease-out; }
+
+/* ---- Buttons ---- */
+.mdv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.mdv-btn:disabled { opacity: 0.5; cursor: default; }
+
+.mdv-btn-glass {
+  padding: 0.5rem 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #fff;
+  background: var(--mdv-glass-bg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+}
+.mdv-btn-glass:hover { background: var(--mdv-glass-bg-hover); }
+
+.mdv-btn-accent {
+  background: var(--accent-color);
+  color: var(--mdv-on-accent);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
+}
+.mdv-btn-accent:hover:not(:disabled) { opacity: 0.9; }
+
+.mdv-btn-refresh {
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 0.75rem;
+}
+
+.mdv-btn-log {
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+}
+
+.mdv-btn-play {
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: var(--mdv-play-text);
+  background: var(--mdv-play-bg);
+  border-radius: 0.75rem;
+  box-shadow: 0 20px 25px -5px rgba(2, 44, 34, 0.4);
+  pointer-events: auto;
+}
+.mdv-btn-play:hover {
+  background: var(--mdv-play-bg-hover);
+  transform: translateY(-2px);
+}
+
+.mdv-btn-launch {
+  justify-content: center;
+  gap: 0.375rem;
+  width: 100%;
+  padding: 0.375rem 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--mdv-play-text);
+  background: rgba(5, 150, 105, 0.9);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.mdv-btn-launch:hover { background: var(--mdv-play-bg-hover); }
+
+.mdv-btn-configure {
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--mdv-accent-text);
+  background: var(--mdv-accent-bg-soft);
+  border: 1px solid var(--mdv-accent-border-soft);
+  border-radius: 0.5rem;
+}
+.mdv-btn-configure:hover { opacity: 0.9; }
+
+/* ---- Poster ---- */
+.mdv-poster {
+  flex-shrink: 0;
+  width: 12rem;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  background: #1b1e2b;
+  border: 2px solid var(--mdv-accent-border-soft);
+  border-radius: 1rem;
+  box-shadow: 0 20px 40px -15px rgba(var(--accent-rgb), 0.3);
+}
+
+.mdv-poster img { width: 100%; height: 100%; object-fit: cover; }
+
+.mdv-poster-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 1rem;
+  text-align: center;
+}
+
+.mdv-poster-fallback span {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+/* ---- Badges / pills ---- */
+.mdv-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mdv-type-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mdv-on-accent);
+  background: var(--accent-color);
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+/* Icon inside the filled badge follows the badge text colour */
+.mdv-type-badge svg { color: inherit; }
+
+.mdv-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--mdv-pill-text);
+  background: var(--mdv-pill-bg);
+  border: 1px solid var(--mdv-pill-border);
+  border-radius: 9999px;
+}
+
+.mdv-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 9999px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+}
+
+.mdv-status-badge--ok {
+  color: var(--mdv-success-text);
+  background: var(--mdv-success-bg);
+  border: 1px solid var(--mdv-success-border);
+}
+
+.mdv-status-badge--warn {
+  color: var(--mdv-warn-text);
+  background: var(--mdv-warn-bg);
+  border: 1px solid var(--mdv-warn-border);
+}
+
+/* ---- Title & genres ---- */
+.mdv-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  font-size: 2.25rem;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  color: var(--mdv-heading);
+  text-shadow: var(--mdv-title-shadow);
+}
+
+@media (min-width: 768px) {
+  .mdv-title { font-size: 3rem; }
+}
+
+.mdv-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding-top: 0.125rem;
+}
+
+.mdv-genre {
+  padding: 0.125rem 0.625rem;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mdv-pill-text);
+  background: #1c1f2e;
+  border: 1px solid #2e334a;
+  border-radius: 0.375rem;
+}
+
+/* ---- Feedback messages ---- */
+.mdv-feedback {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+
+.mdv-message {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--mdv-success-text);
+  background: var(--mdv-success-bg);
+  border: 1px solid var(--mdv-success-border);
+  border-radius: 0.5rem;
+}
+
+/* ---- Cards ---- */
+.mdv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  background: var(--mdv-card-bg);
+  border: 1px solid var(--mdv-card-border);
+  border-radius: 1rem;
+  box-shadow: var(--mdv-card-shadow);
+  -webkit-backdrop-filter: var(--mdv-card-blur);
+  backdrop-filter: var(--mdv-card-blur);
+}
+
+.mdv-card--roomy { gap: 1rem; }
+
+.mdv-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mdv-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--mdv-heading);
+}
+
+.mdv-card-title--sm { font-size: 1rem; }
+
+.mdv-synopsis {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.625;
+  color: var(--mdv-text-muted);
+}
+
+.mdv-meta-note {
+  margin: 0;
+  padding-top: 0.5rem;
+  font-size: 11px;
+  color: var(--mdv-text-faint);
+  border-top: 1px solid var(--mdv-divider);
+}
+
+.mdv-empty { margin: 0; font-size: 0.875rem; color: var(--mdv-text-muted); }
+.mdv-empty--sm { font-size: 0.75rem; }
+
+/* ---- Inner tiles (shared) ---- */
+.mdv-tile {
+  display: flex;
+  flex-direction: column;
+  background: var(--mdv-card-bg);
+  border: 1px solid var(--mdv-card-border);
+  border-radius: 1rem;
+  box-shadow: var(--mdv-card-shadow);
+  -webkit-backdrop-filter: var(--mdv-card-blur);
+  backdrop-filter: var(--mdv-card-blur);
+}
+
+.mdv-tile--sm { border-radius: 0.5rem; }
+
+/* ---- Cast ---- */
+.mdv-cast-rail {
+  display: flex;
+  gap: 1rem;
+  padding-bottom: 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mdv-cast-rail::-webkit-scrollbar { display: none; }
+
+.mdv-cast-member {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  width: 7rem;
+  text-align: center;
+}
+
+.mdv-cast-avatar {
+  width: 6rem;
+  height: 6rem;
+  margin: 0 auto;
+  overflow: hidden;
+  background: var(--mdv-surface);
+  border: 2px solid var(--mdv-surface-border);
+  border-radius: 9999px;
+  transition: border-color 0.15s;
+}
+.mdv-cast-member:hover .mdv-cast-avatar { border-color: var(--accent-color); }
+.mdv-cast-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.mdv-cast-avatar-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--mdv-text-faint);
+}
+
+.mdv-cast-name,
+.mdv-cast-role {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mdv-cast-name { font-size: 0.75rem; font-weight: 700; color: var(--mdv-heading); }
+.mdv-cast-role { font-size: 10px; color: var(--mdv-text-muted); }
+
+/* ---- Seasons ---- */
+.mdv-seasons { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.mdv-season { overflow: hidden; }
+
+.mdv-season-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 1rem;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.mdv-season-toggle:hover { background: var(--mdv-surface-hover); }
+
+.mdv-season-info { display: flex; align-items: center; gap: 0.75rem; }
+
+.mdv-season-poster {
+  width: 2.5rem;
+  height: 3.5rem;
+  object-fit: cover;
+  border: 1px solid var(--mdv-surface-border);
+  border-radius: 0.25rem;
+}
+
+.mdv-season-name { margin: 0; font-size: 0.875rem; font-weight: 700; color: var(--mdv-heading); }
+.mdv-season-count { margin: 0; font-size: 0.75rem; color: var(--mdv-text-muted); }
+
+.mdv-season-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: transparent !important; /* Removes the flat solid background */
+  border-top: 1px solid var(--mdv-surface-border);
+}
+
+.mdv-season-overview {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--mdv-text);
+}
+
+.mdv-episodes {
+   display: flex; flex-direction: column; gap: 0.5rem; 
+  }
+
+.mdv-episode {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--mdv-card-bg) !important;
+  border: 1px solid var(--mdv-card-border) !important;
+  
+  /* Adds the magic blur effect that shifts colors based on the poster background */
+  -webkit-backdrop-filter: var(--mdv-card-blur) !important;
+  backdrop-filter: var(--mdv-card-blur) !important;
+}
+
+
+/* Optional: Adds a matching hover effect just like the season header */
+.mdv-episode:hover {
+  background: var(--mdv-surface-hover) !important;
+}
+
+.mdv-episode-still {
+  width: 5rem;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--mdv-surface-border);
+  border-radius: 0.25rem;
+}
+
+.mdv-episode-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.mdv-episode-head { display: flex; align-items: center; justify-content: space-between; }
+.mdv-episode-title { margin: 0; font-size: 0.75rem; font-weight: 700; color: var(--mdv-heading); }
+.mdv-episode-date { font-size: 10px; color: var(--mdv-text-muted); }
+
+.mdv-episode-overview {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  margin: 0;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--mdv-text-muted);
+}
+
+/* ---- Stats ---- */
+.mdv-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .mdv-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.mdv-stat { padding: 0.875rem; }
+.mdv-stat-label { font-size: 0.75rem; font-weight: 500; color: var(--mdv-text-muted); }
+.mdv-stat-value { margin: 0.25rem 0 0; font-size: 0.875rem; font-weight: 700; color: var(--mdv-heading); }
+.mdv-stat-value--accent { color: var(--mdv-accent-text); }
+
+/* ---- History ---- */
+.mdv-history-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.mdv-history-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.mdv-history-row { display: flex; align-items: center; justify-content: space-between; }
+.mdv-history-tags { display: flex; align-items: center; gap: 0.5rem; }
+
+.mdv-history-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--mdv-text-muted);
+}
+
+.mdv-chip {
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 0.25rem;
+}
+
+.mdv-chip--status {
+  color: var(--mdv-accent-text);
+  background: var(--mdv-accent-bg-soft);
+  border: 1px solid var(--mdv-accent-border-soft);
+}
+
+.mdv-chip--context {
+  font-weight: 500;
+  color: var(--mdv-purple-text);
+  background: var(--mdv-purple-bg);
+  border: 1px solid var(--mdv-purple-border);
+}
+
+.mdv-score {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 700;
+  color: var(--mdv-warn-text);
+}
+.mdv-score svg { fill: currentColor; }
+
+.mdv-thoughts {
+  margin: 0;
+  padding-top: 0.25rem;
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--mdv-text);
+  border-top: 1px solid var(--mdv-surface-border);
+}
+
+.mdv-source { padding-top: 0.25rem; font-size: 10px; color: var(--mdv-text-faint); }
+
+/* ---- Local files & availability ---- */
+.mdv-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.mdv-file {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  font-size: 0.75rem;
+}
+
+.mdv-file-head { display: flex; align-items: center; justify-content: space-between; }
+
+.mdv-file-name {
+  margin: 0;
+  overflow: hidden;
+  font-weight: 600;
+  color: var(--mdv-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mdv-file-path {
+  margin: 0;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--mdv-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mdv-tag {
+  flex-shrink: 0;
+  padding: 0.125rem 0.5rem;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 0.25rem;
+}
+.mdv-tag--ok { color: var(--mdv-success-text); background: var(--mdv-success-bg); }
+.mdv-tag--warn { color: var(--mdv-warn-text); background: var(--mdv-warn-bg); }
+
+.mdv-availability {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  font-size: 0.75rem;
+}
+.mdv-availability--empty { display: block; color: var(--mdv-text-muted); }
+.mdv-availability-provider { margin: 0; font-weight: 600; color: var(--mdv-heading); }
+.mdv-availability-type { margin: 0; font-size: 10px; color: var(--mdv-text-muted); }
+
+.mdv-link {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--mdv-accent-text);
+}
+.mdv-link:hover { text-decoration: underline; }
+
+/* ---- Modals (always dark, independent of page tone) ---- */
+.mdv-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.8);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.mdv-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 28rem;
+  padding: 1.5rem;
+  color: #f3f4f6;
+  background: #14161f;
+  border: 1px solid #2d3145;
+  border-radius: 1rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.mdv-modal-title { margin: 0; font-size: 1.125rem; font-weight: 700; color: #fff; }
+.mdv-form { display: flex; flex-direction: column; gap: 0.75rem; }
+.mdv-label { display: block; margin-bottom: 0.25rem; font-size: 0.75rem; font-weight: 500; color: #9ca3af; }
+
+.mdv-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: #f3f4f6;
+  background: #1b1d2a;
+  border: 1px solid #2d3145;
+  border-radius: 0.5rem;
+}
+.mdv-input::placeholder { color: #6b7280; }
+.mdv-input--mono { padding: 0.625rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.75rem; }
+
+.mdv-modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding-top: 0.5rem; }
+
+.mdv-btn-cancel {
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #9ca3af;
+  background: transparent;
+}
+.mdv-btn-cancel:hover { color: #fff; }
+
+.mdv-btn-save {
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mdv-page, .mdv-header, .mdv-btn, .mdv-fade-in { transition: none; animation: none; }
+}
