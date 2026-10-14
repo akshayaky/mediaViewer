@@ -56,7 +56,8 @@ export interface Media {
   created_at: string;
   updated_at: string;
   external_ids?: ExternalID[];
-  accent_color?: string
+  accent_color?: string;
+  manually_matched?: boolean;
 }
 
 export interface MediaHistory {

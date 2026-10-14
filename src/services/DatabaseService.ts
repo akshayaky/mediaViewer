@@ -23,10 +23,15 @@ export class DatabaseService {
     }
 
     const SQL = await initSqlJs({
-      locateFile: () => sqlWasmUrl
+      locateFile: file => {
+        if (typeof window === 'undefined') {
+          return `./node_modules/sql.js/dist/${file}`;
+        }
+        return sqlWasmUrl;
+      }
     });
 
-    const savedDb = localStorage.getItem(STORAGE_KEYS.SQLITE_DB);
+    const savedDb = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.SQLITE_DB) : null;
     if (savedDb) {
       const uInt8Array = new Uint8Array(
         atob(savedDb)
@@ -53,7 +58,9 @@ export class DatabaseService {
       binary += String.fromCharCode(buffer[i]);
     }
     const base64 = btoa(binary);
-    localStorage.setItem(STORAGE_KEYS.SQLITE_DB, base64);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEYS.SQLITE_DB, base64);
+    }
   }
 
   private addColumnIfNotExists(table: string, column: string, type: string): void {
@@ -183,6 +190,13 @@ export class DatabaseService {
     this.addColumnIfNotExists('media', 'cast', 'TEXT');
     this.addColumnIfNotExists('media', 'seasons', 'TEXT');
     this.addColumnIfNotExists('media', 'accent_color', 'TEXT');
+    this.addColumnIfNotExists('media', 'manually_matched', 'INTEGER DEFAULT 0');
+
+    try {
+      this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_external_ids_provider_ext ON external_ids(provider, external_id);');
+    } catch {
+      // Index already exists
+    }
   }
 
   // ==========================================
@@ -258,6 +272,7 @@ export class DatabaseService {
       created_at: row.created_at as string,
       updated_at: row.updated_at as string,
       accent_color: (row.accent_color as string) || undefined,
+      manually_matched: Boolean(row.manually_matched),
       external_ids: this.getExternalIdsForMedia(row.id as string)
     };
   }
@@ -273,8 +288,8 @@ export class DatabaseService {
   public saveMedia(media: Media): void {
     if (!this.db) return;
     this.db.run(
-      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at, accent_color)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at, accent_color, manually_matched)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          type=excluded.type,
          title=excluded.title,
@@ -294,7 +309,8 @@ export class DatabaseService {
          cast=excluded.cast,
          seasons=excluded.seasons,
          updated_at=excluded.updated_at,
-         accent_color=excluded.accent_color`,
+         accent_color=excluded.accent_color,
+         manually_matched=excluded.manually_matched`,
       [
         media.id,
         media.type,
@@ -316,7 +332,8 @@ export class DatabaseService {
         media.seasons ? JSON.stringify(media.seasons) : null,
         media.created_at,
         media.updated_at,
-        media.accent_color || null
+        media.accent_color || null,
+        media.manually_matched ? 1 : 0
       ]
     );
 
@@ -325,6 +342,116 @@ export class DatabaseService {
         this.saveExternalId(ext);
       }
     }
+    this.save();
+  }
+
+  public getMediaByExternalId(provider: string, external_id: string): Media | null {
+    if (!this.db) return null;
+    const stmt = this.db.prepare('SELECT media_id FROM external_ids WHERE provider = :provider AND external_id = :external_id');
+    stmt.bind({ ':provider': provider, ':external_id': external_id });
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      stmt.free();
+      if (row.media_id) {
+        return this.getMediaById(row.media_id as string);
+      }
+    }
+    stmt.free();
+    return null;
+  }
+
+  public findSuspectedDuplicates(title: string, release_year?: number, excludeMediaId?: string): Media[] {
+    const allMedia = this.getAllMedia();
+    const cleanTitle = title.toLowerCase().replace(/[\W_]+/g, ' ').trim();
+
+    return allMedia.filter(m => {
+      if (excludeMediaId && m.id === excludeMediaId) return false;
+      const mClean = m.title.toLowerCase().replace(/[\W_]+/g, ' ').trim();
+      if (mClean === cleanTitle) return true;
+
+      // If title is almost identical and release year matches
+      if (release_year && m.release_year && release_year === m.release_year) {
+        if (mClean.includes(cleanTitle) || cleanTitle.includes(mClean)) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  public mergeMediaEntities(survivingId: string, duplicateId: string, overrides?: Partial<Media>): void {
+    if (!this.db || survivingId === duplicateId) return;
+
+    this.db.run('BEGIN TRANSACTION;');
+    try {
+      // 1. Relink local files
+      this.db.run('UPDATE local_file SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+
+      // 2. Relink history
+      this.db.run('UPDATE media_history SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+
+      // 3. Relink availability
+      this.db.run('UPDATE availability SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+
+      // 4. Relink wishlist
+      this.db.run('UPDATE wishlist SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+
+      // 5. Relink notion raw records
+      this.db.run('UPDATE notion_raw_records SET parsed_media_id = ? WHERE parsed_media_id = ?', [survivingId, duplicateId]);
+
+      // 6. Handle external_ids reassignments without duplicate provider/external_id conflicts
+      const dupExts = this.getExternalIdsForMedia(duplicateId);
+      const survExts = this.getExternalIdsForMedia(survivingId);
+
+      for (const ext of dupExts) {
+        const existsOnSurv = survExts.some(
+          s => s.provider === ext.provider && s.external_id === ext.external_id
+        );
+        if (!existsOnSurv) {
+          // Relink or insert
+          this.db.run(
+            `INSERT INTO external_ids (id, media_id, provider, external_id)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET media_id=excluded.media_id`,
+            [ext.id, survivingId, ext.provider, ext.external_id]
+          );
+        } else {
+          // Delete duplicate's external ID entry to avoid unique constraint error
+          this.db.run('DELETE FROM external_ids WHERE id = ?', [ext.id]);
+        }
+      }
+
+      // 7. Delete duplicate media row
+      this.db.run('DELETE FROM media WHERE id = ?', [duplicateId]);
+
+      this.db.run('COMMIT;');
+    } catch (err) {
+      this.db.run('ROLLBACK;');
+      console.error('Failed to merge media entities:', err);
+      throw err;
+    }
+
+    // Update surviving media with overrides if provided
+    if (overrides) {
+      const survivingMedia = this.getMediaById(survivingId);
+      if (survivingMedia) {
+        this.saveMedia({
+          ...survivingMedia,
+          ...overrides,
+          updated_at: new Date().toISOString()
+        });
+      }
+    } else {
+      this.save();
+    }
+  }
+
+  public deleteMedia(id: string): void {
+    if (!this.db) return;
+    this.db.run('DELETE FROM media WHERE id = ?', [id]);
+    this.db.run('DELETE FROM external_ids WHERE media_id = ?', [id]);
+    this.db.run('DELETE FROM media_history WHERE media_id = ?', [id]);
+    this.db.run('UPDATE local_file SET media_id = NULL WHERE media_id = ?', [id]);
     this.save();
   }
 

@@ -188,6 +188,131 @@ export class IGDBProvider implements MetadataProvider {
     return this.getMockSearchResults(cleanQuery || query);
   }
 
+  public async getRelatedMedia(externalId: string): Promise<MetadataSearchResult[]> {
+    const { clientId, clientSecret } = this.getTwitchCredentials();
+
+    if (externalId.startsWith('igdb:') && clientId && clientSecret) {
+      const igdbId = externalId.replace('igdb:', '');
+      const token = await this.getTwitchAccessToken(clientId, clientSecret);
+      if (token) {
+        try {
+          const body = `where id = ${igdbId}; fields name, collection.games.name, collection.games.cover.image_id, collection.games.first_release_date, collection.games.summary, franchises.games.name, franchises.games.cover.image_id, franchises.games.first_release_date, franchises.games.summary, remakes.name, remakes.cover.image_id, remakes.first_release_date, remakes.summary, dlcs.name, dlcs.cover.image_id, dlcs.first_release_date, dlcs.summary, parent_game.name, parent_game.cover.image_id, parent_game.first_release_date, parent_game.summary;`;
+          const res = await smartFetch(`${this.igdbBaseUrl}/games`, {
+            method: 'POST',
+            headers: {
+              'Client-ID': clientId,
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'text/plain'
+            },
+            body
+          });
+
+          if (res.ok) {
+            const list = await res.json();
+            if (list.length > 0) {
+              const game = list[0];
+              const relatedGames: any[] = [];
+              const addedIds = new Set<number>([Number(igdbId)]);
+
+              const addGame = (g: any) => {
+                if (g && g.id && !addedIds.has(g.id)) {
+                  addedIds.add(g.id);
+                  relatedGames.push(g);
+                }
+              };
+
+              if (game.collection?.games) game.collection.games.forEach(addGame);
+              if (game.franchises) {
+                game.franchises.forEach((f: any) => {
+                  if (f.games) f.games.forEach(addGame);
+                });
+              }
+              if (game.remakes) game.remakes.forEach(addGame);
+              if (game.dlcs) game.dlcs.forEach(addGame);
+              if (game.parent_game) addGame(game.parent_game);
+
+              if (relatedGames.length > 0) {
+                return relatedGames.slice(0, 8).map(g => {
+                  const coverUrl = g.cover?.image_id
+                    ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${g.cover.image_id}.jpg`
+                    : undefined;
+                  const year = g.first_release_date
+                    ? new Date(g.first_release_date * 1000).getFullYear()
+                    : undefined;
+
+                  return {
+                    title: g.name,
+                    type: 'VideoGame' as MediaType,
+                    release_year: year,
+                    description: g.summary,
+                    poster: coverUrl,
+                    external_id: `igdb:${g.id}`,
+                    provider: this.name
+                  };
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error('IGDB getRelatedMedia failed:', err);
+        }
+      }
+    }
+
+    return this.getMockRelatedMedia(externalId);
+  }
+
+  private getMockRelatedMedia(externalId: string): MetadataSearchResult[] {
+    if (externalId.includes('1020') || externalId.toLowerCase().includes('assassin')) {
+      return [
+        {
+          title: "Assassin's Creed III",
+          type: 'VideoGame',
+          release_year: 2012,
+          description: 'Set during the American Revolution, experience the story of Ratonhnhaké:ton.',
+          poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&q=80',
+          external_id: 'igdb:1019',
+          provider: 'IGDB'
+        },
+        {
+          title: "Assassin's Creed Rogue",
+          type: 'VideoGame',
+          release_year: 2014,
+          description: 'Set during the Seven Years War, Shay Patrick Cormac turns against the Brotherhood.',
+          poster: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=500&q=80',
+          external_id: 'igdb:1021',
+          provider: 'IGDB'
+        }
+      ];
+    }
+
+    if (externalId.includes('1877') || externalId.toLowerCase().includes('cyberpunk')) {
+      return [
+        {
+          title: 'Cyberpunk 2077: Phantom Liberty',
+          type: 'VideoGame',
+          release_year: 2023,
+          description: 'A spy-thriller expansion for Cyberpunk 2077 set in Dogtown.',
+          poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80',
+          external_id: 'igdb:1878',
+          provider: 'IGDB'
+        }
+      ];
+    }
+
+    return [
+      {
+        title: 'Overcooked! 2',
+        type: 'VideoGame',
+        release_year: 2018,
+        description: 'Overcooked returns with a brand-new helping of chaotic cooking action!',
+        poster: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&q=80',
+        external_id: 'igdb:2031',
+        provider: 'IGDB'
+      }
+    ];
+  }
+
   public async getMediaDetails(externalId: string): Promise<Partial<Media>> {
     const { clientId, clientSecret, rawgApiKey } = this.getTwitchCredentials();
 

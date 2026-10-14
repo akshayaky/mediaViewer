@@ -146,6 +146,159 @@ export class TMDBProvider implements MetadataProvider {
     return results;
   }
 
+  public async getRelatedMedia(externalId: string): Promise<MetadataSearchResult[]> {
+    const apiKey = this.getApiKey();
+
+    let mediaType: 'movie' | 'tv' = 'movie';
+    let tmdbId = externalId;
+
+    if (externalId.startsWith('movie:')) {
+      mediaType = 'movie';
+      tmdbId = externalId.replace('movie:', '');
+    } else if (externalId.startsWith('tv:')) {
+      mediaType = 'tv';
+      tmdbId = externalId.replace('tv:', '');
+    }
+
+    if (!apiKey || !/^\d+$/.test(tmdbId)) {
+      return this.getMockRelatedMedia(externalId, mediaType);
+    }
+
+    try {
+      const results: MetadataSearchResult[] = [];
+
+      if (mediaType === 'movie') {
+        const { url, headers } = this.getFetchConfig(`/movie/${tmdbId}`, {
+          append_to_response: 'belongs_to_collection,recommendations'
+        });
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+          const data = await res.json();
+
+          if (data.belongs_to_collection && data.belongs_to_collection.id) {
+            const collectionFetch = this.getFetchConfig(`/collection/${data.belongs_to_collection.id}`);
+            const colRes = await fetch(collectionFetch.url, { headers: collectionFetch.headers });
+            if (colRes.ok) {
+              const colData = await colRes.json();
+              if (colData.parts && colData.parts.length > 0) {
+                colData.parts.forEach((p: any) => {
+                  if (String(p.id) !== tmdbId) {
+                    const releaseYear = p.release_date ? parseInt(p.release_date.split('-')[0], 10) : undefined;
+                    results.push({
+                      title: p.title,
+                      original_title: p.original_title,
+                      release_year: releaseYear && !isNaN(releaseYear) ? releaseYear : undefined,
+                      type: 'Film',
+                      description: p.overview,
+                      poster: p.poster_path ? `${this.imageBaseUrl}/w500${p.poster_path}` : undefined,
+                      backdrop: p.backdrop_path ? `${this.imageBaseUrl}/w1280${p.backdrop_path}` : undefined,
+                      external_id: `movie:${p.id}`,
+                      provider: this.name
+                    });
+                  }
+                });
+              }
+            }
+          }
+
+          if (results.length === 0 && data.recommendations && data.recommendations.results) {
+            data.recommendations.results.slice(0, 6).forEach((rec: any) => {
+              if (String(rec.id) !== tmdbId) {
+                const releaseYear = rec.release_date ? parseInt(rec.release_date.split('-')[0], 10) : undefined;
+                results.push({
+                  title: rec.title,
+                  original_title: rec.original_title,
+                  release_year: releaseYear && !isNaN(releaseYear) ? releaseYear : undefined,
+                  type: 'Film',
+                  description: rec.overview,
+                  poster: rec.poster_path ? `${this.imageBaseUrl}/w500${rec.poster_path}` : undefined,
+                  backdrop: rec.backdrop_path ? `${this.imageBaseUrl}/w1280${rec.backdrop_path}` : undefined,
+                  external_id: `movie:${rec.id}`,
+                  provider: this.name
+                });
+              }
+            });
+          }
+        }
+      } else {
+        const { url, headers } = this.getFetchConfig(`/tv/${tmdbId}/recommendations`);
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.results && data.results.length > 0) {
+            data.results.slice(0, 6).forEach((rec: any) => {
+              if (String(rec.id) !== tmdbId) {
+                const releaseYear = rec.first_air_date ? parseInt(rec.first_air_date.split('-')[0], 10) : undefined;
+                results.push({
+                  title: rec.name,
+                  original_title: rec.original_name,
+                  release_year: releaseYear && !isNaN(releaseYear) ? releaseYear : undefined,
+                  type: 'TV Series',
+                  description: rec.overview,
+                  poster: rec.poster_path ? `${this.imageBaseUrl}/w500${rec.poster_path}` : undefined,
+                  backdrop: rec.backdrop_path ? `${this.imageBaseUrl}/w1280${rec.backdrop_path}` : undefined,
+                  external_id: `tv:${rec.id}`,
+                  provider: this.name
+                });
+              }
+            });
+          }
+        }
+      }
+
+      if (results.length > 0) {
+        return results;
+      }
+    } catch (err) {
+      console.warn('TMDB getRelatedMedia failed:', err);
+    }
+
+    return this.getMockRelatedMedia(externalId, mediaType);
+  }
+
+  private getMockRelatedMedia(_externalId: string, mediaType: 'movie' | 'tv'): MetadataSearchResult[] {
+    if (mediaType === 'movie') {
+      return [
+        {
+          title: 'Premalu',
+          original_title: 'Premalu',
+          release_year: 2024,
+          type: 'Film',
+          description: 'A romantic comedy set in Hyderabad following Sachin and Reenu.',
+          poster: 'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=500&q=80',
+          backdrop: 'https://images.unsplash.com/photo-1518676599625-583ad8c26727?w=1280&q=80',
+          external_id: 'movie:123456',
+          provider: 'TMDB'
+        },
+        {
+          title: 'Aanandam',
+          original_title: 'Aanandam',
+          release_year: 2016,
+          type: 'Film',
+          description: 'Seven engineering students go on a college trip across South India.',
+          poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&q=80',
+          backdrop: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80',
+          external_id: 'movie:390123',
+          provider: 'TMDB'
+        }
+      ];
+    } else {
+      return [
+        {
+          title: 'Ted Lasso',
+          original_title: 'Ted Lasso',
+          release_year: 2020,
+          type: 'TV Series',
+          description: 'An American college football coach is hired to manage a British soccer team.',
+          poster: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=500&q=80',
+          backdrop: 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=1280&q=80',
+          external_id: 'tv:97630',
+          provider: 'TMDB'
+        }
+      ];
+    }
+  }
+
   public async getMediaDetails(externalId: string): Promise<Partial<Media>> {
     const apiKey = this.getApiKey();
 
