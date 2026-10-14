@@ -447,7 +447,7 @@ export const SettingsView: React.FC = () => {
         </p>
 
         {/* Integration Badges */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
           <div className="bg-[#1a1d29] p-3 rounded-xl border border-[#2d3145] flex items-center justify-between">
             <span className="font-bold text-white">TMDB (Movies/TV)</span>
             {tmdbKey ? (
@@ -463,7 +463,7 @@ export const SettingsView: React.FC = () => {
           </div>
 
           <div className="bg-[#1a1d29] p-3 rounded-xl border border-[#2d3145] flex items-center justify-between">
-            <span className="font-bold text-white">IGDB (Twitch OAuth)</span>
+            <span className="font-bold text-white">IGDB (Twitch OAuth & Logos)</span>
             {twitchClientId && twitchClientSecret ? (
               <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-semibold text-[11px] flex items-center space-x-1">
                 <ShieldCheck className="w-3 h-3" />
@@ -472,20 +472,6 @@ export const SettingsView: React.FC = () => {
             ) : (
               <span className="bg-amber-950 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-semibold text-[11px]">
                 Demo Fallback
-              </span>
-            )}
-          </div>
-
-          <div className="bg-[#1a1d29] p-3 rounded-xl border border-[#2d3145] flex items-center justify-between">
-            <span className="font-bold text-white">Steam (Game Logos)</span>
-            {steamApiKey ? (
-              <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-semibold text-[11px] flex items-center space-x-1">
-                <ShieldCheck className="w-3 h-3" />
-                <span>Configured</span>
-              </span>
-            ) : (
-              <span className="bg-amber-950 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-semibold text-[11px]">
-                Public Store Search
               </span>
             )}
           </div>

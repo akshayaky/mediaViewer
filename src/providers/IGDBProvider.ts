@@ -2,32 +2,16 @@ import { Media, MediaType } from '../types/media';
 import { MetadataProvider, MetadataSearchResult } from './interfaces';
 import { dbService } from '../services/DatabaseService';
 
-export async function fetchSteamLogo(gameTitle: string): Promise<string | undefined> {
+export async function fetchIGDBLogo(gameTitle: string): Promise<string | undefined> {
   try {
-    const cleanTitle = gameTitle.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ').trim();
-    if (!cleanTitle) return undefined;
-
-    const settings = dbService.getSettings();
-    const apiKeyParam = settings.steam_api_key?.trim() ? `&key=${encodeURIComponent(settings.steam_api_key.trim())}` : '';
-
-    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    let targetUrl = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(cleanTitle)}&l=english&cc=US${apiKeyParam}`;
-    if (!isTauri && typeof window !== 'undefined') {
-      targetUrl = `/steam-search?term=${encodeURIComponent(cleanTitle)}&l=english&cc=US${apiKeyParam}`;
-    }
-
-    const res = await smartFetch(targetUrl);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.items && data.items.length > 0) {
-        const appId = data.items[0].id;
-        if (appId) {
-          return `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/logo.png`;
-        }
-      }
+    const provider = new IGDBProvider();
+    const results = await provider.searchMedia(gameTitle, 'VideoGame');
+    if (results.length > 0) {
+      const details = await provider.getMediaDetails(results[0].external_id);
+      return details.logo;
     }
   } catch (err) {
-    console.warn(`Failed to fetch Steam logo for game "${gameTitle}":`, err);
+    console.warn(`Failed to fetch IGDB logo for game "${gameTitle}":`, err);
   }
   return undefined;
 }
@@ -258,8 +242,28 @@ export class IGDBProvider implements MetadataProvider {
               const developer = developers.length > 0 ? developers.join(', ') : undefined;
               const publisher = publishers.length > 0 ? publishers.join(', ') : undefined;
 
-              // Fetch Steam logo for video game
-              const logo = await fetchSteamLogo(game.name);
+              // Fetch IGDB logo for video game if game.id or game_logos exists
+              let logo: string | undefined = undefined;
+              try {
+                const logoBody = `where game = ${igdbId}; fields image_id;`;
+                const logoRes = await smartFetch(`${this.igdbBaseUrl}/game_logos`, {
+                  method: 'POST',
+                  headers: {
+                    'Client-ID': clientId,
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'text/plain'
+                  },
+                  body: logoBody
+                });
+                if (logoRes.ok) {
+                  const logos = await logoRes.json();
+                  if (logos && logos.length > 0 && logos[0].image_id) {
+                    logo = `https://images.igdb.com/igdb/image/upload/t_logo_comp/${logos[0].image_id}.png`;
+                  }
+                }
+              } catch (logoErr) {
+                console.warn('Failed to fetch IGDB game_logos:', logoErr);
+              }
 
               return {
                 title: game.name,
@@ -297,8 +301,6 @@ export class IGDBProvider implements MetadataProvider {
             ? game.publishers.map((p: any) => p.name).join(', ')
             : undefined;
 
-          const logo = await fetchSteamLogo(game.name);
-
           return {
             title: game.name,
             type: 'VideoGame',
@@ -307,7 +309,6 @@ export class IGDBProvider implements MetadataProvider {
             genres,
             poster: game.background_image,
             backdrop: game.background_image_additional || game.background_image,
-            logo,
             developer,
             publisher,
             metadata_source: 'RAWG',
@@ -407,7 +408,7 @@ export class IGDBProvider implements MetadataProvider {
         genres: ['Action', 'RPG', 'Open World', 'Sci-Fi'],
         poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80',
         backdrop: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1280&q=80',
-        logo: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1091500/logo.png',
+        logo: 'https://images.igdb.com/igdb/image/upload/t_logo_comp/co2dky.png',
         developer: 'CD Projekt Red',
         publisher: 'CD Projekt',
         metadata_source: 'IGDB',
