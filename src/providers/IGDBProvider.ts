@@ -7,13 +7,16 @@ export async function fetchSteamLogo(gameTitle: string): Promise<string | undefi
     const cleanTitle = gameTitle.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ').trim();
     if (!cleanTitle) return undefined;
 
+    const settings = dbService.getSettings();
+    const apiKeyParam = settings.steam_api_key?.trim() ? `&key=${encodeURIComponent(settings.steam_api_key.trim())}` : '';
+
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    let targetUrl = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(cleanTitle)}&l=english&cc=US`;
+    let targetUrl = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(cleanTitle)}&l=english&cc=US${apiKeyParam}`;
     if (!isTauri && typeof window !== 'undefined') {
-      targetUrl = `/steam-search?term=${encodeURIComponent(cleanTitle)}&l=english&cc=US`;
+      targetUrl = `/steam-search?term=${encodeURIComponent(cleanTitle)}&l=english&cc=US${apiKeyParam}`;
     }
 
-    const res = await fetch(targetUrl);
+    const res = await smartFetch(targetUrl);
     if (res.ok) {
       const data = await res.json();
       if (data.items && data.items.length > 0) {
