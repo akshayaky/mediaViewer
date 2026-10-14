@@ -171,6 +171,18 @@ export function useMediaDetail(initialMedia: Media) {
     return newMedia;
   };
 
+  const updateCurrentMedia = useCallback((newMedia: Media) => {
+    setCurrentMedia(newMedia);
+    setHistoryList(dbService.getHistoryForMedia(newMedia.id));
+    setState(dbService.getMediaState(newMedia.id));
+    setLocalFiles(dbService.getLocalFilesForMedia(newMedia.id));
+    setArtwork({
+      poster: newMedia.poster,
+      backdrop: newMedia.backdrop,
+      logo: newMedia.logo
+    });
+  }, []);
+
   const refreshLocalFiles = () => {
     setLocalFiles(dbService.getLocalFilesForMedia(currentMedia.id));
   };
@@ -338,6 +350,7 @@ export function useMediaDetail(initialMedia: Media) {
     relatedMedia,
     isLoadingRelated,
     addedExternalIds,
-    handleAddRelatedToLibrary
+    handleAddRelatedToLibrary,
+    updateCurrentMedia
   };
 }
