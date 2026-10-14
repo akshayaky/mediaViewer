@@ -12,7 +12,7 @@ type RGB = [number, number, number];
 
 export type PageTone = 'light' | 'dark';
 
-export const DEFAULT_ACCENT = '#cd285c';
+export const DEFAULT_ACCENT = '#423e3f';
 const DEFAULT_ACCENT_RGB = '225, 29, 72';
 
 /**

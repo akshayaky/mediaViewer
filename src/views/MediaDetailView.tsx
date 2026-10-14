@@ -76,6 +76,17 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     logSessionHistory,
     addCustomFilePath
   } = useMediaDetail(initialMedia);
+
+  if(!isRefreshingMetadata && artwork.backdrop == "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80")
+  {
+    console.log("Loading now");
+    handleManualMetadataRefresh();
+  }
+  else
+  {
+    console.log("already loaded " + artwork.backdrop);
+  }
+
   console.log("Detailed view");
   const [loadedArtworkSrc, setLoadedArtworkSrc] = useState<string>();
   const [failedBackdropSrc, setFailedBackdropSrc] = useState<string>();
