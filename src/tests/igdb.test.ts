@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { igdbProvider, fetchIGDBLogo } from '../providers/IGDBProvider';
 
 describe('IGDBProvider', () => {
@@ -36,6 +36,6 @@ describe('IGDBProvider', () => {
 
   it('fetches IGDB logo using fetchIGDBLogo fallback/mock details', async () => {
     const logo = await fetchIGDBLogo('Cyberpunk 2077');
-    expect(logo).toBe('https://images.igdb.com/igdb/image/upload/t_logo_comp/co2dky.png');
+    expect(logo).toBe('https://images.igdb.com/igdb/image/upload/t_logo_med/co2dky.png');
   });
 });

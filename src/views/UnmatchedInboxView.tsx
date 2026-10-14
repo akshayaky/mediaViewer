@@ -73,6 +73,17 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
   };
 
   const handleConfirmExternalCandidate = async (file: LocalFile, candidate: MetadataSearchResult) => {
+    if (candidate.external_id) {
+      const existingMedia = dbService.getMediaByExternalId(candidate.provider, candidate.external_id);
+      if (existingMedia) {
+        dbService.linkLocalFileToMedia(file.id, existingMedia.id);
+        setSavedMessage(`Linked local file to existing canonical entry "${existingMedia.title}"!`);
+        setTimeout(() => setSavedMessage(''), 3000);
+        refreshFiles();
+        return;
+      }
+    }
+
     const now = new Date().toISOString();
     const mediaType: MediaType = candidate.type;
 

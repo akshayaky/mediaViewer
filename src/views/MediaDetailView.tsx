@@ -5,6 +5,11 @@ import { useDominantColor } from '../helper/useDominantColour';
 import { getMediaTheme } from '../helper/mediaDetailTheme';
 import { dbService } from '../services/DatabaseService';
 import './MediaDetailView.css';
+import { MetadataSearchResult } from '../providers/interfaces';
+import { FixMatchModal } from '../components/FixMatchModal';
+import { MergeDuplicateModal } from '../components/MergeDuplicateModal';
+import { tmdbProvider } from '../providers/TMDBProvider';
+import { igdbProvider } from '../providers/IGDBProvider';
 import {
   ArrowLeft,
   Star,
@@ -30,7 +35,12 @@ import {
   Loader2,
   Clock,
   Layers,
-  Code
+  Code,
+  MoreVertical,
+  Link as LinkIcon,
+  Sparkles,
+  X,
+  Check
 } from 'lucide-react';
 
 interface MediaDetailViewProps {
@@ -74,8 +84,26 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     handleManualMetadataRefresh,
     handlePlayFile,
     logSessionHistory,
-    addCustomFilePath
+    addCustomFilePath,
+    relatedMedia,
+    isLoadingRelated,
+    addedExternalIds,
+    handleAddRelatedToLibrary
   } = useMediaDetail(initialMedia);
+
+
+  // Three dot menu state
+  const [showMenu, setShowMenu] = useState(false);
+  const [showFixMatchModal, setShowFixMatchModal] = useState(false);
+
+  // Duplicates & Merge modal state
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergePair, setMergePair] = useState<{ mediaA: Media; mediaB: Media } | null>(null);
+
+  // Ephemeral preview modal for related items
+  const [previewRelatedItem, setPreviewRelatedItem] = useState<MetadataSearchResult | null>(null);
+  const [previewDetails, setPreviewDetails] = useState<Partial<Media> | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   if(!isRefreshingMetadata && artwork.backdrop == "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80")
   {
@@ -245,28 +273,47 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       {/* Pinned Header Bar Actions */}
       <div className={`mdv-header ${isPlayButtonStuck ? 'mdv-header--stuck' : ''}`}>
         <div className="mdv-header-actions">
-          <button onClick={onBack} className="mdv-btn mdv-btn-glass">
+          <button onClick={onBack} className="mdv-btn mdv-btn-glass cursor-pointer">
             <ArrowLeft className="mdv-icon-md" />
             <span>Back to Library</span>
           </button>
 
-          <button
-            onClick={handleManualMetadataRefresh}
-            disabled={isRefreshingMetadata}
-            className="mdv-btn mdv-btn-accent mdv-btn-refresh"
-          >
-            {isRefreshingMetadata ? (
-              <>
-                <Loader2 className="mdv-icon-md mdv-spin" />
-                <span>Re-syncing Provider...</span>
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mdv-icon-md" />
-                <span>Refresh Metadata</span>
-              </>
+          <div className="relative">
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              className="mdv-btn mdv-btn-glass cursor-pointer"
+              title="Media Options"
+            >
+              <MoreVertical className="mdv-icon-md" />
+            </button>
+
+            {showMenu && (
+              <div className="absolute right-0 mt-2 w-56 bg-[#1b1d2a] border border-[#2d3145] rounded-xl shadow-2xl py-1 z-50 animate-fadeIn">
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    handleManualMetadataRefresh();
+                  }}
+                  disabled={isRefreshingMetadata}
+                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-rose-950/50 hover:text-rose-300 flex items-center space-x-2 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{isRefreshingMetadata ? 'Re-syncing Provider...' : 'Refresh Metadata'}</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    setShowFixMatchModal(true);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-rose-950/50 hover:text-rose-300 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736]"
+                >
+                  <LinkIcon className="w-4 h-4 text-sky-400 shrink-0" />
+                  <span>Fix Match / Change Metadata</span>
+                </button>
+              </div>
             )}
-          </button>
+          </div>
         </div>
       </div>
 
@@ -701,6 +748,234 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           </section>
         </div>
       </div>
+
+      {/* Related Media Rail Section */}
+      <div className="max-w-7xl mx-auto px-6 pb-12">
+        <section className="mdv-card mdv-card--roomy">
+          <h2 className="mdv-card-title flex items-center space-x-2">
+            <Sparkles className="mdv-icon-lg mdv-icon-accent" />
+            <span>Related Media, Prequels & Sequels</span>
+          </h2>
+
+          {isLoadingRelated ? (
+            <div className="flex items-center space-x-2 py-6 text-gray-400 text-xs">
+              <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+              <span>Loading related media relationships from provider...</span>
+            </div>
+          ) : relatedMedia.length === 0 ? (
+            <p className="mdv-empty">No direct prequels, sequels, or related series recorded for this media item.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 pt-3">
+              {relatedMedia.map((item, idx) => {
+                const isAdded = addedExternalIds.has(item.external_id) || addedExternalIds.has(`${item.provider}:${item.external_id}`);
+
+                return (
+                  <div
+                    key={`${item.external_id}_${idx}`}
+                    className="group relative bg-[#1b1d2a] border border-[#2d3145] hover:border-rose-500 rounded-xl overflow-hidden shadow-lg transition-all flex flex-col justify-between"
+                  >
+                    {/* Poster + top-right + button */}
+                    <div
+                      onClick={async () => {
+                        const provider = item.type === 'VideoGame' ? igdbProvider : tmdbProvider;
+                        setPreviewRelatedItem(item);
+                        setIsLoadingPreview(true);
+                        try {
+                          const details = await provider.getMediaDetails(item.external_id);
+                          setPreviewDetails(details);
+                        } catch {
+                          setPreviewDetails(null);
+                        } finally {
+                          setIsLoadingPreview(false);
+                        }
+                      }}
+                      className="relative aspect-[2/3] cursor-pointer overflow-hidden bg-[#232736]"
+                    >
+                      {item.poster ? (
+                        <img
+                          src={item.poster}
+                          alt={item.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center text-gray-400">
+                          {getTypeIcon()}
+                          <span className="text-[10px] mt-1 line-clamp-2">{item.title}</span>
+                        </div>
+                      )}
+
+                      {/* Top-right + action button */}
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!isAdded) {
+                            await handleAddRelatedToLibrary(item);
+                          }
+                        }}
+                        disabled={isAdded}
+                        title={isAdded ? 'Already in Library' : 'Add to Library (Planned)'}
+                        className={`absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-md shadow-lg transition-all cursor-pointer z-10 ${
+                          isAdded
+                            ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/50 cursor-default'
+                            : 'bg-rose-600/90 hover:bg-rose-500 text-white border border-rose-400/30 hover:scale-110'
+                        }`}
+                      >
+                        {isAdded ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    {/* Footer text */}
+                    <div className="p-2.5 space-y-1">
+                      <h4 className="font-bold text-xs text-white truncate" title={item.title}>
+                        {item.title}
+                      </h4>
+                      <div className="flex items-center justify-between text-[10px] text-gray-400">
+                        <span>{item.release_year || ''}</span>
+                        {isAdded && <span className="text-emerald-400 font-semibold">In Library</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Ephemeral Related Media Detail Preview Modal */}
+      {previewRelatedItem && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl w-full max-w-2xl flex flex-col max-h-[85vh] shadow-2xl overflow-hidden animate-fadeIn">
+            <div className="p-5 border-b border-[#232736] flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-5 h-5 text-rose-400" />
+                <h3 className="text-lg font-bold text-white">Related Item Preview</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setPreviewRelatedItem(null);
+                  setPreviewDetails(null);
+                }}
+                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#1f222e] transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
+              {isLoadingPreview ? (
+                <div className="flex items-center space-x-2 py-8 text-gray-400 text-xs justify-center">
+                  <Loader2 className="w-5 h-5 animate-spin text-rose-400" />
+                  <span>Loading full entry details...</span>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row gap-5">
+                  {(previewDetails?.poster || previewRelatedItem.poster) && (
+                    <img
+                      src={previewDetails?.poster || previewRelatedItem.poster}
+                      alt={previewRelatedItem.title}
+                      className="w-32 aspect-[2/3] object-cover rounded-xl border border-[#2d3145] shrink-0 shadow-lg"
+                    />
+                  )}
+
+                  <div className="space-y-2 text-xs text-gray-300 flex-1">
+                    <h2 className="text-xl font-black text-white">{previewDetails?.title || previewRelatedItem.title}</h2>
+                    <div className="flex items-center space-x-3 text-rose-300 font-semibold">
+                      <span>{previewDetails?.release_year || previewRelatedItem.release_year}</span>
+                      <span>•</span>
+                      <span>{previewRelatedItem.type}</span>
+                      <span>•</span>
+                      <span>{previewRelatedItem.provider}</span>
+                    </div>
+
+                    {previewDetails?.genres && previewDetails.genres.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {previewDetails.genres.map(g => (
+                          <span key={g} className="bg-[#232736] text-gray-300 border border-[#2d3145] text-[10px] px-2 py-0.5 rounded-full">
+                            {g}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="text-gray-300 leading-relaxed pt-2">
+                      {previewDetails?.description || previewRelatedItem.description || 'No detailed synopsis recorded.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-[#232736] flex items-center justify-between bg-[#11131c]">
+              <span className="text-xs text-gray-400">
+                {addedExternalIds.has(previewRelatedItem.external_id)
+                  ? 'This entry is already in your library.'
+                  : 'Browsing preview mode without persisting to database.'}
+              </span>
+
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => {
+                    setPreviewRelatedItem(null);
+                    setPreviewDetails(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-[#2d3145] text-gray-300 hover:bg-[#1a1c29] text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+
+                {!addedExternalIds.has(previewRelatedItem.external_id) && (
+                  <button
+                    onClick={async () => {
+                      await handleAddRelatedToLibrary(previewRelatedItem);
+                      setPreviewRelatedItem(null);
+                      setPreviewDetails(null);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add to Library (Planned)</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fix Match Modal */}
+      {showFixMatchModal && (
+        <FixMatchModal
+          media={currentMedia}
+          isOpen={showFixMatchModal}
+          onClose={() => setShowFixMatchModal(false)}
+          onMatchedUpdated={() => {
+            handleManualMetadataRefresh();
+          }}
+          onRequestMerge={(mediaA, mediaB) => {
+            setMergePair({ mediaA, mediaB });
+            setShowMergeModal(true);
+          }}
+        />
+      )}
+
+      {/* Merge Duplicate Modal */}
+      {showMergeModal && mergePair && (
+        <MergeDuplicateModal
+          mediaA={mergePair.mediaA}
+          mediaB={mergePair.mediaB}
+          isOpen={showMergeModal}
+          onClose={() => {
+            setShowMergeModal(false);
+            setMergePair(null);
+          }}
+          onMerged={() => {
+            setShowMergeModal(false);
+            setMergePair(null);
+            handleManualMetadataRefresh();
+          }}
+        />
+      )}
 
       {/* Log History Modal */}
       {showAddHistoryModal && (

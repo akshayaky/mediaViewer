@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Media, LocalFile, MediaHistory, MediaState } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { localLauncherService } from '../services/LocalLauncherService';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
+import { MetadataSearchResult } from '../providers/interfaces';
 
 export function useMediaDetail(initialMedia: Media) {
   const [currentMedia, setCurrentMedia] = useState<Media>(initialMedia);
@@ -19,6 +20,11 @@ export function useMediaDetail(initialMedia: Media) {
   );
   const availabilities = dbService.getAvailabilityForMedia(initialMedia.id);
 
+  // Related media state
+  const [relatedMedia, setRelatedMedia] = useState<MetadataSearchResult[]>([]);
+  const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+  const [addedExternalIds, setAddedExternalIds] = useState<Set<string>>(new Set());
+
   // Artwork state
   const [artwork, setArtwork] = useState<{ poster?: string; backdrop?: string; logo?: string }>({
     poster: initialMedia.poster,
@@ -30,6 +36,58 @@ export function useMediaDetail(initialMedia: Media) {
   const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState('');
   const [launchMessage, setLaunchMessage] = useState('');
+
+  // Synchronize added external IDs from database
+  const refreshAddedExternalIds = useCallback(() => {
+    const allMedia = dbService.getAllMedia();
+    const set = new Set<string>();
+    for (const m of allMedia) {
+      if (m.external_ids) {
+        for (const ext of m.external_ids) {
+          set.add(ext.external_id);
+          set.add(`${ext.provider}:${ext.external_id}`);
+        }
+      }
+    }
+    setAddedExternalIds(set);
+  }, []);
+
+  useEffect(() => {
+    refreshAddedExternalIds();
+  }, [refreshAddedExternalIds, currentMedia]);
+
+  // Fetch related media asynchronously
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingRelated(true);
+
+    const extId = currentMedia.external_ids && currentMedia.external_ids.length > 0
+      ? currentMedia.external_ids[0].external_id
+      : currentMedia.title;
+
+    const provider = currentMedia.type === 'VideoGame' ? igdbProvider : tmdbProvider;
+
+    if (provider.getRelatedMedia) {
+      provider.getRelatedMedia(extId).then(items => {
+        if (isMounted) {
+          setRelatedMedia(items || []);
+          setIsLoadingRelated(false);
+        }
+      }).catch(err => {
+        console.warn('Failed to fetch related media:', err);
+        if (isMounted) {
+          setRelatedMedia([]);
+          setIsLoadingRelated(false);
+        }
+      });
+    } else {
+      setIsLoadingRelated(false);
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentMedia.id, currentMedia.external_ids, currentMedia.type, currentMedia.title]);
 
   // Resolve artwork
   useEffect(() => {
@@ -47,6 +105,71 @@ export function useMediaDetail(initialMedia: Media) {
       isMounted = false;
     };
   }, [currentMedia]);
+
+  const handleAddRelatedToLibrary = async (candidate: MetadataSearchResult): Promise<Media> => {
+    // Check if external_id already exists in local DB
+    if (candidate.external_id) {
+      const existing = dbService.getMediaByExternalId(candidate.provider, candidate.external_id);
+      if (existing) {
+        refreshAddedExternalIds();
+        return existing;
+      }
+    }
+
+    let details: Partial<Media> = {};
+    const provider = candidate.type === 'VideoGame' ? igdbProvider : tmdbProvider;
+    try {
+      details = await provider.getMediaDetails(candidate.external_id);
+    } catch (err) {
+      console.warn('Failed to fetch full details for related item:', err);
+    }
+
+    const now = new Date().toISOString();
+    const mediaId = `media_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+    const newMedia: Media = {
+      id: mediaId,
+      type: candidate.type,
+      title: details.title || candidate.title,
+      original_title: details.original_title || candidate.original_title,
+      release_year: details.release_year || candidate.release_year,
+      description: details.description || candidate.description,
+      genres: details.genres || [],
+      runtime: details.runtime,
+      poster: details.poster || candidate.poster,
+      backdrop: details.backdrop || candidate.backdrop,
+      logo: details.logo,
+      publisher: details.publisher,
+      developer: details.developer,
+      cast: details.cast,
+      seasons: details.seasons,
+      metadata_source: details.metadata_source || candidate.provider,
+      metadata_refreshed_at: now,
+      created_at: now,
+      updated_at: now,
+      external_ids: candidate.external_id ? [
+        {
+          id: `ext_${Date.now()}`,
+          media_id: mediaId,
+          provider: candidate.provider,
+          external_id: candidate.external_id
+        }
+      ] : []
+    };
+
+    dbService.saveMedia(newMedia);
+    dbService.saveHistory({
+      id: `hist_${Date.now()}`,
+      media_id: mediaId,
+      status: 'Planned',
+      source: 'Import',
+      created_at: now
+    });
+
+    window.dispatchEvent(new CustomEvent('library-scanned'));
+    refreshAddedExternalIds();
+    return newMedia;
+  };
 
   const refreshLocalFiles = () => {
     setLocalFiles(dbService.getLocalFilesForMedia(currentMedia.id));
@@ -211,6 +334,10 @@ export function useMediaDetail(initialMedia: Media) {
     handleManualMetadataRefresh,
     handlePlayFile,
     logSessionHistory,
-    addCustomFilePath
+    addCustomFilePath,
+    relatedMedia,
+    isLoadingRelated,
+    addedExternalIds,
+    handleAddRelatedToLibrary
   };
 }

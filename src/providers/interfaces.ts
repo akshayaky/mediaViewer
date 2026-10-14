@@ -16,6 +16,7 @@ export interface MetadataProvider {
   name: string;
   searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]>;
   getMediaDetails(externalId: string): Promise<Partial<Media>>;
+  getRelatedMedia?(externalId: string): Promise<MetadataSearchResult[]>;
 }
 
 export interface ArtworkProvider {
