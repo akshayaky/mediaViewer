@@ -150,6 +150,7 @@ export interface AppSettings {
   twitch_client_id?: string;
   twitch_client_secret?: string;
   rawg_api_key?: string;
+  steam_api_key?: string;
   igdb_api_key?: string;
   notion_integration_token?: string;
   notion_database_id?: string;

@@ -35,6 +35,7 @@ export const SettingsView: React.FC = () => {
   const [twitchClientId, setTwitchClientId] = useState(settings.twitch_client_id || '');
   const [twitchClientSecret, setTwitchClientSecret] = useState(settings.twitch_client_secret || '');
   const [rawgApiKey, setRawgApiKey] = useState(settings.rawg_api_key || '');
+  const [steamApiKey, setSteamApiKey] = useState(settings.steam_api_key || '');
   const [notionToken, setNotionToken] = useState(settings.notion_integration_token || '');
 
   const [savedMessage, setSavedMessage] = useState('');
@@ -84,6 +85,7 @@ export const SettingsView: React.FC = () => {
     dbService.saveSetting('twitch_client_id', twitchClientId.trim());
     dbService.saveSetting('twitch_client_secret', twitchClientSecret.trim());
     dbService.saveSetting('rawg_api_key', rawgApiKey.trim());
+    dbService.saveSetting('steam_api_key', steamApiKey.trim());
     dbService.saveSetting('notion_integration_token', notionToken.trim());
     dbService.saveSetting('country_region', region.trim());
     setSavedMessage('API credentials and preferences saved locally in SQLite.');
@@ -445,7 +447,7 @@ export const SettingsView: React.FC = () => {
         </p>
 
         {/* Integration Badges */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
           <div className="bg-[#1a1d29] p-3 rounded-xl border border-[#2d3145] flex items-center justify-between">
             <span className="font-bold text-white">TMDB (Movies/TV)</span>
             {tmdbKey ? (
@@ -470,6 +472,20 @@ export const SettingsView: React.FC = () => {
             ) : (
               <span className="bg-amber-950 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-semibold text-[11px]">
                 Demo Fallback
+              </span>
+            )}
+          </div>
+
+          <div className="bg-[#1a1d29] p-3 rounded-xl border border-[#2d3145] flex items-center justify-between">
+            <span className="font-bold text-white">Steam (Game Logos)</span>
+            {steamApiKey ? (
+              <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-semibold text-[11px] flex items-center space-x-1">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Configured</span>
+              </span>
+            ) : (
+              <span className="bg-amber-950 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-semibold text-[11px]">
+                Public Store Search
               </span>
             )}
           </div>
@@ -534,6 +550,17 @@ export const SettingsView: React.FC = () => {
                 value={twitchClientSecret}
                 onChange={e => setTwitchClientSecret(e.target.value)}
                 placeholder="Twitch Developer Client Secret"
+                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-300 font-bold block mb-1">Steam API Key (Game Title Logos)</label>
+              <input
+                type="password"
+                value={steamApiKey}
+                onChange={e => setSteamApiKey(e.target.value)}
+                placeholder="Steam Web API Key"
                 className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
               />
             </div>

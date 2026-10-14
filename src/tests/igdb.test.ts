@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { igdbProvider } from '../providers/IGDBProvider';
+import { describe, it, expect, vi } from 'vitest';
+import { igdbProvider, fetchSteamLogo } from '../providers/IGDBProvider';
+import { dbService } from '../services/DatabaseService';
 
 describe('IGDBProvider', () => {
   it('cleans raw query strings for game searches', () => {
@@ -32,5 +33,30 @@ describe('IGDBProvider', () => {
   it('returns empty results if searching non-game type in IGDBProvider', async () => {
     const results = await igdbProvider.searchMedia('Inception', 'Film');
     expect(results).toEqual([]);
+  });
+
+  it('fetches Steam game title logo using fetchSteamLogo', async () => {
+    // Mock dbService.getSettings to avoid running SQLite WASM in unit test environment
+    vi.spyOn(dbService, 'getSettings').mockReturnValue({
+      steam_api_key: 'test_steam_key_123'
+    });
+
+    // Mock global fetch for store search API
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        items: [{ id: 1091500, name: 'Cyberpunk 2077' }]
+      })
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const logo = await fetchSteamLogo('Cyberpunk 2077');
+    expect(logo).toBe('https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1091500/logo.png');
+    expect(mockFetch).toHaveBeenCalled();
+    const callUrl = mockFetch.mock.calls[0][0];
+    expect(callUrl).toContain('key=test_steam_key_123');
+
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 });
