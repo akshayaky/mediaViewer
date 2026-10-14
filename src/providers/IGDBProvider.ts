@@ -246,19 +246,19 @@ export class IGDBProvider implements MetadataProvider {
               let logo: string | undefined = undefined;
               try {
                 const logoBody = `where game = ${igdbId}; fields image_id;`;
-                const logoRes = await smartFetch(`${this.igdbBaseUrl}/game_logos`, {
+                const logoRes = await smartFetch(`${this.igdbBaseUrl}/logos`, {
                   method: 'POST',
                   headers: {
                     'Client-ID': clientId,
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'text/plain'
                   },
-                  body: logoBody
+                  body: logoBody  // `where game = ${igdbId}; fields image_id;` — already correct
                 });
                 if (logoRes.ok) {
                   const logos = await logoRes.json();
                   if (logos && logos.length > 0 && logos[0].image_id) {
-                    logo = `https://images.igdb.com/igdb/image/upload/t_logo_comp/${logos[0].image_id}.png`;
+                    logo = `https://images.igdb.com/igdb/image/upload/t_logo_med/${logos[0].image_id}.png`;
                   }
                 }
               } catch (logoErr) {
@@ -408,7 +408,7 @@ export class IGDBProvider implements MetadataProvider {
         genres: ['Action', 'RPG', 'Open World', 'Sci-Fi'],
         poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80',
         backdrop: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1280&q=80',
-        logo: 'https://images.igdb.com/igdb/image/upload/t_logo_comp/co2dky.png',
+        logo: 'https://images.igdb.com/igdb/image/upload/t_logo_med/co2dky.png',
         developer: 'CD Projekt Red',
         publisher: 'CD Projekt',
         metadata_source: 'IGDB',
