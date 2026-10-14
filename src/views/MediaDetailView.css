@@ -155,8 +155,8 @@
   background: linear-gradient(
     to top,
     var(--accent-color) 0%,
-    var(--accent-color) 10%,
-    rgba(var(--accent-rgb), 0.8) 30%,
+    var(--accent-color) 0%,
+    rgba(var(--accent-rgb), 0.0) 30%,
     rgba(0, 0, 0, 0.4) 100%
   );
 }

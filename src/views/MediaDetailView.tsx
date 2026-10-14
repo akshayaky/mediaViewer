@@ -264,7 +264,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         {/* Floating Poster & Title Overlay */}
         <div className="mdv-hero-inner">
           {/* Poster */}
-          <div className="mdv-poster">
+          {/* <div className="mdv-poster">
             {artwork.poster ? (
               <img src={artwork.poster} alt={currentMedia.title} />
             ) : (
@@ -273,7 +273,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 <span>{currentMedia.title}</span>
               </div>
             )}
-          </div>
+          </div> */}
 
           {/* Title & Core Badges */}
           <div className="mdv-title-block">
