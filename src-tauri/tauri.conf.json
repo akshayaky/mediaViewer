@@ -29,8 +29,7 @@
             {
               "identifier": "http:default",
               "allow": [
-                { "url": "https://image.tmdb.org/**" },
-                { "url": "https://images.igdb.com/**" }
+                { "url": "https://image.tmdb.org/**" }
               ]
             },
             {

@@ -4,22 +4,25 @@ import { dbService } from '../services/DatabaseService';
 
 export async function fetchSteamLogo(gameTitle: string): Promise<string | undefined> {
   try {
-    const cleanTitle = gameTitle.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ').trim();
+    let cleanTitle = gameTitle.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ').trim();
+    cleanTitle = cleanTitle.replace(/[\._\-]/g, ' ').replace(/\s+/g, ' ').trim();
     if (!cleanTitle) return undefined;
 
-    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
     let targetUrl = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(cleanTitle)}&l=english&cc=US`;
     if (!isTauri && typeof window !== 'undefined') {
       targetUrl = `/steam-search?term=${encodeURIComponent(cleanTitle)}&l=english&cc=US`;
     }
 
-    const res = await fetch(targetUrl);
+    const res = await smartFetch(targetUrl);
     if (res.ok) {
       const data = await res.json();
       if (data.items && data.items.length > 0) {
         const appId = data.items[0].id;
         if (appId) {
-          return `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/logo.png`;
+          // Verify logo availability or return primary Steam logo CDN URL
+          const logoUrl = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/logo.png`;
+          return logoUrl;
         }
       }
     }
@@ -30,7 +33,7 @@ export async function fetchSteamLogo(gameTitle: string): Promise<string | undefi
 }
 
 async function smartFetch(url: string, options?: RequestInit): Promise<Response> {
-  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+  const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
 
   if (isTauri) {
     try {
@@ -47,6 +50,8 @@ async function smartFetch(url: string, options?: RequestInit): Promise<Response>
     targetUrl = url.replace('https://api.igdb.com/v4', '/igdb-api');
   } else if (url.startsWith('https://id.twitch.tv/oauth2/token')) {
     targetUrl = url.replace('https://id.twitch.tv/oauth2/token', '/twitch-oauth');
+  } else if (url.startsWith('https://store.steampowered.com/api/storesearch')) {
+    targetUrl = url.replace('https://store.steampowered.com/api/storesearch', '/steam-search');
   }
 
   return await fetch(targetUrl, options);
