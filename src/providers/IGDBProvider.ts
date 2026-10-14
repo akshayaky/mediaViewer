@@ -262,55 +262,8 @@ export class IGDBProvider implements MetadataProvider {
     return this.getMockRelatedMedia(externalId);
   }
 
-  private getMockRelatedMedia(externalId: string): MetadataSearchResult[] {
-    if (externalId.includes('1020') || externalId.toLowerCase().includes('assassin')) {
-      return [
-        {
-          title: "Assassin's Creed III",
-          type: 'VideoGame',
-          release_year: 2012,
-          description: 'Set during the American Revolution, experience the story of Ratonhnhaké:ton.',
-          poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&q=80',
-          external_id: 'igdb:1019',
-          provider: 'IGDB'
-        },
-        {
-          title: "Assassin's Creed Rogue",
-          type: 'VideoGame',
-          release_year: 2014,
-          description: 'Set during the Seven Years War, Shay Patrick Cormac turns against the Brotherhood.',
-          poster: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=500&q=80',
-          external_id: 'igdb:1021',
-          provider: 'IGDB'
-        }
-      ];
-    }
-
-    if (externalId.includes('1877') || externalId.toLowerCase().includes('cyberpunk')) {
-      return [
-        {
-          title: 'Cyberpunk 2077: Phantom Liberty',
-          type: 'VideoGame',
-          release_year: 2023,
-          description: 'A spy-thriller expansion for Cyberpunk 2077 set in Dogtown.',
-          poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80',
-          external_id: 'igdb:1878',
-          provider: 'IGDB'
-        }
-      ];
-    }
-
-    return [
-      {
-        title: 'Overcooked! 2',
-        type: 'VideoGame',
-        release_year: 2018,
-        description: 'Overcooked returns with a brand-new helping of chaotic cooking action!',
-        poster: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&q=80',
-        external_id: 'igdb:2031',
-        provider: 'IGDB'
-      }
-    ];
+  private getMockRelatedMedia(_externalId: string): MetadataSearchResult[] {
+    return [];
   }
 
   public async getMediaDetails(externalId: string): Promise<Partial<Media>> {

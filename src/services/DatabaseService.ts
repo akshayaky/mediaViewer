@@ -338,6 +338,7 @@ export class DatabaseService {
     );
 
     if (media.external_ids) {
+      this.db.run('DELETE FROM external_ids WHERE media_id = ?', [media.id]);
       for (const ext of media.external_ids) {
         this.saveExternalId(ext);
       }
@@ -400,26 +401,15 @@ export class DatabaseService {
       this.db.run('UPDATE notion_raw_records SET parsed_media_id = ? WHERE parsed_media_id = ?', [survivingId, duplicateId]);
 
       // 6. Handle external_ids reassignments without duplicate provider/external_id conflicts
-      const dupExts = this.getExternalIdsForMedia(duplicateId);
-      const survExts = this.getExternalIdsForMedia(survivingId);
-
-      for (const ext of dupExts) {
-        const existsOnSurv = survExts.some(
-          s => s.provider === ext.provider && s.external_id === ext.external_id
-        );
-        if (!existsOnSurv) {
-          // Relink or insert
-          this.db.run(
-            `INSERT INTO external_ids (id, media_id, provider, external_id)
-             VALUES (?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET media_id=excluded.media_id`,
-            [ext.id, survivingId, ext.provider, ext.external_id]
-          );
-        } else {
-          // Delete duplicate's external ID entry to avoid unique constraint error
-          this.db.run('DELETE FROM external_ids WHERE id = ?', [ext.id]);
-        }
-      }
+      this.db.run(
+        `DELETE FROM external_ids
+         WHERE media_id = ?
+         AND provider || ':' || external_id IN (
+           SELECT provider || ':' || external_id FROM external_ids WHERE media_id = ?
+         )`,
+        [duplicateId, survivingId]
+      );
+      this.db.run('UPDATE external_ids SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
 
       // 7. Delete duplicate media row
       this.db.run('DELETE FROM media WHERE id = ?', [duplicateId]);

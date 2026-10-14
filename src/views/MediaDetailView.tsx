@@ -46,6 +46,7 @@ import {
 interface MediaDetailViewProps {
   media: Media;
   onBack: () => void;
+  onSelectMedia?: (media: Media) => void;
 }
 
 interface DominantColorExtractorProps {
@@ -70,7 +71,7 @@ const DominantColorExtractor: React.FC<DominantColorExtractorProps> = ({
   return null;
 };
 
-export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack }) => {
+export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, onSelectMedia }) => {
   const {
     currentMedia,
     historyList,
@@ -88,7 +89,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     relatedMedia,
     isLoadingRelated,
     addedExternalIds,
-    handleAddRelatedToLibrary
+    handleAddRelatedToLibrary,
+    updateCurrentMedia
   } = useMediaDetail(initialMedia);
 
 
@@ -777,6 +779,18 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                     {/* Poster + top-right + button */}
                     <div
                       onClick={async () => {
+                        if (item.external_id) {
+                          const existing = dbService.getMediaByExternalId(item.provider, item.external_id);
+                          if (existing) {
+                            if (onSelectMedia) {
+                              onSelectMedia(existing);
+                            } else {
+                              updateCurrentMedia(existing);
+                            }
+                            return;
+                          }
+                        }
+
                         const provider = item.type === 'VideoGame' ? igdbProvider : tmdbProvider;
                         setPreviewRelatedItem(item);
                         setIsLoadingPreview(true);
@@ -949,8 +963,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           media={currentMedia}
           isOpen={showFixMatchModal}
           onClose={() => setShowFixMatchModal(false)}
-          onMatchedUpdated={() => {
-            handleManualMetadataRefresh();
+          onMatchedUpdated={(updated) => {
+            updateCurrentMedia(updated);
           }}
           onRequestMerge={(mediaA, mediaB) => {
             setMergePair({ mediaA, mediaB });
@@ -969,10 +983,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             setShowMergeModal(false);
             setMergePair(null);
           }}
-          onMerged={() => {
+          onMerged={(surviving) => {
             setShowMergeModal(false);
             setMergePair(null);
-            handleManualMetadataRefresh();
+            updateCurrentMedia(surviving);
           }}
         />
       )}

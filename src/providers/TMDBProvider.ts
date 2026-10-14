@@ -256,47 +256,8 @@ export class TMDBProvider implements MetadataProvider {
     return this.getMockRelatedMedia(externalId, mediaType);
   }
 
-  private getMockRelatedMedia(_externalId: string, mediaType: 'movie' | 'tv'): MetadataSearchResult[] {
-    if (mediaType === 'movie') {
-      return [
-        {
-          title: 'Premalu',
-          original_title: 'Premalu',
-          release_year: 2024,
-          type: 'Film',
-          description: 'A romantic comedy set in Hyderabad following Sachin and Reenu.',
-          poster: 'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=500&q=80',
-          backdrop: 'https://images.unsplash.com/photo-1518676599625-583ad8c26727?w=1280&q=80',
-          external_id: 'movie:123456',
-          provider: 'TMDB'
-        },
-        {
-          title: 'Aanandam',
-          original_title: 'Aanandam',
-          release_year: 2016,
-          type: 'Film',
-          description: 'Seven engineering students go on a college trip across South India.',
-          poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&q=80',
-          backdrop: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80',
-          external_id: 'movie:390123',
-          provider: 'TMDB'
-        }
-      ];
-    } else {
-      return [
-        {
-          title: 'Ted Lasso',
-          original_title: 'Ted Lasso',
-          release_year: 2020,
-          type: 'TV Series',
-          description: 'An American college football coach is hired to manage a British soccer team.',
-          poster: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=500&q=80',
-          backdrop: 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=1280&q=80',
-          external_id: 'tv:97630',
-          provider: 'TMDB'
-        }
-      ];
-    }
+  private getMockRelatedMedia(_externalId: string, _mediaType: 'movie' | 'tv'): MetadataSearchResult[] {
+    return [];
   }
 
   public async getMediaDetails(externalId: string): Promise<Partial<Media>> {
