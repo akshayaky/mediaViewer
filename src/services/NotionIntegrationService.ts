@@ -6,47 +6,212 @@ import {
 } from '../providers/interfaces';
 import { dbService } from '../services/DatabaseService';
 import { Media, MediaHistory, NotionRawRecord, MediaType, MediaStatus } from '../types/media';
+import { NotionDatabase, NotionPropertySchema, NotionPage } from '../types/notion';
+import { isTauri } from '../services/LocalScannerService';
 
 export class NotionIntegrationService implements NotionProvider {
   /**
-   * Parses title strings containing contextual brackets/parentheses into
-   * clean canonical titles and extracted history context notes.
+   * Helper to perform HTTP requests to Notion REST API
+   */
+  private async fetchNotionApi(endpoint: string, token: string, options: RequestInit = {}): Promise<any> {
+    const url = `https://api.notion.com/v1${endpoint}`;
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Notion-Version': '2022-06-08',
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    };
+
+    let response: Response;
+    if (isTauri()) {
+      const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
+      response = await tauriFetch(url, { ...options, headers });
+    } else {
+      response = await fetch(url, { ...options, headers });
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Notion API Error (${response.status}): ${errorText}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Fetches available databases accessible to the integration token
+   */
+  public async fetchDatabases(token: string): Promise<NotionDatabase[]> {
+    if (!token) return [];
+    try {
+      const data = await this.fetchNotionApi('/search', token, {
+        method: 'POST',
+        body: JSON.stringify({
+          filter: { value: 'database', property: 'object' },
+          page_size: 100
+        })
+      });
+
+      return (data.results || []).map((db: any) => ({
+        id: db.id,
+        title: db.title?.[0]?.plain_text || db.title?.[0]?.text?.content || 'Untitled Database',
+        icon: db.icon?.emoji || db.icon?.external?.url,
+        description: db.description?.[0]?.plain_text || '',
+        created_time: db.created_time,
+        last_edited_time: db.last_edited_time,
+        url: db.url,
+        properties: this.parseDatabaseProperties(db.properties)
+      }));
+    } catch (err) {
+      console.error('Failed to fetch Notion databases:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Fetches schema for a specific Notion database
+   */
+  public async fetchDatabaseSchema(token: string, databaseId: string): Promise<Record<string, NotionPropertySchema>> {
+    if (!token || !databaseId) return {};
+    try {
+      const db = await this.fetchNotionApi(`/databases/${databaseId}`, token, { method: 'GET' });
+      return this.parseDatabaseProperties(db.properties);
+    } catch (err) {
+      console.error('Failed to fetch Notion database schema:', err);
+      throw err;
+    }
+  }
+
+  private parseDatabaseProperties(props: Record<string, any>): Record<string, NotionPropertySchema> {
+    const result: Record<string, NotionPropertySchema> = {};
+    if (!props) return result;
+
+    for (const [key, prop] of Object.entries(props)) {
+      result[key] = {
+        id: (prop as any).id,
+        name: key,
+        type: (prop as any).type,
+        select: (prop as any).select,
+        status: (prop as any).status
+      };
+    }
+    return result;
+  }
+
+  /**
+   * Fetches all pages/rows from a Notion database as generic row objects
+   */
+  public async fetchFromApi(token: string, databaseId: string): Promise<NotionImportRow[]> {
+    if (!token || !databaseId) return [];
+
+    let hasMore = true;
+    let nextCursor: string | undefined = undefined;
+    const pages: NotionPage[] = [];
+
+    while (hasMore) {
+      const body: any = { page_size: 100 };
+      if (nextCursor) body.start_cursor = nextCursor;
+
+      const data = await this.fetchNotionApi(`/databases/${databaseId}/query`, token, {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+
+      pages.push(...(data.results || []));
+      hasMore = Boolean(data.has_more);
+      nextCursor = data.next_cursor;
+    }
+
+    // Convert Notion pages into NotionImportRow records
+    return pages.map(page => this.convertNotionPageToRow(page));
+  }
+
+  /**
+   * Converts a raw Notion Page API object into a simple NotionImportRow key-value map
+   */
+  public convertNotionPageToRow(page: NotionPage): NotionImportRow {
+    const row: NotionImportRow = {
+      Type: '',
+      Name: '',
+      _page_id: page.id,
+      _url: page.url,
+      _last_edited_time: page.last_edited_time
+    };
+
+    for (const [propName, propVal] of Object.entries(page.properties)) {
+      let strVal = '';
+      if (!propVal) continue;
+
+      switch (propVal.type) {
+        case 'title':
+          strVal = propVal.title?.map(t => t.plain_text).join('') || '';
+          break;
+        case 'rich_text':
+          strVal = propVal.rich_text?.map(t => t.plain_text).join('') || '';
+          break;
+        case 'select':
+          strVal = propVal.select?.name || '';
+          break;
+        case 'status':
+          strVal = propVal.status?.name || '';
+          break;
+        case 'number':
+          strVal = propVal.number !== null && propVal.number !== undefined ? String(propVal.number) : '';
+          break;
+        case 'date':
+          if (propVal.date) {
+            strVal = propVal.date.end ? `${propVal.date.start} → ${propVal.date.end}` : propVal.date.start;
+          }
+          break;
+        default:
+          strVal = '';
+      }
+
+      row[propName] = strVal;
+    }
+
+    return row;
+  }
+
+  /**
+   * Parses title strings containing contextual annotations into clean canonical titles and extracted context notes.
    *
-   * Examples:
-   * - "Aanandam(2+ Rewatch)" -> cleanTitle: "Aanandam", contextNote: "2+ Rewatch"
-   * - "Premalu(Rewatch)" -> cleanTitle: "Premalu", contextNote: "Rewatch"
-   * - "Overcooked(restart)" -> cleanTitle: "Overcooked", contextNote: "restart"
-   * - "Assasin’s Creed 4 black flag resynced" -> cleanTitle: "Assassin's Creed IV: Black Flag", contextNote: "resynced"
-   * - "Ted Lasso(Season 1-2 rewatch, 3-4 )" -> cleanTitle: "Ted Lasso", contextNote: "Season 1-2 rewatch, 3-4"
+   * Annotations handled:
+   * - (rewatch), (2+ Rewatch), (? rewatch), season rewatch
+   * - (restart), resynced
+   * - (Theater)
+   * - S2, Season 2
    */
   public parseTitle(rawTitle: string): { cleanTitle: string; contextNote?: string } {
     if (!rawTitle) return { cleanTitle: '' };
 
     let clean = rawTitle.trim();
-    let extractedContext: string | undefined = undefined;
+    let extractedContexts: string[] = [];
 
-    // 1. Extract content inside parentheses or brackets
-    const bracketRegex = /[\(\[](.*?)[\)\]]/;
-    const match = bracketRegex.exec(clean);
-
-    if (match) {
-      extractedContext = match[1].trim();
-      clean = clean.replace(bracketRegex, '').trim();
+    // 1. Extract content inside parentheses or square brackets e.g. (2+ Rewatch), (restart), (Theater), (? rewatch)
+    const bracketRegex = /[\(\[](.*?)[\)\]]/g;
+    let match;
+    while ((match = bracketRegex.exec(clean)) !== null) {
+      if (match[1] && match[1].trim()) {
+        extractedContexts.push(match[1].trim());
+      }
     }
+    clean = clean.replace(bracketRegex, '').trim();
 
-    // 2. Handle trailing keywords like "resynced" or "restart" if outside parentheses
-    const resyncedRegex = /\b(resynced|restart|re-started)\b/i;
-    const resyncedMatch = resyncedRegex.exec(clean);
-    if (resyncedMatch) {
-      const keyword = resyncedMatch[1];
-      clean = clean.replace(resyncedRegex, '').trim();
-      extractedContext = extractedContext ? `${extractedContext}, ${keyword}` : keyword;
+    // 2. Extract trailing keywords e.g. "resynced", "restart", "re-started", "season rewatch"
+    const keywordRegex = /\b(resynced|restart|re-started|season rewatch)\b/gi;
+    let kwMatch;
+    while ((kwMatch = keywordRegex.exec(clean)) !== null) {
+      if (kwMatch[1]) {
+        extractedContexts.push(kwMatch[1].trim());
+      }
     }
+    clean = clean.replace(keywordRegex, '').trim();
 
-    // Normalize spacing and clean quotes/special quotes
-    clean = clean.replace(/’/g, "'").replace(/\s+/g, ' ');
+    // 3. Normalize quotes and double spaces
+    clean = clean.replace(/’/g, "'").replace(/\s+/g, ' ').trim();
 
-    // Normalize known variant names for consistency
+    // 4. Normalize known variant names
     const lower = clean.toLowerCase();
     if (
       lower.startsWith("assasin's creed 4") ||
@@ -57,19 +222,23 @@ export class NotionIntegrationService implements NotionProvider {
       clean = "Assassin's Creed IV: Black Flag";
     } else if (lower.startsWith("the paper s2") || lower.startsWith("the paper season 2")) {
       clean = "The Paper";
-      extractedContext = extractedContext ? `Season 2, ${extractedContext}` : "Season 2";
+      if (!extractedContexts.some(c => c.toLowerCase().includes('season 2') || c.toLowerCase().includes('s2'))) {
+        extractedContexts.unshift("Season 2");
+      }
     }
+
+    const contextNote = extractedContexts.length > 0 ? extractedContexts.join(', ') : undefined;
 
     return {
       cleanTitle: clean,
-      contextNote: extractedContext
+      contextNote
     };
   }
 
   /**
    * Helper to parse scores like "⭐️⭐️⭐️⭐️", "4/5", "4", "4.5"
    */
-  private parseScore(scoreRaw?: string): number | undefined {
+  public parseScore(scoreRaw?: string): number | undefined {
     if (!scoreRaw) return undefined;
     const str = scoreRaw.trim();
 
@@ -79,7 +248,7 @@ export class NotionIntegrationService implements NotionProvider {
 
     // Parse fraction or number
     const num = parseFloat(str);
-    if (!isNaN(num)) return num;
+    if (!isNaN(num)) return Math.min(5, Math.max(1, num));
 
     return undefined;
   }
@@ -87,7 +256,7 @@ export class NotionIntegrationService implements NotionProvider {
   /**
    * Helper to normalize media type
    */
-  private parseType(typeRaw?: string): MediaType {
+  public parseType(typeRaw?: string): MediaType {
     if (!typeRaw) return 'Film';
     const lower = typeRaw.toLowerCase();
     if (lower.includes('game') || lower.includes('videogame')) return 'VideoGame';
@@ -98,7 +267,7 @@ export class NotionIntegrationService implements NotionProvider {
   /**
    * Helper to normalize media status
    */
-  private parseStatus(statusRaw?: string): MediaStatus {
+  public parseStatus(statusRaw?: string): MediaStatus {
     if (!statusRaw) return 'Finished';
     const lower = statusRaw.toLowerCase();
     if (lower.includes('abandoned') || lower.includes('dropped')) return 'Abandoned';
@@ -106,6 +275,28 @@ export class NotionIntegrationService implements NotionProvider {
     if (lower.includes('pause') || lower.includes('hold')) return 'Paused';
     if (lower.includes('plan') || lower.includes('want')) return 'Planned';
     return 'Finished';
+  }
+
+  /**
+   * Parses date strings (single dates or ranges) into started_at & completed_at
+   */
+  public parseDates(watchedOnRaw?: string, status: MediaStatus = 'Finished'): { startedAt?: string; completedAt?: string } {
+    if (!watchedOnRaw || !watchedOnRaw.trim()) return {};
+
+    const raw = watchedOnRaw.trim();
+    if (raw.includes('→') || raw.includes('->')) {
+      const parts = raw.split(/→|->/);
+      return {
+        startedAt: parts[0]?.trim(),
+        completedAt: parts[1]?.trim()
+      };
+    }
+
+    if (status === 'Currently') {
+      return { startedAt: raw };
+    }
+
+    return { completedAt: raw };
   }
 
   public async importFromRows(
@@ -129,7 +320,6 @@ export class NotionIntegrationService implements NotionProvider {
     const errors: string[] = [];
 
     const existingMediaList = dbService.getAllMedia();
-    // Map normalized title + type to Media ID
     const mediaMap = new Map<string, Media>();
     for (const m of existingMediaList) {
       mediaMap.set(`${m.title.toLowerCase()}_${m.type}`, m);
@@ -143,7 +333,8 @@ export class NotionIntegrationService implements NotionProvider {
         const rawType = row[defaultMapping.typeField] || row['Type'] || 'Film';
         if (!rawName.trim()) continue;
 
-        const rawRecordId = `notion_raw_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const pageId = row['_page_id'];
+        const rawRecordId = pageId ? `notion_raw_${pageId}` : `notion_raw_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const rawWatchedOn = row[defaultMapping.watchedOnField] || row['Watched On'] || row['Completed Watching'];
         const rawScore = row[defaultMapping.scoreField] || row['Score'];
         const rawStatus = row[defaultMapping.statusField] || row['Status'];
@@ -165,12 +356,24 @@ export class NotionIntegrationService implements NotionProvider {
           imported_at: now
         };
 
-        // Parse canonical title and context note
+        // Parse clean title and context note
         const { cleanTitle, contextNote } = this.parseTitle(rawName);
         const mediaType = this.parseType(rawType);
+        const parsedStatus = this.parseStatus(rawStatus);
         const mediaKey = `${cleanTitle.toLowerCase()}_${mediaType}`;
 
         let targetMedia = mediaMap.get(mediaKey);
+
+        // Check for suspected duplicates / uncertain matches
+        const suspectedDuplicates = dbService.findSuspectedDuplicates(cleanTitle);
+
+        if (!targetMedia && suspectedDuplicates.length > 1) {
+          // Flag as uncertain match in Notion Raw Record
+          notionRaw.parsed_media_id = undefined;
+          dbService.saveNotionRawRecord(notionRaw);
+          rawRecordsSaved++;
+          continue;
+        }
 
         if (!targetMedia) {
           const newMediaId = `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -205,33 +408,33 @@ export class NotionIntegrationService implements NotionProvider {
           }
         }
 
-        // Parse date(s)
-        let startedAt: string | undefined = undefined;
-        let completedAt: string | undefined = undefined;
-        if (rawWatchedOn) {
-          if (rawWatchedOn.includes('→') || rawWatchedOn.includes('->')) {
-            const parts = rawWatchedOn.split(/→|->/);
-            startedAt = parts[0]?.trim();
-            completedAt = parts[1]?.trim();
-          } else {
-            completedAt = rawWatchedOn.trim();
-          }
+        // Link Notion External ID to target media if pageId exists
+        if (pageId) {
+          dbService.saveExternalId({
+            id: `ext_notion_${pageId}`,
+            media_id: targetMedia.id,
+            provider: 'Notion',
+            external_id: pageId
+          });
         }
 
-        // Create MediaHistory
-        const historyId = `history_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        // Parse date(s)
+        const { startedAt, completedAt } = this.parseDates(rawWatchedOn, parsedStatus);
+
+        // Create MediaHistory interaction record
+        const historyId = pageId ? `history_notion_${pageId}` : `history_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const historyRecord: MediaHistory = {
           id: historyId,
           media_id: targetMedia.id,
           started_at: startedAt,
           completed_at: completedAt,
-          status: this.parseStatus(rawStatus),
+          status: parsedStatus,
           score: this.parseScore(rawScore),
           thoughts: rawThoughts?.trim(),
           context: contextNote,
           source: 'Notion',
-          original_source_record_id: rawRecordId,
-          created_at: now
+          original_source_record_id: pageId || rawRecordId,
+          created_at: row['_last_edited_time'] || now
         };
 
         dbService.saveHistory(historyRecord);
@@ -255,6 +458,32 @@ export class NotionIntegrationService implements NotionProvider {
       rawRecordsSaved,
       errors
     };
+  }
+
+  /**
+   * Updates an existing Notion page using Notion API (for sync)
+   */
+  public async updatePageProperties(token: string, pageId: string, properties: Record<string, any>): Promise<void> {
+    if (!token || !pageId) return;
+    await this.fetchNotionApi(`/pages/${pageId}`, token, {
+      method: 'PATCH',
+      body: JSON.stringify({ properties })
+    });
+  }
+
+  /**
+   * Creates a new Notion page using Notion API (for sync)
+   */
+  public async createPageInDatabase(token: string, databaseId: string, properties: Record<string, any>): Promise<string> {
+    if (!token || !databaseId) throw new Error('Missing token or databaseId');
+    const res = await this.fetchNotionApi('/pages', token, {
+      method: 'POST',
+      body: JSON.stringify({
+        parent: { database_id: databaseId },
+        properties
+      })
+    });
+    return res.id;
   }
 }
 

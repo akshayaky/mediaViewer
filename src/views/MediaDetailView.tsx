@@ -40,7 +40,8 @@ import {
   Link as LinkIcon,
   Sparkles,
   X,
-  Check
+  Check,
+  Info
 } from 'lucide-react';
 
 interface MediaDetailViewProps {
@@ -93,7 +94,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     updateCurrentMedia
   } = useMediaDetail(initialMedia);
 
-
   // Three dot menu state
   const [showMenu, setShowMenu] = useState(false);
   const [showFixMatchModal, setShowFixMatchModal] = useState(false);
@@ -107,17 +107,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const [previewDetails, setPreviewDetails] = useState<Partial<Media> | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
-  if(!isRefreshingMetadata && artwork.backdrop == "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80")
-  {
-    console.log("Loading now");
+  if (!isRefreshingMetadata && artwork.backdrop === "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80") {
     handleManualMetadataRefresh();
   }
-  else
-  {
-    console.log("already loaded " + artwork.backdrop);
-  }
 
-  console.log("Detailed view");
   const [loadedArtworkSrc, setLoadedArtworkSrc] = useState<string>();
   const [failedBackdropSrc, setFailedBackdropSrc] = useState<string>();
   const [calculatedAccent, setCalculatedAccent] = useState<{ mediaId: string; color: string }>();
@@ -145,7 +138,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     }
   }, [initialMedia]);
 
-  // Light/dark tone + accent-derived colours. All other styling lives in MediaDetailView.css
   const theme = getMediaTheme(accentColorForPage);
 
   // Season accordion state
@@ -268,7 +260,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           />
         )}
 
-        {/* Backdrop Gradient Overlays */}
         <div className="mdv-backdrop-overlay" />
       </div>
 
@@ -321,21 +312,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
       {/* Scrollable Hero Content */}
       <div className="mdv-hero">
-        {/* Floating Poster & Title Overlay */}
         <div className="mdv-hero-inner">
-          {/* Poster */}
-          {/* <div className="mdv-poster">
-            {artwork.poster ? (
-              <img src={artwork.poster} alt={currentMedia.title} />
-            ) : (
-              <div className="mdv-poster-fallback">
-                {getTypeIcon()}
-                <span>{currentMedia.title}</span>
-              </div>
-            )}
-          </div> */}
-
-          {/* Title & Core Badges */}
           <div className="mdv-title-block">
             <div className="mdv-badges">
               <span className="mdv-type-badge">
@@ -343,7 +320,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 <span>{currentMedia.type}</span>
               </span>
 
-              {/* Local Availability Badge */}
               {isAvailableLocally ? (
                 <span className="mdv-status-badge mdv-status-badge--ok">
                   <FolderCheck className="mdv-icon-md" />
@@ -385,7 +361,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
               )}
             </div>
 
-            {/* Logo Image or Fallback Title Text */}
             {logoUrl ? (
               <div className="py-1">
                 <img
@@ -408,7 +383,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
               <span>{currentMedia.title}</span>
             </h1>
 
-            {/* Genres list */}
             {currentMedia.genres && currentMedia.genres.length > 0 && (
               <div className="mdv-genres">
                 {currentMedia.genres.map(g => (
@@ -419,7 +393,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
               </div>
             )}
 
-            {/* Feedback messages */}
             <div className="mdv-feedback">
               {launchMessage && (
                 <span className="mdv-message mdv-fade-in">
@@ -452,7 +425,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
       {/* Main Content Layout */}
       <div className="mdv-main">
-        {/* Left Column: Overview, Seasons, Cast, Journal */}
+        {/* Left Column: Overview, Multi-watch Breakdown, Seasons, Cast, Journal */}
         <div className="mdv-col mdv-col--main">
           {/* Overview */}
           <section className="mdv-card">
@@ -469,6 +442,39 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
               </p>
             )}
           </section>
+
+          {/* Multi-Watch / Multi-Play Context Explanation Callout */}
+          {historyList.length > 1 && (
+            <section className="bg-purple-950/40 border border-purple-500/40 p-5 rounded-2xl space-y-3 shadow-md">
+              <div className="flex items-center space-x-2 text-purple-300 font-bold text-sm">
+                <Info className="w-5 h-5 text-purple-400 shrink-0" />
+                <span>Watch / Play History Breakdown ({historyList.length} Sessions Recorded)</span>
+              </div>
+
+              <p className="text-xs text-gray-200 leading-relaxed">
+                This media item has multiple interaction logs in your database (e.g. initial plays, rewatches, restarts, or re-syncs). The app normalizes these into a <strong>single canonical entry</strong> with <strong>{historyList.length} historical tracking logs</strong> preserved below.
+              </p>
+
+              <div className="flex flex-wrap gap-2 pt-1 text-xs">
+                <span className="bg-purple-900/80 text-purple-200 border border-purple-400/30 px-2.5 py-1 rounded-lg font-semibold">
+                  Total Watches/Plays: {state.total_watch_play_count}
+                </span>
+                <span className="bg-rose-900/80 text-rose-200 border border-rose-400/30 px-2.5 py-1 rounded-lg font-semibold">
+                  Rewatches / Replays: {state.rewatch_count}
+                </span>
+                {state.abandoned_count > 0 && (
+                  <span className="bg-amber-900/80 text-amber-200 border border-amber-400/30 px-2.5 py-1 rounded-lg font-semibold">
+                    Abandoned Sessions: {state.abandoned_count}
+                  </span>
+                )}
+                {state.first_watched_played && (
+                  <span className="bg-[#1c2030] text-gray-300 border border-[#2d3248] px-2.5 py-1 rounded-lg font-mono">
+                    First Recorded: {state.first_watched_played}
+                  </span>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* Cast Rail */}
           {currentMedia.cast && currentMedia.cast.length > 0 && (
@@ -776,7 +782,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                     key={`${item.external_id}_${idx}`}
                     className="group relative bg-[#1b1d2a] border border-[#2d3145] hover:border-rose-500 rounded-xl overflow-hidden shadow-lg transition-all flex flex-col justify-between"
                   >
-                    {/* Poster + top-right + button */}
                     <div
                       onClick={async () => {
                         if (item.external_id) {
@@ -818,7 +823,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                         </div>
                       )}
 
-                      {/* Top-right + action button */}
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
@@ -838,7 +842,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                       </button>
                     </div>
 
-                    {/* Footer text */}
                     <div className="p-2.5 space-y-1">
                       <h4 className="font-bold text-xs text-white truncate" title={item.title}>
                         {item.title}

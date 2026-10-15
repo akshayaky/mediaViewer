@@ -4,6 +4,7 @@ import { localScannerService, isTauri } from '../services/LocalScannerService';
 import { invoke } from '@tauri-apps/api/core';
 import { AppSettings, MediaType } from '../types/media';
 import { useNotionImporter } from '../hooks/useNotionImporter';
+import { useNotionSync } from '../hooks/useNotionSync';
 import { useLibraryScanner } from '../hooks/useLibraryScanner';
 import { DEFAULT_FOLDERS } from '../constants/appConstants';
 import {
@@ -20,7 +21,11 @@ import {
   FolderSearch,
   Loader2,
   Lock,
-  ShieldCheck
+  ShieldCheck,
+  ExternalLink,
+  Layers,
+  ArrowRightLeft,
+  Check
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -36,7 +41,6 @@ export const SettingsView: React.FC = () => {
   const [twitchClientSecret, setTwitchClientSecret] = useState(settings.twitch_client_secret || '');
   const [rawgApiKey, setRawgApiKey] = useState(settings.rawg_api_key || '');
   const [steamApiKey, setSteamApiKey] = useState(settings.steam_api_key || '');
-  const [notionToken, setNotionToken] = useState(settings.notion_integration_token || '');
 
   const [savedMessage, setSavedMessage] = useState('');
 
@@ -50,17 +54,46 @@ export const SettingsView: React.FC = () => {
   const {
     csvHeaders,
     csvRows,
-    mapping,
-    setMapping,
-    isImporting,
-    importResult,
+    mapping: csvMapping,
+    setMapping: setCsvMapping,
+    isImporting: isCsvImporting,
+    importResult: csvImportResult,
     parseCsvFile,
-    runImport
+    runImport: runCsvImport
   } = useNotionImporter();
+
+  const {
+    token: notionToken,
+    databaseId: notionDbId,
+    databases,
+    schema,
+    mapping: notionApiMapping,
+    setMapping: setNotionApiMapping,
+    isLoadingDatabases,
+    isLoadingSchema,
+    isSyncing,
+    syncResult,
+    conflicts,
+    lastSyncTime,
+    syncErrors,
+    connectNotionOAuth,
+    saveNotionConfig,
+    triggerImportFromApi,
+    triggerSync,
+    resolveConflict
+  } = useNotionSync();
+
+  const [tokenInput, setTokenInput] = useState(notionToken);
+  const [selectedDbId, setSelectedDbId] = useState(notionDbId);
 
   useEffect(() => {
     setSettings(dbService.getSettings());
   }, []);
+
+  useEffect(() => {
+    setTokenInput(notionToken);
+    setSelectedDbId(notionDbId);
+  }, [notionToken, notionDbId]);
 
   const handleSaveFolders = (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,8 +119,8 @@ export const SettingsView: React.FC = () => {
     dbService.saveSetting('twitch_client_secret', twitchClientSecret.trim());
     dbService.saveSetting('rawg_api_key', rawgApiKey.trim());
     dbService.saveSetting('steam_api_key', steamApiKey.trim());
-    dbService.saveSetting('notion_integration_token', notionToken.trim());
     dbService.saveSetting('country_region', region.trim());
+    saveNotionConfig(tokenInput, selectedDbId, notionApiMapping);
     setSavedMessage('API credentials and preferences saved locally in SQLite.');
     setTimeout(() => setSavedMessage(''), 3000);
   };
@@ -114,7 +147,6 @@ export const SettingsView: React.FC = () => {
         console.error('Failed to open native folder picker in Tauri:', err);
       }
     } else {
-      // Web Mode: Try showDirectoryPicker or fallback to hidden file input
       if ('showDirectoryPicker' in window) {
         try {
           const dirHandle = await (window as any).showDirectoryPicker();
@@ -155,7 +187,6 @@ export const SettingsView: React.FC = () => {
         }
       }
 
-      // Fallback HTML directory input
       if (key === 'movies' && moviesFolderInputRef.current) {
         moviesFolderInputRef.current.click();
       } else if (key === 'tv' && tvFolderInputRef.current) {
@@ -199,6 +230,8 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const schemaKeys = Object.keys(schema);
+
   return (
     <div className="p-8 space-y-8 max-w-5xl mx-auto">
       {/* Hidden Folder Directory Inputs */}
@@ -229,10 +262,10 @@ export const SettingsView: React.FC = () => {
         <div>
           <h1 className="text-3xl font-extrabold text-[#ffffff] tracking-tight flex items-center space-x-3">
             <Settings className="w-8 h-8 text-rose-500" />
-            <span>Settings & Integrations</span>
+            <span>Settings & Notion Hub</span>
           </h1>
           <p className="text-sm text-rose-400/80 font-medium mt-1">
-            Configure local folders using Windows File Explorer, run library scans with live feedback, configure API keys, and import Notion databases
+            Configure local folders, API integration keys, Notion database sync, and conflict resolution
           </p>
         </div>
 
@@ -243,6 +276,405 @@ export const SettingsView: React.FC = () => {
           </span>
         )}
       </div>
+
+      {/* Notion Integration Hub Section */}
+      <section className="bg-[#14161f] p-6 rounded-2xl border border-purple-500/30 space-y-5 shadow-lg">
+        <div className="flex items-center justify-between border-b border-[#232736] pb-4">
+          <div className="flex items-center space-x-3">
+            <Database className="w-6 h-6 text-purple-400" />
+            <div>
+              <h2 className="text-xl font-bold text-white">Notion Database Integration & Sync Hub</h2>
+              <p className="text-xs text-gray-400">
+                Connect your Notion workspace, select tracking databases, inspect schema properties, map fields, and execute bidirectional sync
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {notionToken ? (
+              <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-xs px-3 py-1 rounded-full font-bold flex items-center space-x-1.5">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Notion Connected</span>
+              </span>
+            ) : (
+              <span className="bg-amber-950 text-amber-400 border border-amber-500/40 text-xs px-3 py-1 rounded-full font-semibold">
+                Disconnected
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* 1. Connect Notion */}
+        <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-3">
+          <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+            <Key className="w-4 h-4 text-purple-400" />
+            <span>1. Connect Notion Workspace</span>
+          </h3>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <button
+              type="button"
+              onClick={connectNotionOAuth}
+              className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center justify-center space-x-2 transition-all shadow-md cursor-pointer"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Connect Notion via OAuth</span>
+            </button>
+
+            <span className="text-xs text-gray-400 text-center">or manually enter integration token:</span>
+
+            <input
+              type="password"
+              value={tokenInput}
+              onChange={e => setTokenInput(e.target.value)}
+              placeholder="secret_..."
+              className="flex-1 bg-[#13151f] border border-[#2d3145] rounded-xl p-2.5 text-xs text-gray-100 font-mono"
+            />
+
+            <button
+              type="button"
+              onClick={() => saveNotionConfig(tokenInput, selectedDbId, notionApiMapping)}
+              className="bg-[#242838] hover:bg-[#2d3247] text-white text-xs font-semibold px-4 py-2.5 rounded-xl border border-[#3b4059] transition-all cursor-pointer"
+            >
+              Save Token
+            </button>
+          </div>
+        </div>
+
+        {/* 2. Select Database & Inspect Schema */}
+        {notionToken && (
+          <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                <Layers className="w-4 h-4 text-sky-400" />
+                <span>2. Select Notion Database & Inspect Schema</span>
+              </h3>
+
+              {isLoadingDatabases && (
+                <span className="text-xs text-sky-400 flex items-center space-x-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Loading databases from Notion...</span>
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div>
+                <label className="text-gray-300 font-bold block mb-1">Target Tracking Database</label>
+                <select
+                  value={selectedDbId}
+                  onChange={e => {
+                    setSelectedDbId(e.target.value);
+                    saveNotionConfig(tokenInput, e.target.value, notionApiMapping);
+                  }}
+                  className="w-full bg-[#13151f] border border-[#2f3448] rounded-xl p-2.5 text-gray-200 font-medium"
+                >
+                  <option value="">-- Select a Database --</option>
+                  {databases.map(db => (
+                    <option key={db.id} value={db.id}>
+                      {db.title} ({db.id.substring(0, 8)}...)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-300 font-bold block mb-1">Detected Schema Properties ({schemaKeys.length})</label>
+                {isLoadingSchema ? (
+                  <p className="text-gray-400 italic py-2">Querying database schema...</p>
+                ) : schemaKeys.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 py-1">
+                    {schemaKeys.map(key => (
+                      <span key={key} className="bg-[#232736] text-sky-300 border border-[#2d3145] px-2 py-0.5 rounded text-[11px] font-mono">
+                        {key} ({schema[key]?.type})
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 italic py-2">Select a database above to inspect schema properties.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 3. Map Fields & Sync Control */}
+        {notionToken && selectedDbId && (
+          <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-4">
+            <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+              <Sparkles className="w-4 h-4 text-rose-400" />
+              <span>3. Configure Field Mapping & Execute Sync</span>
+            </h3>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div>
+                <label className="text-gray-400 font-medium block mb-1">Title / Name Field</label>
+                <select
+                  value={notionApiMapping.nameField}
+                  onChange={e => {
+                    const newMap = { ...notionApiMapping, nameField: e.target.value };
+                    setNotionApiMapping(newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                  }}
+                  className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
+                >
+                  {schemaKeys.map(k => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-400 font-medium block mb-1">Type Field</label>
+                <select
+                  value={notionApiMapping.typeField}
+                  onChange={e => {
+                    const newMap = { ...notionApiMapping, typeField: e.target.value };
+                    setNotionApiMapping(newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                  }}
+                  className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
+                >
+                  {schemaKeys.map(k => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-400 font-medium block mb-1">Watched/Completed Field</label>
+                <select
+                  value={notionApiMapping.watchedOnField}
+                  onChange={e => {
+                    const newMap = { ...notionApiMapping, watchedOnField: e.target.value };
+                    setNotionApiMapping(newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                  }}
+                  className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
+                >
+                  {schemaKeys.map(k => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-400 font-medium block mb-1">Score / Rating Field</label>
+                <select
+                  value={notionApiMapping.scoreField}
+                  onChange={e => {
+                    const newMap = { ...notionApiMapping, scoreField: e.target.value };
+                    setNotionApiMapping(newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                  }}
+                  className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
+                >
+                  {schemaKeys.map(k => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-400 font-medium block mb-1">Status Field</label>
+                <select
+                  value={notionApiMapping.statusField}
+                  onChange={e => {
+                    const newMap = { ...notionApiMapping, statusField: e.target.value };
+                    setNotionApiMapping(newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                  }}
+                  className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
+                >
+                  {schemaKeys.map(k => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-400 font-medium block mb-1">Language Field</label>
+                <select
+                  value={notionApiMapping.languageField}
+                  onChange={e => {
+                    const newMap = { ...notionApiMapping, languageField: e.target.value };
+                    setNotionApiMapping(newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                  }}
+                  className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
+                >
+                  {schemaKeys.map(k => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-400 font-medium block mb-1">Thoughts Field</label>
+                <select
+                  value={notionApiMapping.thoughtsField}
+                  onChange={e => {
+                    const newMap = { ...notionApiMapping, thoughtsField: e.target.value };
+                    setNotionApiMapping(newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                  }}
+                  className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
+                >
+                  {schemaKeys.map(k => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-400 font-medium block mb-1">Publisher Field</label>
+                <select
+                  value={notionApiMapping.publisherField}
+                  onChange={e => {
+                    const newMap = { ...notionApiMapping, publisherField: e.target.value };
+                    setNotionApiMapping(newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                  }}
+                  className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
+                >
+                  {schemaKeys.map(k => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Sync Action Buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#232736]">
+              <div className="flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={triggerSync}
+                  disabled={isSyncing}
+                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center space-x-2 cursor-pointer"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  <span>{isSyncing ? 'Synchronizing...' : 'Perform Bidirectional Sync'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={triggerImportFromApi}
+                  disabled={isSyncing}
+                  className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center space-x-2 cursor-pointer"
+                >
+                  <Database className="w-4 h-4" />
+                  <span>Import from Notion API</span>
+                </button>
+              </div>
+
+              {lastSyncTime && (
+                <span className="text-xs text-gray-400 font-mono">
+                  Last Synced: {new Date(lastSyncTime).toLocaleString()}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Sync Summary & Conflict Resolution Panel */}
+        {syncResult && (
+          <div className="bg-[#102419] border border-emerald-500/40 p-4 rounded-xl text-xs space-y-2 animate-fadeIn">
+            <h4 className="font-bold text-emerald-400 flex items-center space-x-2">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Notion Sync Executed Successfully</span>
+            </h4>
+            <p className="text-gray-300">
+              Pulled/Updated <strong className="text-emerald-400">{syncResult.importedCount}</strong> records from Notion → Pushed <strong className="text-purple-400">{syncResult.pushedCount}</strong> app tracking sessions to Notion pages. Detected <strong className="text-amber-400">{syncResult.conflictsCount}</strong> conflicts.
+            </p>
+          </div>
+        )}
+
+        {syncErrors.length > 0 && (
+          <div className="bg-[#2a1719] border border-rose-500/40 p-4 rounded-xl text-xs text-rose-300 space-y-1">
+            <h4 className="font-bold flex items-center space-x-1">
+              <AlertCircle className="w-4 h-4" />
+              <span>Sync Errors Encountered:</span>
+            </h4>
+            <ul className="list-disc pl-5 space-y-0.5 text-gray-300">
+              {syncErrors.map((err, idx) => (
+                <li key={idx}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Conflict Resolution UI */}
+        {conflicts.length > 0 && (
+          <div className="bg-[#261d15] border border-amber-500/50 p-5 rounded-xl space-y-4 animate-fadeIn">
+            <h3 className="text-sm font-bold text-amber-300 flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 text-amber-400" />
+              <span>Active Conflicts Requiring Resolution ({conflicts.length})</span>
+            </h3>
+
+            <div className="space-y-3">
+              {conflicts.map(conflict => (
+                <div key={conflict.id} className="bg-[#1a1410] border border-amber-500/30 p-4 rounded-xl text-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white text-sm">{conflict.mediaTitle}</span>
+                    <span className="bg-amber-950 text-amber-300 px-2 py-0.5 rounded text-[11px] font-semibold">
+                      Field: {conflict.field}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-gray-300">
+                    <div className="bg-[#211a14] p-3 rounded-lg border border-amber-500/20 space-y-1">
+                      <span className="text-[10px] text-amber-400/80 font-bold block">NOTION VALUE</span>
+                      <p className="font-mono text-white text-xs">{conflict.notionValue || '(empty)'}</p>
+                    </div>
+
+                    <div className="bg-[#211a14] p-3 rounded-lg border border-amber-500/20 space-y-1">
+                      <span className="text-[10px] text-purple-400/80 font-bold block">APP LOCAL VALUE</span>
+                      <p className="font-mono text-white text-xs">{conflict.appValue || '(empty)'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end space-x-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => resolveConflict(conflict, 'notion')}
+                      className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center space-x-1"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Keep Notion Value</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => resolveConflict(conflict, 'app')}
+                      className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center space-x-1"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Keep App Value</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Local Folder Architecture & Directory Scanner Section */}
       <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
@@ -561,17 +993,6 @@ export const SettingsView: React.FC = () => {
                 className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
               />
             </div>
-
-            <div>
-              <label className="text-xs text-gray-300 font-bold block mb-1">Notion Integration Token</label>
-              <input
-                type="password"
-                value={notionToken}
-                onChange={e => setNotionToken(e.target.value)}
-                placeholder="secret_..."
-                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2.5 text-xs text-gray-100 font-mono"
-              />
-            </div>
           </div>
 
           <div className="flex justify-end pt-1">
@@ -585,14 +1006,14 @@ export const SettingsView: React.FC = () => {
         </form>
       </section>
 
-      {/* Notion Integration & Column Mapper Section */}
+      {/* Notion CSV Import Fallback Wizard */}
       <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
         <h2 className="text-lg font-bold text-white flex items-center space-x-2">
           <FileSpreadsheet className="w-5 h-5 text-rose-500" />
-          <span>Notion Database CSV Import Wizard</span>
+          <span>Notion Database CSV Export Import Wizard</span>
         </h2>
         <p className="text-xs text-gray-400">
-          Upload your existing Notion database export (.csv). The importer will parse clean titles and context notes while preserving un-altered raw Notion records.
+          Upload a local Notion database export (.csv). The importer will parse clean titles and context notes while preserving un-altered raw Notion records.
         </p>
 
         <div className="space-y-4 pt-2">
@@ -622,8 +1043,8 @@ export const SettingsView: React.FC = () => {
                 <div>
                   <label className="text-gray-400 font-medium block mb-1">Title / Name Field</label>
                   <select
-                    value={mapping.nameField}
-                    onChange={e => setMapping({ ...mapping, nameField: e.target.value })}
+                    value={csvMapping.nameField}
+                    onChange={e => setCsvMapping({ ...csvMapping, nameField: e.target.value })}
                     className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                   >
                     {csvHeaders.map(h => (
@@ -637,8 +1058,8 @@ export const SettingsView: React.FC = () => {
                 <div>
                   <label className="text-gray-400 font-medium block mb-1">Type Field</label>
                   <select
-                    value={mapping.typeField}
-                    onChange={e => setMapping({ ...mapping, typeField: e.target.value })}
+                    value={csvMapping.typeField}
+                    onChange={e => setCsvMapping({ ...csvMapping, typeField: e.target.value })}
                     className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                   >
                     {csvHeaders.map(h => (
@@ -652,8 +1073,8 @@ export const SettingsView: React.FC = () => {
                 <div>
                   <label className="text-gray-400 font-medium block mb-1">Watched/Completed Field</label>
                   <select
-                    value={mapping.watchedOnField}
-                    onChange={e => setMapping({ ...mapping, watchedOnField: e.target.value })}
+                    value={csvMapping.watchedOnField}
+                    onChange={e => setCsvMapping({ ...csvMapping, watchedOnField: e.target.value })}
                     className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                   >
                     {csvHeaders.map(h => (
@@ -667,8 +1088,8 @@ export const SettingsView: React.FC = () => {
                 <div>
                   <label className="text-gray-400 font-medium block mb-1">Score / Rating Field</label>
                   <select
-                    value={mapping.scoreField}
-                    onChange={e => setMapping({ ...mapping, scoreField: e.target.value })}
+                    value={csvMapping.scoreField}
+                    onChange={e => setCsvMapping({ ...csvMapping, scoreField: e.target.value })}
                     className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                   >
                     {csvHeaders.map(h => (
@@ -682,8 +1103,8 @@ export const SettingsView: React.FC = () => {
                 <div>
                   <label className="text-gray-400 font-medium block mb-1">Status Field</label>
                   <select
-                    value={mapping.statusField}
-                    onChange={e => setMapping({ ...mapping, statusField: e.target.value })}
+                    value={csvMapping.statusField}
+                    onChange={e => setCsvMapping({ ...csvMapping, statusField: e.target.value })}
                     className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                   >
                     {csvHeaders.map(h => (
@@ -697,8 +1118,8 @@ export const SettingsView: React.FC = () => {
                 <div>
                   <label className="text-gray-400 font-medium block mb-1">Language Field</label>
                   <select
-                    value={mapping.languageField}
-                    onChange={e => setMapping({ ...mapping, languageField: e.target.value })}
+                    value={csvMapping.languageField}
+                    onChange={e => setCsvMapping({ ...csvMapping, languageField: e.target.value })}
                     className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                   >
                     {csvHeaders.map(h => (
@@ -712,8 +1133,8 @@ export const SettingsView: React.FC = () => {
                 <div>
                   <label className="text-gray-400 font-medium block mb-1">Thoughts Field</label>
                   <select
-                    value={mapping.thoughtsField}
-                    onChange={e => setMapping({ ...mapping, thoughtsField: e.target.value })}
+                    value={csvMapping.thoughtsField}
+                    onChange={e => setCsvMapping({ ...csvMapping, thoughtsField: e.target.value })}
                     className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                   >
                     {csvHeaders.map(h => (
@@ -727,8 +1148,8 @@ export const SettingsView: React.FC = () => {
                 <div>
                   <label className="text-gray-400 font-medium block mb-1">Publisher Field</label>
                   <select
-                    value={mapping.publisherField}
-                    onChange={e => setMapping({ ...mapping, publisherField: e.target.value })}
+                    value={csvMapping.publisherField}
+                    onChange={e => setCsvMapping({ ...csvMapping, publisherField: e.target.value })}
                     className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                   >
                     {csvHeaders.map(h => (
@@ -743,40 +1164,27 @@ export const SettingsView: React.FC = () => {
               <div className="pt-2">
                 <button
                   type="button"
-                  onClick={runImport}
-                  disabled={isImporting}
+                  onClick={runCsvImport}
+                  disabled={isCsvImporting}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center space-x-2 cursor-pointer"
                 >
                   <Database className="w-4 h-4" />
-                  <span>{isImporting ? 'Importing Rows...' : 'Execute Notion Import'}</span>
+                  <span>{isCsvImporting ? 'Importing Rows...' : 'Execute Notion CSV Import'}</span>
                 </button>
               </div>
             </div>
           )}
 
-          {/* Import Results Banner */}
-          {importResult && (
+          {/* CSV Import Results Banner */}
+          {csvImportResult && (
             <div className="bg-[#102419] border border-emerald-500/40 p-4 rounded-xl text-xs space-y-2">
               <h4 className="font-bold text-emerald-400 flex items-center space-x-2">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Notion Import Summary</span>
+                <span>Notion CSV Import Summary</span>
               </h4>
               <p className="text-gray-300">
-                Processed {importResult.totalRows} Notion rows → Created/Updated {importResult.importedMediaCount} canonical Media items & {importResult.importedHistoryCount} MediaHistory interaction records. Archived {importResult.rawRecordsSaved} raw records.
+                Processed {csvImportResult.totalRows} Notion rows → Created/Updated {csvImportResult.importedMediaCount} canonical Media items & {csvImportResult.importedHistoryCount} MediaHistory interaction records. Archived {csvImportResult.rawRecordsSaved} raw records.
               </p>
-              {importResult.errors.length > 0 && (
-                <div className="text-rose-400 space-y-1">
-                  <p className="font-bold flex items-center space-x-1">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>Errors Encountered:</span>
-                  </p>
-                  <ul className="list-disc pl-4 space-y-0.5">
-                    {importResult.errors.map((err, idx) => (
-                      <li key={idx}>{err}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
           )}
         </div>

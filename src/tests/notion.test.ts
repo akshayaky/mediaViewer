@@ -1,8 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { NotionIntegrationService } from '../services/NotionIntegrationService';
+import { dbService } from '../services/DatabaseService';
 
 describe('NotionIntegrationService', () => {
   const service = new NotionIntegrationService();
+
+  beforeEach(async () => {
+    await dbService.init();
+  });
 
   describe('parseTitle', () => {
     it('extracts bracketed context notes from titles', () => {
@@ -39,6 +44,116 @@ describe('NotionIntegrationService', () => {
       const result = service.parseTitle('Dune Part Two');
       expect(result.cleanTitle).toBe('Dune Part Two');
       expect(result.contextNote).toBeUndefined();
+    });
+  });
+
+  describe('parseDates', () => {
+    it('parses date ranges correctly', () => {
+      const result = service.parseDates('September 26, 2026 → October 4, 2026');
+      expect(result.startedAt).toBe('September 26, 2026');
+      expect(result.completedAt).toBe('October 4, 2026');
+    });
+
+    it('parses single date for finished media', () => {
+      const result = service.parseDates('September 3, 2026', 'Finished');
+      expect(result.completedAt).toBe('September 3, 2026');
+      expect(result.startedAt).toBeUndefined();
+    });
+
+    it('parses single date for currently active media', () => {
+      const result = service.parseDates('August 23, 2026', 'Currently');
+      expect(result.startedAt).toBe('August 23, 2026');
+      expect(result.completedAt).toBeUndefined();
+    });
+  });
+
+  describe('parseScore', () => {
+    it('converts star emojis to numbers', () => {
+      expect(service.parseScore('⭐️⭐️⭐️⭐️')).toBe(4);
+      expect(service.parseScore('⭐️⭐️⭐️⭐️⭐️')).toBe(5);
+      expect(service.parseScore('4/5')).toBe(4);
+      expect(service.parseScore('3.5')).toBe(3.5);
+    });
+  });
+
+  describe('Importing Example Notion Database Records', () => {
+    it('correctly normalizes example records into canonical media and history entries', async () => {
+      const exampleRows = [
+        {
+          Type: 'Film',
+          Name: 'Aanandam(2+ Rewatch)',
+          'Watched On/Completed Watching': 'September 3, 2026',
+          'Score /5': '⭐️⭐️⭐️⭐️',
+          Status: 'Finished',
+          Language: 'Malayalam'
+        },
+        {
+          Type: 'Film',
+          Name: 'Premalu(Rewatch)',
+          'Watched On/Completed Watching': 'September 3, 2026',
+          'Score /5': '⭐️⭐️⭐️⭐️',
+          Status: 'Finished',
+          Language: 'Malayalam'
+        },
+        {
+          Type: 'VideoGame',
+          Name: 'Overcooked(restart)',
+          'Watched On/Completed Watching': 'August 23, 2026',
+          'Score /5': '⭐️⭐️⭐️⭐️',
+          Status: 'Abandoned',
+          Language: 'English'
+        },
+        {
+          Type: 'VideoGame',
+          Name: 'Assasin’s Creed 4 black flag',
+          'Watched On/Completed Watching': 'August 22, 2026',
+          'Score /5': '⭐️⭐️⭐️⭐️',
+          Status: 'Abandoned',
+          Language: 'English'
+        },
+        {
+          Type: 'VideoGame',
+          Name: 'Assasin’s Creed 4 black flag resynced',
+          'Watched On/Completed Watching': 'August 23, 2026',
+          'Score /5': '⭐️⭐️⭐️⭐️',
+          Status: 'Currently',
+          Language: 'English'
+        },
+        {
+          Type: 'TV Series',
+          Name: 'The Paper S2',
+          'Watched On/Completed Watching': 'September 26, 2026 → October 4, 2026',
+          'Score /5': '⭐️⭐️⭐️⭐️',
+          Status: 'Finished',
+          Language: 'English'
+        }
+      ];
+
+      const result = await service.importFromRows(exampleRows);
+
+      expect(result.totalRows).toBe(6);
+      expect(result.importedHistoryCount).toBe(6);
+
+      const allMedia = dbService.getAllMedia();
+      const acMedia = allMedia.find(m => m.title === "Assassin's Creed IV: Black Flag");
+      expect(acMedia).toBeDefined();
+
+      if (acMedia) {
+        const historyList = dbService.getHistoryForMedia(acMedia.id);
+        expect(historyList.length).toBe(2);
+
+        const state = dbService.getMediaState(acMedia.id);
+        expect(state.current_status).toBe('Currently');
+      }
+
+      const paperMedia = allMedia.find(m => m.title === 'The Paper');
+      expect(paperMedia).toBeDefined();
+      if (paperMedia) {
+        const paperHistory = dbService.getHistoryForMedia(paperMedia.id);
+        expect(paperHistory[0].started_at).toBe('September 26, 2026');
+        expect(paperHistory[0].completed_at).toBe('October 4, 2026');
+        expect(paperHistory[0].context).toBe('Season 2');
+      }
     });
   });
 });
