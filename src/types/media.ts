@@ -155,6 +155,7 @@ export interface AppSettings {
   igdb_api_key?: string;
   notion_integration_token?: string;
   notion_database_id?: string;
+  notion_oauth_client_id?: string;
   notion_field_mapping?: any;
   notion_last_sync_time?: string;
   notion_sync_errors?: string[];
