@@ -9,10 +9,12 @@ import { DEFAULT_NOTION_COLUMN_MAPPING } from '../constants/appConstants';
 export function useNotionSync() {
   const [token, setToken] = useState<string>('');
   const [databaseId, setDatabaseId] = useState<string>('');
+  const [oauthClientId, setOauthClientId] = useState<string>('');
   const [databases, setDatabases] = useState<NotionDatabase[]>([]);
   const [schema, setSchema] = useState<Record<string, NotionPropertySchema>>({});
   const [isLoadingDatabases, setIsLoadingDatabases] = useState(false);
   const [isLoadingSchema, setIsLoadingSchema] = useState(false);
+  const [isCreatingDatabase, setIsCreatingDatabase] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<NotionSyncResult | null>(null);
   const [conflicts, setConflicts] = useState<NotionSyncConflict[]>([]);
@@ -24,6 +26,7 @@ export function useNotionSync() {
     const settings = dbService.getSettings();
     const savedToken = settings.notion_integration_token || '';
     const savedDbId = settings.notion_database_id || '';
+    const savedOauthClientId = settings.notion_oauth_client_id || '';
     const savedMapping = settings.notion_field_mapping
       ? (typeof settings.notion_field_mapping === 'string'
           ? JSON.parse(settings.notion_field_mapping)
@@ -32,6 +35,7 @@ export function useNotionSync() {
 
     setToken(savedToken);
     setDatabaseId(savedDbId);
+    setOauthClientId(savedOauthClientId);
     setMapping(savedMapping);
     setLastSyncTime(settings.notion_last_sync_time || '');
     setSyncErrors(settings.notion_sync_errors || []);
@@ -64,7 +68,6 @@ export function useNotionSync() {
       const sch = await notionService.fetchDatabaseSchema(tok, dbId);
       setSchema(sch);
 
-      // Auto-guess column mappings based on schema keys
       const keys = Object.keys(sch);
       if (keys.length > 0) {
         const guessKey = (keywords: string[], fallback: string) =>
@@ -89,11 +92,15 @@ export function useNotionSync() {
     }
   };
 
-  const connectNotionOAuth = async () => {
-    // Standard Notion OAuth flow
-    const clientId = '36248358-notion-auth';
+  const connectNotionOAuth = async (overrideClientId?: string) => {
+    const cid = overrideClientId || oauthClientId;
+    if (!cid.trim()) {
+      alert('Please enter your Notion Integration OAuth Client ID first, or connect using a direct Integration Token (secret_...).');
+      return;
+    }
+
     const redirectUri = encodeURIComponent(window.location.origin);
-    const oauthUrl = `https://api.notion.com/v1/oauth/authorize?owner=user&client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code`;
+    const oauthUrl = `https://api.notion.com/v1/oauth/authorize?owner=user&client_id=${cid.trim()}&redirect_uri=${redirectUri}&response_type=code`;
 
     try {
       if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
@@ -108,10 +115,38 @@ export function useNotionSync() {
     }
   };
 
-  const saveNotionConfig = (newToken: string, newDbId: string, newMapping: NotionColumnMapping) => {
+  const createDatabaseInNotion = async () => {
+    if (!token) return;
+    setIsCreatingDatabase(true);
+    try {
+      const newDb = await notionService.createMediaDatabaseInWorkspace(token);
+      setDatabases(prev => [newDb, ...prev]);
+      setDatabaseId(newDb.id);
+      dbService.saveSetting('notion_database_id', newDb.id);
+
+      await loadSchema(token, newDb.id);
+      window.dispatchEvent(new CustomEvent('library-scanned'));
+    } catch (err: any) {
+      console.error('Failed to create database in Notion:', err);
+      setSyncErrors([`Failed to create database in Notion workspace: ${err.message || err}`]);
+    } finally {
+      setIsCreatingDatabase(false);
+    }
+  };
+
+  const saveNotionConfig = (
+    newToken: string,
+    newDbId: string,
+    newMapping: NotionColumnMapping,
+    newOauthClientId?: string
+  ) => {
     setToken(newToken);
     setDatabaseId(newDbId);
     setMapping(newMapping);
+    if (newOauthClientId !== undefined) {
+      setOauthClientId(newOauthClientId);
+      dbService.saveSetting('notion_oauth_client_id', newOauthClientId.trim());
+    }
 
     dbService.saveSetting('notion_integration_token', newToken.trim());
     dbService.saveSetting('notion_database_id', newDbId.trim());
@@ -175,18 +210,21 @@ export function useNotionSync() {
   return {
     token,
     databaseId,
+    oauthClientId,
     databases,
     schema,
     mapping,
     setMapping,
     isLoadingDatabases,
     isLoadingSchema,
+    isCreatingDatabase,
     isSyncing,
     syncResult,
     conflicts,
     lastSyncTime,
     syncErrors,
     connectNotionOAuth,
+    createDatabaseInNotion,
     saveNotionConfig,
     loadDatabases,
     loadSchema,

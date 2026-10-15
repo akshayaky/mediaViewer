@@ -39,6 +39,86 @@ export class NotionIntegrationService implements NotionProvider {
   }
 
   /**
+   * Creates a pre-configured Media Tracking Database in Notion workspace
+   * (Useful when the user does not have a database yet and wants Notion for backup/sync)
+   */
+  public async createMediaDatabaseInWorkspace(token: string, parentPageId?: string): Promise<NotionDatabase> {
+    if (!token) throw new Error('Notion token is required to create database.');
+
+    let parentObj: any = { type: 'workspace', workspace: true };
+
+    if (parentPageId) {
+      parentObj = { type: 'page_id', page_id: parentPageId };
+    } else {
+      try {
+        const pagesSearch = await this.fetchNotionApi('/search', token, {
+          method: 'POST',
+          body: JSON.stringify({
+            filter: { value: 'page', property: 'object' },
+            page_size: 1
+          })
+        });
+
+        if (pagesSearch.results && pagesSearch.results.length > 0) {
+          parentObj = { type: 'page_id', page_id: pagesSearch.results[0].id };
+        }
+      } catch {
+        // Fallback to workspace parent
+      }
+    }
+
+    const payload = {
+      parent: parentObj,
+      title: [
+        {
+          type: 'text',
+          text: { content: 'My Media Library - Tracking Database' }
+        }
+      ],
+      properties: {
+        'Name': { title: {} },
+        'Type': {
+          select: {
+            options: [
+              { name: 'Film', color: 'red' },
+              { name: 'TV Series', color: 'blue' },
+              { name: 'VideoGame', color: 'purple' }
+            ]
+          }
+        },
+        'Watched On/Completed Watching': { date: {} },
+        'Score /5': { number: { format: 'number' } },
+        'Status': {
+          select: {
+            options: [
+              { name: 'Finished', color: 'green' },
+              { name: 'Currently', color: 'yellow' },
+              { name: 'Abandoned', color: 'orange' },
+              { name: 'Planned', color: 'gray' },
+              { name: 'Paused', color: 'brown' }
+            ]
+          }
+        },
+        'Language': { rich_text: {} },
+        'Thoughts': { rich_text: {} },
+        'Publisher': { rich_text: {} }
+      }
+    };
+
+    const db = await this.fetchNotionApi('/databases', token, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    return {
+      id: db.id,
+      title: db.title?.[0]?.plain_text || 'My Media Library - Tracking Database',
+      url: db.url,
+      properties: this.parseDatabaseProperties(db.properties)
+    };
+  }
+
+  /**
    * Fetches available databases accessible to the integration token
    */
   public async fetchDatabases(token: string): Promise<NotionDatabase[]> {

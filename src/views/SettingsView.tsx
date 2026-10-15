@@ -25,7 +25,8 @@ import {
   ExternalLink,
   Layers,
   ArrowRightLeft,
-  Check
+  Check,
+  Plus
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -65,18 +66,21 @@ export const SettingsView: React.FC = () => {
   const {
     token: notionToken,
     databaseId: notionDbId,
+    oauthClientId: notionOauthClientId,
     databases,
     schema,
     mapping: notionApiMapping,
     setMapping: setNotionApiMapping,
     isLoadingDatabases,
     isLoadingSchema,
+    isCreatingDatabase,
     isSyncing,
     syncResult,
     conflicts,
     lastSyncTime,
     syncErrors,
     connectNotionOAuth,
+    createDatabaseInNotion,
     saveNotionConfig,
     triggerImportFromApi,
     triggerSync,
@@ -84,6 +88,7 @@ export const SettingsView: React.FC = () => {
   } = useNotionSync();
 
   const [tokenInput, setTokenInput] = useState(notionToken);
+  const [clientIdInput, setClientIdInput] = useState(notionOauthClientId);
   const [selectedDbId, setSelectedDbId] = useState(notionDbId);
 
   useEffect(() => {
@@ -92,8 +97,9 @@ export const SettingsView: React.FC = () => {
 
   useEffect(() => {
     setTokenInput(notionToken);
+    setClientIdInput(notionOauthClientId);
     setSelectedDbId(notionDbId);
-  }, [notionToken, notionDbId]);
+  }, [notionToken, notionOauthClientId, notionDbId]);
 
   const handleSaveFolders = (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,7 +126,7 @@ export const SettingsView: React.FC = () => {
     dbService.saveSetting('rawg_api_key', rawgApiKey.trim());
     dbService.saveSetting('steam_api_key', steamApiKey.trim());
     dbService.saveSetting('country_region', region.trim());
-    saveNotionConfig(tokenInput, selectedDbId, notionApiMapping);
+    saveNotionConfig(tokenInput, selectedDbId, notionApiMapping, clientIdInput);
     setSavedMessage('API credentials and preferences saved locally in SQLite.');
     setTimeout(() => setSavedMessage(''), 3000);
   };
@@ -285,7 +291,7 @@ export const SettingsView: React.FC = () => {
             <div>
               <h2 className="text-xl font-bold text-white">Notion Database Integration & Sync Hub</h2>
               <p className="text-xs text-gray-400">
-                Connect your Notion workspace, select tracking databases, inspect schema properties, map fields, and execute bidirectional sync
+                Connect your Notion workspace, select tracking databases (or create a new tracking table with 1 click for backup & multi-device sync), inspect schema properties, map fields, and execute bidirectional sync
               </p>
             </div>
           </div>
@@ -305,49 +311,65 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {/* 1. Connect Notion */}
-        <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-3">
+        <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center space-x-2">
             <Key className="w-4 h-4 text-purple-400" />
             <span>1. Connect Notion Workspace</span>
           </h3>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <button
-              type="button"
-              onClick={connectNotionOAuth}
-              className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center justify-center space-x-2 transition-all shadow-md cursor-pointer"
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span>Connect Notion via OAuth</span>
-            </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="space-y-2">
+              <label className="text-gray-300 font-bold block">Integration Secret Token (e.g. ntn_... / secret_...)</label>
+              <input
+                type="password"
+                value={tokenInput}
+                onChange={e => setTokenInput(e.target.value)}
+                placeholder="ntn_... or secret_..."
+                className="w-full bg-[#13151f] border border-[#2d3145] rounded-xl p-2.5 text-xs text-gray-100 font-mono"
+              />
+              <p className="text-[11px] text-gray-400">
+                Direct integration tokens connect immediately without needing a external OAuth redirect server.
+              </p>
+            </div>
 
-            <span className="text-xs text-gray-400 text-center">or manually enter integration token:</span>
+            <div className="space-y-2">
+              <label className="text-gray-300 font-bold block">Notion Public OAuth Client ID (Optional)</label>
+              <input
+                type="text"
+                value={clientIdInput}
+                onChange={e => setClientIdInput(e.target.value)}
+                placeholder="OAuth Integration Client ID"
+                className="w-full bg-[#13151f] border border-[#2d3145] rounded-xl p-2.5 text-xs text-gray-100 font-mono"
+              />
+              <div className="flex items-center space-x-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => connectNotionOAuth(clientIdInput)}
+                  className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-md cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Connect Notion OAuth</span>
+                </button>
 
-            <input
-              type="password"
-              value={tokenInput}
-              onChange={e => setTokenInput(e.target.value)}
-              placeholder="secret_..."
-              className="flex-1 bg-[#13151f] border border-[#2d3145] rounded-xl p-2.5 text-xs text-gray-100 font-mono"
-            />
-
-            <button
-              type="button"
-              onClick={() => saveNotionConfig(tokenInput, selectedDbId, notionApiMapping)}
-              className="bg-[#242838] hover:bg-[#2d3247] text-white text-xs font-semibold px-4 py-2.5 rounded-xl border border-[#3b4059] transition-all cursor-pointer"
-            >
-              Save Token
-            </button>
+                <button
+                  type="button"
+                  onClick={() => saveNotionConfig(tokenInput, selectedDbId, notionApiMapping, clientIdInput)}
+                  className="bg-[#242838] hover:bg-[#2d3247] text-white font-semibold text-xs px-4 py-2 rounded-xl border border-[#3b4059] transition-all cursor-pointer"
+                >
+                  Save Credentials
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* 2. Select Database & Inspect Schema */}
+        {/* 2. Select Database OR Create New Database in Notion */}
         {notionToken && (
           <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <h3 className="text-sm font-bold text-white flex items-center space-x-2">
                 <Layers className="w-4 h-4 text-sky-400" />
-                <span>2. Select Notion Database & Inspect Schema</span>
+                <span>2. Select Existing Database OR Create New Notion Tracking Table</span>
               </h3>
 
               {isLoadingDatabases && (
@@ -359,23 +381,49 @@ export const SettingsView: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div>
+              <div className="space-y-3">
                 <label className="text-gray-300 font-bold block mb-1">Target Tracking Database</label>
                 <select
                   value={selectedDbId}
                   onChange={e => {
                     setSelectedDbId(e.target.value);
-                    saveNotionConfig(tokenInput, e.target.value, notionApiMapping);
+                    saveNotionConfig(tokenInput, e.target.value, notionApiMapping, clientIdInput);
                   }}
                   className="w-full bg-[#13151f] border border-[#2f3448] rounded-xl p-2.5 text-gray-200 font-medium"
                 >
-                  <option value="">-- Select a Database --</option>
+                  <option value="">-- Select an Existing Database --</option>
                   {databases.map(db => (
                     <option key={db.id} value={db.id}>
                       {db.title} ({db.id.substring(0, 8)}...)
                     </option>
                   ))}
                 </select>
+
+                {/* Create Database Button for Backup & Multi-Device Sync */}
+                <div className="pt-2 border-t border-[#2d3145] space-y-2">
+                  <p className="text-[11px] text-purple-300 font-medium">
+                    Don't have a database in Notion yet? Create one automatically for backup & syncing across devices:
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={createDatabaseInNotion}
+                    disabled={isCreatingDatabase}
+                    className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center space-x-2 transition-all shadow-md cursor-pointer"
+                  >
+                    {isCreatingDatabase ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Creating Media Database in Notion...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        <span>Create Media Library Database in Notion</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -391,7 +439,7 @@ export const SettingsView: React.FC = () => {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-400 italic py-2">Select a database above to inspect schema properties.</p>
+                  <p className="text-gray-400 italic py-2">Select or create a Notion database above to inspect schema properties.</p>
                 )}
               </div>
             </div>
@@ -414,7 +462,7 @@ export const SettingsView: React.FC = () => {
                   onChange={e => {
                     const newMap = { ...notionApiMapping, nameField: e.target.value };
                     setNotionApiMapping(newMap);
-                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap, clientIdInput);
                   }}
                   className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                 >
@@ -433,7 +481,7 @@ export const SettingsView: React.FC = () => {
                   onChange={e => {
                     const newMap = { ...notionApiMapping, typeField: e.target.value };
                     setNotionApiMapping(newMap);
-                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap, clientIdInput);
                   }}
                   className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                 >
@@ -452,7 +500,7 @@ export const SettingsView: React.FC = () => {
                   onChange={e => {
                     const newMap = { ...notionApiMapping, watchedOnField: e.target.value };
                     setNotionApiMapping(newMap);
-                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap, clientIdInput);
                   }}
                   className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                 >
@@ -471,7 +519,7 @@ export const SettingsView: React.FC = () => {
                   onChange={e => {
                     const newMap = { ...notionApiMapping, scoreField: e.target.value };
                     setNotionApiMapping(newMap);
-                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap, clientIdInput);
                   }}
                   className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                 >
@@ -490,7 +538,7 @@ export const SettingsView: React.FC = () => {
                   onChange={e => {
                     const newMap = { ...notionApiMapping, statusField: e.target.value };
                     setNotionApiMapping(newMap);
-                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap, clientIdInput);
                   }}
                   className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                 >
@@ -509,7 +557,7 @@ export const SettingsView: React.FC = () => {
                   onChange={e => {
                     const newMap = { ...notionApiMapping, languageField: e.target.value };
                     setNotionApiMapping(newMap);
-                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap, clientIdInput);
                   }}
                   className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                 >
@@ -528,7 +576,7 @@ export const SettingsView: React.FC = () => {
                   onChange={e => {
                     const newMap = { ...notionApiMapping, thoughtsField: e.target.value };
                     setNotionApiMapping(newMap);
-                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap, clientIdInput);
                   }}
                   className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                 >
@@ -547,7 +595,7 @@ export const SettingsView: React.FC = () => {
                   onChange={e => {
                     const newMap = { ...notionApiMapping, publisherField: e.target.value };
                     setNotionApiMapping(newMap);
-                    saveNotionConfig(tokenInput, selectedDbId, newMap);
+                    saveNotionConfig(tokenInput, selectedDbId, newMap, clientIdInput);
                   }}
                   className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
                 >
