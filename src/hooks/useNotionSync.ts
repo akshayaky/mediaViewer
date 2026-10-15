@@ -89,12 +89,23 @@ export function useNotionSync() {
     }
   };
 
-  const connectNotionOAuth = () => {
+  const connectNotionOAuth = async () => {
     // Standard Notion OAuth flow
     const clientId = '36248358-notion-auth';
     const redirectUri = encodeURIComponent(window.location.origin);
     const oauthUrl = `https://api.notion.com/v1/oauth/authorize?owner=user&client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code`;
-    window.open(oauthUrl, '_blank');
+
+    try {
+      if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+        const { openUrl } = await import('@tauri-apps/plugin-opener');
+        await openUrl(oauthUrl);
+      } else {
+        window.open(oauthUrl, '_blank');
+      }
+    } catch (err) {
+      console.warn('Failed to open external OAuth URL, falling back to window.open:', err);
+      window.open(oauthUrl, '_blank');
+    }
   };
 
   const saveNotionConfig = (newToken: string, newDbId: string, newMapping: NotionColumnMapping) => {
