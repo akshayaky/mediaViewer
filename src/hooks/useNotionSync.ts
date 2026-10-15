@@ -9,7 +9,6 @@ import { DEFAULT_NOTION_COLUMN_MAPPING } from '../constants/appConstants';
 export function useNotionSync() {
   const [token, setToken] = useState<string>('');
   const [databaseId, setDatabaseId] = useState<string>('');
-  const [oauthClientId, setOauthClientId] = useState<string>('');
   const [databases, setDatabases] = useState<NotionDatabase[]>([]);
   const [schema, setSchema] = useState<Record<string, NotionPropertySchema>>({});
   const [isLoadingDatabases, setIsLoadingDatabases] = useState(false);
@@ -26,7 +25,6 @@ export function useNotionSync() {
     const settings = dbService.getSettings();
     const savedToken = settings.notion_integration_token || '';
     const savedDbId = settings.notion_database_id || '';
-    const savedOauthClientId = settings.notion_oauth_client_id || '';
     const savedMapping = settings.notion_field_mapping
       ? (typeof settings.notion_field_mapping === 'string'
           ? JSON.parse(settings.notion_field_mapping)
@@ -35,7 +33,6 @@ export function useNotionSync() {
 
     setToken(savedToken);
     setDatabaseId(savedDbId);
-    setOauthClientId(savedOauthClientId);
     setMapping(savedMapping);
     setLastSyncTime(settings.notion_last_sync_time || '');
     setSyncErrors(settings.notion_sync_errors || []);
@@ -92,26 +89,20 @@ export function useNotionSync() {
     }
   };
 
-  const connectNotionOAuth = async (overrideClientId?: string) => {
-    const cid = overrideClientId || oauthClientId;
-    if (!cid.trim()) {
-      alert('Please enter your Notion Integration OAuth Client ID first, or connect using a direct Integration Token (secret_...).');
-      return;
-    }
-
-    const redirectUri = encodeURIComponent(window.location.origin);
-    const oauthUrl = `https://api.notion.com/v1/oauth/authorize?owner=user&client_id=${cid.trim()}&redirect_uri=${redirectUri}&response_type=code`;
+  const connectNotionOAuth = async () => {
+    // Open Notion integrations portal so the user can connect/create an integration token in 1 click
+    const notionIntegrationsUrl = 'https://www.notion.so/my-integrations';
 
     try {
       if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
         const { openUrl } = await import('@tauri-apps/plugin-opener');
-        await openUrl(oauthUrl);
+        await openUrl(notionIntegrationsUrl);
       } else {
-        window.open(oauthUrl, '_blank');
+        window.open(notionIntegrationsUrl, '_blank');
       }
     } catch (err) {
-      console.warn('Failed to open external OAuth URL, falling back to window.open:', err);
-      window.open(oauthUrl, '_blank');
+      console.warn('Failed to open external Notion integrations URL, falling back to window.open:', err);
+      window.open(notionIntegrationsUrl, '_blank');
     }
   };
 
@@ -134,19 +125,10 @@ export function useNotionSync() {
     }
   };
 
-  const saveNotionConfig = (
-    newToken: string,
-    newDbId: string,
-    newMapping: NotionColumnMapping,
-    newOauthClientId?: string
-  ) => {
+  const saveNotionConfig = (newToken: string, newDbId: string, newMapping: NotionColumnMapping) => {
     setToken(newToken);
     setDatabaseId(newDbId);
     setMapping(newMapping);
-    if (newOauthClientId !== undefined) {
-      setOauthClientId(newOauthClientId);
-      dbService.saveSetting('notion_oauth_client_id', newOauthClientId.trim());
-    }
 
     dbService.saveSetting('notion_integration_token', newToken.trim());
     dbService.saveSetting('notion_database_id', newDbId.trim());
@@ -210,7 +192,6 @@ export function useNotionSync() {
   return {
     token,
     databaseId,
-    oauthClientId,
     databases,
     schema,
     mapping,
