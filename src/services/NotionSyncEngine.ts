@@ -36,10 +36,35 @@ export class NotionSyncEngine {
     this.activeConflicts = [];
 
     try {
-      // 1. Fetch current Notion database pages
+      // 1. Fetch current Notion database schema properties
+      let schema: Record<string, any> = {};
+      try {
+        schema = await notionService.fetchDatabaseSchema(token, databaseId);
+      } catch (e) {
+        console.warn('Could not fetch database schema, falling back to default mapping', e);
+      }
+
+      // 2. Fetch current Notion database pages
       const notionRows = await notionService.fetchFromApi(token, databaseId);
 
-      // 2. Fetch local records
+      // 3. Ensure all local media items have at least one history record
+      const allMedia = dbService.getAllMedia();
+      const syncStartTime = new Date().toISOString();
+      for (const m of allMedia) {
+        const histories = dbService.getHistoryForMedia(m.id);
+        if (histories.length === 0) {
+          dbService.saveHistory({
+            id: `hist_init_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            media_id: m.id,
+            status: 'Planned',
+            source: 'Manual',
+            created_at: syncStartTime,
+            updated_at: syncStartTime
+          });
+        }
+      }
+
+      // 4. Fetch updated local records
       const localHistories = dbService.getAllHistory();
       const localMediaList = dbService.getAllMedia();
 
@@ -57,7 +82,7 @@ export class NotionSyncEngine {
         mediaMap.set(m.id, m);
       }
 
-      // Process Notion -> Local App Pull & Conflict Detection
+      // Process Notion -> Local App Pull & Conflict Detection / Local -> Notion Push Update
       for (const row of notionRows) {
         const pageId = row['_page_id'];
         if (!pageId) continue;
@@ -74,81 +99,94 @@ export class NotionSyncEngine {
           const targetMedia = mediaMap.get(existingHistory.media_id);
           const mediaTitle = targetMedia?.title || rawName;
 
-          // Check for conflicts: if local history was updated after Notion page edited time
           const notionEditedTime = row['_last_edited_time'] ? new Date(row['_last_edited_time']).getTime() : 0;
-          const localCreatedTime = new Date(existingHistory.created_at).getTime();
+          const localUpdatedTime = existingHistory.updated_at
+            ? new Date(existingHistory.updated_at).getTime()
+            : new Date(existingHistory.created_at).getTime();
 
           const parsedScore = notionService.parseScore(rawScore);
           const parsedStatus = notionService.parseStatus(rawStatus);
 
-          let hasConflict = false;
+          // Significant time difference threshold (2 seconds)
+          const isNotionNewer = notionEditedTime > localUpdatedTime + 2000;
+          const isLocalNewer = localUpdatedTime > notionEditedTime + 2000;
 
-          // Check score conflict
-          if (parsedScore !== undefined && existingHistory.score !== undefined && parsedScore !== existingHistory.score) {
-            this.activeConflicts.push({
-              id: `conflict_${pageId}_score_${Date.now()}`,
-              pageId,
-              historyId: existingHistory.id,
-              mediaId: existingHistory.media_id,
-              mediaTitle,
-              field: 'Score / Rating',
-              notionValue: `${parsedScore} Stars`,
-              appValue: `${existingHistory.score} Stars`,
-              notionLastEdited: row['_last_edited_time'] || '',
-              appLastEdited: existingHistory.created_at
+          if (isNotionNewer) {
+            // Update local history from Notion
+            const { startedAt, completedAt } = notionService.parseDates(rawWatchedOn, parsedStatus);
+            dbService.saveHistory({
+              ...existingHistory,
+              score: parsedScore !== undefined ? parsedScore : existingHistory.score,
+              status: parsedStatus,
+              thoughts: rawThoughts || existingHistory.thoughts,
+              started_at: startedAt || existingHistory.started_at,
+              completed_at: completedAt || existingHistory.completed_at,
+              updated_at: row['_last_edited_time'] || syncStartTime
             });
-            hasConflict = true;
-          }
-
-          // Check status conflict
-          if (parsedStatus !== existingHistory.status) {
-            this.activeConflicts.push({
-              id: `conflict_${pageId}_status_${Date.now()}`,
-              pageId,
-              historyId: existingHistory.id,
-              mediaId: existingHistory.media_id,
-              mediaTitle,
-              field: 'Status',
-              notionValue: parsedStatus,
-              appValue: existingHistory.status,
-              notionLastEdited: row['_last_edited_time'] || '',
-              appLastEdited: existingHistory.created_at
-            });
-            hasConflict = true;
-          }
-
-          // Check thoughts conflict
-          if (rawThoughts.trim() && existingHistory.thoughts?.trim() && rawThoughts.trim() !== existingHistory.thoughts.trim()) {
-            this.activeConflicts.push({
-              id: `conflict_${pageId}_thoughts_${Date.now()}`,
-              pageId,
-              historyId: existingHistory.id,
-              mediaId: existingHistory.media_id,
-              mediaTitle,
-              field: 'Thoughts / Review',
-              notionValue: rawThoughts.trim(),
-              appValue: existingHistory.thoughts.trim(),
-              notionLastEdited: row['_last_edited_time'] || '',
-              appLastEdited: existingHistory.created_at
-            });
-            hasConflict = true;
-          }
-
-          if (hasConflict) {
-            conflictsCount++;
+            importedCount++;
+          } else if (isLocalNewer && targetMedia) {
+            // Push local updates to Notion page
+            try {
+              const updatedProps = notionService.buildPageProperties(targetMedia, existingHistory, mapping, schema);
+              await notionService.updatePageProperties(token, pageId, updatedProps);
+              pushedCount++;
+            } catch (updateErr: any) {
+              errors.push(`Failed to update Notion page for "${mediaTitle}": ${updateErr.message}`);
+            }
           } else {
-            // Update local history from Notion if Notion is newer
-            if (notionEditedTime > localCreatedTime) {
-              const { startedAt, completedAt } = notionService.parseDates(rawWatchedOn, parsedStatus);
-              dbService.saveHistory({
-                ...existingHistory,
-                score: parsedScore !== undefined ? parsedScore : existingHistory.score,
-                status: parsedStatus,
-                thoughts: rawThoughts || existingHistory.thoughts,
-                started_at: startedAt || existingHistory.started_at,
-                completed_at: completedAt || existingHistory.completed_at
+            // Simultaneous edit check / Conflict check
+            let hasConflict = false;
+
+            if (parsedScore !== undefined && existingHistory.score !== undefined && parsedScore !== existingHistory.score) {
+              this.activeConflicts.push({
+                id: `conflict_${pageId}_score_${Date.now()}`,
+                pageId,
+                historyId: existingHistory.id,
+                mediaId: existingHistory.media_id,
+                mediaTitle,
+                field: 'Score / Rating',
+                notionValue: `${parsedScore} Stars`,
+                appValue: `${existingHistory.score} Stars`,
+                notionLastEdited: row['_last_edited_time'] || '',
+                appLastEdited: existingHistory.updated_at || existingHistory.created_at
               });
-              importedCount++;
+              hasConflict = true;
+            }
+
+            if (parsedStatus !== existingHistory.status) {
+              this.activeConflicts.push({
+                id: `conflict_${pageId}_status_${Date.now()}`,
+                pageId,
+                historyId: existingHistory.id,
+                mediaId: existingHistory.media_id,
+                mediaTitle,
+                field: 'Status',
+                notionValue: parsedStatus,
+                appValue: existingHistory.status,
+                notionLastEdited: row['_last_edited_time'] || '',
+                appLastEdited: existingHistory.updated_at || existingHistory.created_at
+              });
+              hasConflict = true;
+            }
+
+            if (rawThoughts.trim() && existingHistory.thoughts?.trim() && rawThoughts.trim() !== existingHistory.thoughts.trim()) {
+              this.activeConflicts.push({
+                id: `conflict_${pageId}_thoughts_${Date.now()}`,
+                pageId,
+                historyId: existingHistory.id,
+                mediaId: existingHistory.media_id,
+                mediaTitle,
+                field: 'Thoughts / Review',
+                notionValue: rawThoughts.trim(),
+                appValue: existingHistory.thoughts.trim(),
+                notionLastEdited: row['_last_edited_time'] || '',
+                appLastEdited: existingHistory.updated_at || existingHistory.created_at
+              });
+              hasConflict = true;
+            }
+
+            if (hasConflict) {
+              conflictsCount++;
             }
           }
         } else {
@@ -161,50 +199,25 @@ export class NotionSyncEngine {
         }
       }
 
-      // Process Local App -> Notion Push for newly logged history records lacking pageId
-      for (const h of localHistories) {
-        if (h.source === 'Manual' && !h.original_source_record_id) {
-          const media = mediaMap.get(h.media_id);
+      // Process Local App -> Notion Push for newly logged history records lacking original_source_record_id
+      const currentHistories = dbService.getAllHistory();
+      const currentMediaMap = new Map<string, Media>();
+      for (const m of dbService.getAllMedia()) {
+        currentMediaMap.set(m.id, m);
+      }
+
+      for (const h of currentHistories) {
+        if (!h.original_source_record_id) {
+          const media = currentMediaMap.get(h.media_id);
           if (!media) continue;
 
           try {
-            const pageProps: Record<string, any> = {
-              [mapping.nameField || 'Name']: {
-                title: [{ text: { content: media.title } }]
-              },
-              [mapping.typeField || 'Type']: {
-                select: { name: media.type }
-              },
-              [mapping.statusField || 'Status']: {
-                select: { name: h.status }
-              }
-            };
-
-            if (h.score) {
-              pageProps[mapping.scoreField || 'Score /5'] = {
-                number: h.score
-              };
-            }
-
-            if (h.thoughts) {
-              pageProps[mapping.thoughtsField || 'Thoughts'] = {
-                rich_text: [{ text: { content: h.thoughts } }]
-              };
-            }
-
-            if (h.completed_at || h.started_at) {
-              pageProps[mapping.watchedOnField || 'Watched On/Completed Watching'] = {
-                date: {
-                  start: h.started_at || h.completed_at,
-                  end: h.started_at && h.completed_at ? h.completed_at : null
-                }
-              };
-            }
-
+            const pageProps = notionService.buildPageProperties(media, h, mapping, schema);
             const newPageId = await notionService.createPageInDatabase(token, databaseId, pageProps);
 
             // Link local history to newly created Notion Page ID
             h.original_source_record_id = newPageId;
+            h.updated_at = new Date().toISOString();
             dbService.saveHistory(h);
 
             // Also record external ID
@@ -223,8 +236,8 @@ export class NotionSyncEngine {
       }
 
       // Record last sync timestamp in settings
-      const now = new Date().toISOString();
-      dbService.saveSetting('notion_last_sync_time', now);
+      const syncEndTime = new Date().toISOString();
+      dbService.saveSetting('notion_last_sync_time', syncEndTime);
       dbService.saveSetting('notion_sync_errors', errors);
 
       return {
@@ -233,7 +246,7 @@ export class NotionSyncEngine {
         conflictsCount,
         errors,
         unmatchedInboxCount,
-        timestamp: now
+        timestamp: syncEndTime
       };
     } catch (err: any) {
       console.error('Notion Sync Engine error:', err);
@@ -247,12 +260,16 @@ export class NotionSyncEngine {
   public async resolveConflict(
     conflict: NotionSyncConflict,
     resolution: 'notion' | 'app',
-    token?: string
+    token?: string,
+    mapping?: NotionColumnMapping,
+    schema?: Record<string, any>
   ): Promise<void> {
     if (!conflict.historyId) return;
 
     const history = dbService.getAllHistory().find(h => h.id === conflict.historyId);
     if (!history) return;
+
+    const now = new Date().toISOString();
 
     if (resolution === 'notion') {
       // Apply Notion value to local history
@@ -264,20 +281,14 @@ export class NotionSyncEngine {
       } else if (conflict.field === 'Thoughts / Review') {
         history.thoughts = conflict.notionValue;
       }
+      history.updated_at = now;
       dbService.saveHistory(history);
     } else if (resolution === 'app' && token && conflict.pageId) {
       // Apply App value to Notion page via API
       try {
-        const props: Record<string, any> = {};
-        if (conflict.field === 'Score / Rating' && history.score) {
-          props['Score /5'] = { number: history.score };
-        } else if (conflict.field === 'Status') {
-          props['Status'] = { select: { name: history.status } };
-        } else if (conflict.field === 'Thoughts / Review' && history.thoughts) {
-          props['Thoughts'] = { rich_text: [{ text: { content: history.thoughts } }] };
-        }
-
-        if (Object.keys(props).length > 0) {
+        const media = history.media_id ? dbService.getMediaById(history.media_id) : null;
+        if (media && mapping) {
+          const props = notionService.buildPageProperties(media, history, mapping, schema);
           await notionService.updatePageProperties(token, conflict.pageId, props);
         }
       } catch (err) {

@@ -184,7 +184,7 @@ export function useNotionSync() {
   };
 
   const resolveConflict = async (conflict: NotionSyncConflict, resolution: 'notion' | 'app') => {
-    await notionSyncEngine.resolveConflict(conflict, resolution, token);
+    await notionSyncEngine.resolveConflict(conflict, resolution, token, mapping, schema);
     setConflicts(notionSyncEngine.getActiveConflicts());
     window.dispatchEvent(new CustomEvent('library-scanned'));
   };

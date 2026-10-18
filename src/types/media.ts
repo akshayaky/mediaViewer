@@ -72,6 +72,7 @@ export interface MediaHistory {
   source: string; // 'Notion' | 'Manual' | 'Import'
   original_source_record_id?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface MediaState {

@@ -94,6 +94,14 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
       };
 
       dbService.saveMedia(newMedia);
+      dbService.saveHistory({
+        id: `hist_${Date.now()}`,
+        media_id: mediaId,
+        status: 'Planned',
+        source: 'Manual',
+        created_at: now,
+        updated_at: now
+      });
       window.dispatchEvent(new CustomEvent('library-scanned'));
 
       setAddedIds(prev => new Set(prev).add(candidate.external_id));

@@ -536,6 +536,96 @@ export class NotionIntegrationService implements NotionProvider {
   }
 
   /**
+   * Builds schema-aware property payload for a Notion Page
+   */
+  public buildPageProperties(
+    media: Media,
+    history: Partial<MediaHistory>,
+    mapping: NotionColumnMapping,
+    schema?: Record<string, NotionPropertySchema>
+  ): Record<string, any> {
+    const props: Record<string, any> = {};
+
+    // 1. Title / Name
+    const nameKey = mapping.nameField || 'Name';
+    props[nameKey] = {
+      title: [{ text: { content: media.title } }]
+    };
+
+    // 2. Type
+    const typeKey = mapping.typeField || 'Type';
+    const typeSchema = schema?.[typeKey]?.type;
+    if (typeSchema === 'status') {
+      props[typeKey] = { status: { name: media.type } };
+    } else if (typeSchema === 'rich_text') {
+      props[typeKey] = { rich_text: [{ text: { content: media.type } }] };
+    } else {
+      props[typeKey] = { select: { name: media.type } };
+    }
+
+    // 3. Status
+    if (history.status) {
+      const statusKey = mapping.statusField || 'Status';
+      const statusSchema = schema?.[statusKey]?.type;
+      if (statusSchema === 'select') {
+        props[statusKey] = { select: { name: history.status } };
+      } else if (statusSchema === 'rich_text') {
+        props[statusKey] = { rich_text: [{ text: { content: history.status } }] };
+      } else {
+        props[statusKey] = { status: { name: history.status } };
+      }
+    }
+
+    // 4. Score
+    if (history.score !== undefined && history.score !== null) {
+      const scoreKey = mapping.scoreField || 'Score /5';
+      const scoreSchema = schema?.[scoreKey]?.type;
+      if (scoreSchema === 'rich_text') {
+        props[scoreKey] = { rich_text: [{ text: { content: String(history.score) } }] };
+      } else {
+        props[scoreKey] = { number: history.score };
+      }
+    }
+
+    // 5. Thoughts
+    if (history.thoughts) {
+      const thoughtsKey = mapping.thoughtsField || 'Thoughts';
+      props[thoughtsKey] = {
+        rich_text: [{ text: { content: history.thoughts } }]
+      };
+    }
+
+    // 6. Watched / Completed Dates
+    if (history.completed_at || history.started_at) {
+      const watchedKey = mapping.watchedOnField || 'Watched On/Completed Watching';
+      props[watchedKey] = {
+        date: {
+          start: history.started_at || history.completed_at,
+          end: history.started_at && history.completed_at ? history.completed_at : null
+        }
+      };
+    }
+
+    // 7. Language
+    if (media.language) {
+      const langKey = mapping.languageField || 'Language';
+      props[langKey] = {
+        rich_text: [{ text: { content: media.language } }]
+      };
+    }
+
+    // 8. Publisher
+    if (media.publisher) {
+      const pubKey = mapping.publisherField || 'Publisher';
+      props[pubKey] = {
+        rich_text: [{ text: { content: media.publisher } }]
+      };
+    }
+
+    return props;
+  }
+
+  /**
    * Updates an existing Notion page using Notion API (for sync)
    */
   public async updatePageProperties(token: string, pageId: string, properties: Record<string, any>): Promise<void> {

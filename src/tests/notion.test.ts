@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { NotionIntegrationService } from '../services/NotionIntegrationService';
+import { NotionIntegrationService, notionService } from '../services/NotionIntegrationService';
+import { NotionSyncEngine } from '../services/NotionSyncEngine';
 import { dbService } from '../services/DatabaseService';
+import { DEFAULT_NOTION_COLUMN_MAPPING } from '../constants/appConstants';
 
 describe('NotionIntegrationService', () => {
   const service = new NotionIntegrationService();
@@ -87,6 +89,128 @@ describe('NotionIntegrationService', () => {
       expect(service.parseScore('⭐️⭐️⭐️⭐️⭐️')).toBe(5);
       expect(service.parseScore('4/5')).toBe(4);
       expect(service.parseScore('3.5')).toBe(3.5);
+    });
+  });
+
+  describe('Bidirectional Sync Engine', () => {
+    it('pushes local history changes to Notion when local history is updated newer than Notion page', async () => {
+      const syncEngine = new NotionSyncEngine();
+      const token = 'fake-token';
+      const databaseId = 'fake-db-id';
+
+      const mediaId = 'media_test_push_1';
+      const pageId = 'notion_page_123';
+
+      const now = new Date();
+      const olderTime = new Date(now.getTime() - 10000).toISOString();
+      const newerTime = new Date(now.getTime()).toISOString();
+
+      dbService.saveMedia({
+        id: mediaId,
+        type: 'Film',
+        title: 'Inception',
+        genres: ['Sci-Fi'],
+        created_at: olderTime,
+        updated_at: newerTime
+      });
+
+      dbService.saveHistory({
+        id: 'hist_push_1',
+        media_id: mediaId,
+        status: 'Finished',
+        score: 5,
+        thoughts: 'Updated locally in app!',
+        source: 'Notion',
+        original_source_record_id: pageId,
+        created_at: olderTime,
+        updated_at: newerTime
+      });
+
+      // Mock API calls
+      vi.spyOn(notionService, 'fetchDatabaseSchema').mockResolvedValue({
+        'Name': { id: 'title', name: 'Name', type: 'title' },
+        'Type': { id: 'select_type', name: 'Type', type: 'select' },
+        'Status': { id: 'status_val', name: 'Status', type: 'status' },
+        'Score /5': { id: 'num_score', name: 'Score /5', type: 'number' },
+        'Thoughts': { id: 'txt_thoughts', name: 'Thoughts', type: 'rich_text' }
+      });
+
+      vi.spyOn(notionService, 'fetchFromApi').mockResolvedValue([
+        {
+          _page_id: pageId,
+          _last_edited_time: olderTime,
+          Name: 'Inception',
+          Type: 'Film',
+          Status: 'Currently',
+          'Score /5': '4',
+          Thoughts: 'Old Notion thought'
+        }
+      ]);
+
+      const updatePageSpy = vi.spyOn(notionService, 'updatePageProperties').mockResolvedValue(undefined);
+
+      const result = await syncEngine.performSync(token, databaseId, DEFAULT_NOTION_COLUMN_MAPPING);
+
+      expect(result.pushedCount).toBe(1);
+      expect(updatePageSpy).toHaveBeenCalledWith(
+        token,
+        pageId,
+        expect.objectContaining({
+          'Score /5': { number: 5 },
+          'Status': { status: { name: 'Finished' } },
+          'Thoughts': { rich_text: [{ text: { content: 'Updated locally in app!' } }] }
+        })
+      );
+    });
+
+    it('pushes newly created local media lacking original_source_record_id to Notion', async () => {
+      const syncEngine = new NotionSyncEngine();
+      const token = 'fake-token';
+      const databaseId = 'fake-db-id';
+
+      const mediaId = 'media_new_local_1';
+      const now = new Date().toISOString();
+
+      dbService.saveMedia({
+        id: mediaId,
+        type: 'VideoGame',
+        title: 'Elden Ring',
+        genres: ['Action', 'RPG'],
+        created_at: now,
+        updated_at: now
+      });
+
+      dbService.saveHistory({
+        id: 'hist_new_local_1',
+        media_id: mediaId,
+        status: 'Currently',
+        score: 5,
+        thoughts: 'Masterpiece game',
+        source: 'Manual',
+        created_at: now,
+        updated_at: now
+      });
+
+      vi.spyOn(notionService, 'fetchDatabaseSchema').mockResolvedValue({});
+      vi.spyOn(notionService, 'fetchFromApi').mockResolvedValue([]);
+      const createPageSpy = vi.spyOn(notionService, 'createPageInDatabase').mockResolvedValue('new_notion_page_999');
+
+      const result = await syncEngine.performSync(token, databaseId, DEFAULT_NOTION_COLUMN_MAPPING);
+
+      expect(result.pushedCount).toBe(1);
+      expect(createPageSpy).toHaveBeenCalledWith(
+        token,
+        databaseId,
+        expect.objectContaining({
+          Name: { title: [{ text: { content: 'Elden Ring' } }] },
+          Type: { select: { name: 'VideoGame' } },
+          Status: { status: { name: 'Currently' } },
+          'Score /5': { number: 5 }
+        })
+      );
+
+      const updatedHistory = dbService.getHistoryForMedia(mediaId);
+      expect(updatedHistory[0].original_source_record_id).toBe('new_notion_page_999');
     });
   });
 

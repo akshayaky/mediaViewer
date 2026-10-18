@@ -112,6 +112,7 @@ export class DatabaseService {
         source TEXT NOT NULL,
         original_source_record_id TEXT,
         created_at TEXT NOT NULL,
+        updated_at TEXT,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
       );
 
@@ -191,6 +192,7 @@ export class DatabaseService {
     this.addColumnIfNotExists('media', 'seasons', 'TEXT');
     this.addColumnIfNotExists('media', 'accent_color', 'TEXT');
     this.addColumnIfNotExists('media', 'manually_matched', 'INTEGER DEFAULT 0');
+    this.addColumnIfNotExists('media_history', 'updated_at', 'TEXT');
 
     try {
       this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_external_ids_provider_ext ON external_ids(provider, external_id);');
@@ -519,7 +521,8 @@ export class DatabaseService {
         context: (row.context as string) || undefined,
         source: row.source as string,
         original_source_record_id: (row.original_source_record_id as string) || undefined,
-        created_at: row.created_at as string
+        created_at: row.created_at as string,
+        updated_at: (row.updated_at as string) || (row.created_at as string)
       });
     }
     stmt.free();
@@ -541,15 +544,17 @@ export class DatabaseService {
       context: (row[7] as string) || undefined,
       source: row[8] as string,
       original_source_record_id: (row[9] as string) || undefined,
-      created_at: row[10] as string
+      created_at: row[10] as string,
+      updated_at: (row[11] as string) || (row[10] as string)
     }));
   }
 
   public saveHistory(history: MediaHistory): void {
     if (!this.db) return;
+    const updatedAt = history.updated_at || new Date().toISOString();
     this.db.run(
-      `INSERT INTO media_history (id, media_id, started_at, completed_at, status, score, thoughts, context, source, original_source_record_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO media_history (id, media_id, started_at, completed_at, status, score, thoughts, context, source, original_source_record_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          started_at=excluded.started_at,
          completed_at=excluded.completed_at,
@@ -557,7 +562,9 @@ export class DatabaseService {
          score=excluded.score,
          thoughts=excluded.thoughts,
          context=excluded.context,
-         source=excluded.source`,
+         source=excluded.source,
+         original_source_record_id=excluded.original_source_record_id,
+         updated_at=excluded.updated_at`,
       [
         history.id,
         history.media_id,
@@ -569,7 +576,8 @@ export class DatabaseService {
         history.context || null,
         history.source,
         history.original_source_record_id || null,
-        history.created_at
+        history.created_at,
+        updatedAt
       ]
     );
     this.save();
