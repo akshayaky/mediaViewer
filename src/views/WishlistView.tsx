@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Wishlist, MediaType } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { Heart, Plus, ExternalLink, Calendar, Tag } from 'lucide-react';
 
 export const WishlistView: React.FC = () => {
-  const [wishlistItems, setWishlistItems] = useState<Wishlist[]>(dbService.getAllWishlist());
+  const [wishlistItems, setWishlistItems] = useState<Wishlist[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [title, setTitle] = useState('');
   const [type, setType] = useState<MediaType>('Film');
@@ -12,7 +12,12 @@ export const WishlistView: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [poster, setPoster] = useState('');
 
-  const handleAddWishlist = (e: React.FormEvent) => {
+  useEffect(() => {
+    void dbService.getAllWishlist().then(setWishlistItems)
+      .catch(err => console.error('Failed to load wishlist:', err));
+  }, []);
+
+  const handleAddWishlist = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
@@ -26,8 +31,8 @@ export const WishlistView: React.FC = () => {
       added_at: new Date().toISOString()
     };
 
-    dbService.saveWishlist(newItem);
-    setWishlistItems(dbService.getAllWishlist());
+    await dbService.saveWishlist(newItem);
+    setWishlistItems(await dbService.getAllWishlist());
     setShowAddModal(false);
     setTitle('');
     setNotes('');

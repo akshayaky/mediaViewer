@@ -116,8 +116,10 @@ export class LocalScannerService {
     samplePathsOverride?: string[],
     onProgress?: (scannedCount: number) => void
   ): Promise<ScanResult> {
-    const existingMedia = dbService.getAllMedia();
-    const existingLocalFiles = dbService.getAllLocalFiles();
+    const [existingMedia, existingLocalFiles] = await Promise.all([
+      dbService.getAllMedia(),
+      dbService.getAllLocalFiles()
+    ]);
     const fileMapByPath = new Map<string, LocalFile>();
 
     for (const lf of existingLocalFiles) {
@@ -241,7 +243,7 @@ export class LocalScannerService {
       }
 
       try {
-        dbService.saveLocalFile(localFileRecord);
+        await dbService.saveLocalFile(localFileRecord);
       } catch (err) {
         console.error('Failed to save local file record during scan:', err);
       }
@@ -254,7 +256,7 @@ export class LocalScannerService {
         if (!currentDiscoveredSet.has(lf.path.toLowerCase())) {
           if (lf.exists) {
             lf.exists = false;
-            dbService.saveLocalFile(lf);
+            await dbService.saveLocalFile(lf);
             missingMarkedCount++;
           }
         }

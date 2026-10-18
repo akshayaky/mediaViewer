@@ -93,8 +93,8 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
         ]
       };
 
-      dbService.saveMedia(newMedia);
-      dbService.saveHistory({
+      await dbService.saveMedia(newMedia);
+      await dbService.saveHistory({
         id: `hist_${Date.now()}`,
         media_id: mediaId,
         status: 'Planned',

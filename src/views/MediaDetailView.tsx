@@ -131,11 +131,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     if (initialMedia.accent_color) return;
 
     try {
-      dbService.saveMedia({
+      void dbService.saveMedia({
         ...initialMedia,
         accent_color: color,
         updated_at: new Date().toISOString()
-      });
+      }).catch(error => console.error('Failed to save calculated accent color:', error));
     } catch (error) {
       console.error('Failed to save calculated accent color:', error);
     }
@@ -798,7 +798,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                     <div
                       onClick={async () => {
                         if (item.external_id) {
-                          const existing = dbService.getMediaByExternalId(item.provider, item.external_id);
+                          const existing = await dbService.getMediaByExternalId(item.provider, item.external_id);
                           if (existing) {
                             if (onSelectMedia) {
                               onSelectMedia(existing);

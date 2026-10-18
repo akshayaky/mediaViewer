@@ -22,7 +22,7 @@ export function useNotionSync() {
   const [mapping, setMapping] = useState<NotionColumnMapping>(DEFAULT_NOTION_COLUMN_MAPPING);
 
   useEffect(() => {
-    const settings = dbService.getSettings();
+    dbService.getSettings().then(settings => {
     const savedToken = settings.notion_integration_token || '';
     const savedDbId = settings.notion_database_id || '';
     const savedMapping = settings.notion_field_mapping
@@ -43,6 +43,7 @@ export function useNotionSync() {
     if (savedToken && savedDbId) {
       loadSchema(savedToken, savedDbId);
     }
+    }).catch(err => console.error('Failed to load Notion settings:', err));
   }, []);
 
   const loadDatabases = async (tok: string) => {
@@ -113,7 +114,7 @@ export function useNotionSync() {
       const newDb = await notionService.createMediaDatabaseInWorkspace(token);
       setDatabases(prev => [newDb, ...prev]);
       setDatabaseId(newDb.id);
-      dbService.saveSetting('notion_database_id', newDb.id);
+      await dbService.saveSetting('notion_database_id', newDb.id);
 
       await loadSchema(token, newDb.id);
       window.dispatchEvent(new CustomEvent('library-scanned'));
@@ -125,14 +126,14 @@ export function useNotionSync() {
     }
   };
 
-  const saveNotionConfig = (newToken: string, newDbId: string, newMapping: NotionColumnMapping) => {
+  const saveNotionConfig = async (newToken: string, newDbId: string, newMapping: NotionColumnMapping) => {
     setToken(newToken);
     setDatabaseId(newDbId);
     setMapping(newMapping);
 
-    dbService.saveSetting('notion_integration_token', newToken.trim());
-    dbService.saveSetting('notion_database_id', newDbId.trim());
-    dbService.saveSetting('notion_field_mapping', newMapping);
+    await dbService.saveSetting('notion_integration_token', newToken.trim());
+    await dbService.saveSetting('notion_database_id', newDbId.trim());
+    await dbService.saveSetting('notion_field_mapping', newMapping);
 
     if (newToken) loadDatabases(newToken);
     if (newToken && newDbId) loadSchema(newToken, newDbId);

@@ -47,8 +47,8 @@ export class IGDBProvider implements MetadataProvider {
 
   private cachedAccessToken: { token: string; expiresAt: number } | null = null;
 
-  private getTwitchCredentials() {
-    const settings = dbService.getSettings();
+  private async getTwitchCredentials() {
+    const settings = await dbService.getSettings();
     return {
       clientId: settings.twitch_client_id?.trim(),
       clientSecret: settings.twitch_client_secret?.trim(),
@@ -95,7 +95,7 @@ export class IGDBProvider implements MetadataProvider {
   public async searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]> {
     if (type && type !== 'VideoGame') return [];
 
-    const { clientId, clientSecret, rawgApiKey } = this.getTwitchCredentials();
+    const { clientId, clientSecret, rawgApiKey } = await this.getTwitchCredentials();
     const cleanQuery = this.cleanQueryString(query);
     const words = (cleanQuery || query).split(/\s+/).filter(Boolean);
 
@@ -189,7 +189,7 @@ export class IGDBProvider implements MetadataProvider {
   }
 
   public async getRelatedMedia(externalId: string): Promise<MetadataSearchResult[]> {
-    const { clientId, clientSecret } = this.getTwitchCredentials();
+    const { clientId, clientSecret } = await this.getTwitchCredentials();
 
     if (externalId.startsWith('igdb:') && clientId && clientSecret) {
       const igdbId = externalId.replace('igdb:', '');
@@ -267,7 +267,7 @@ export class IGDBProvider implements MetadataProvider {
   }
 
   public async getMediaDetails(externalId: string): Promise<Partial<Media>> {
-    const { clientId, clientSecret, rawgApiKey } = this.getTwitchCredentials();
+    const { clientId, clientSecret, rawgApiKey } = await this.getTwitchCredentials();
 
     if (externalId.startsWith('igdb:') && clientId && clientSecret) {
       const igdbId = externalId.replace('igdb:', '');

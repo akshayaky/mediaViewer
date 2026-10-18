@@ -21,7 +21,7 @@ export function App() {
     async function initApp() {
       try {
         await dbService.init();
-        seedDatabaseIfEmpty();
+        //await seedDatabaseIfEmpty();
       } catch (err) {
         console.error('Failed to initialize database:', err);
       } finally {

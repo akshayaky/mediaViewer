@@ -1,6 +1,4 @@
-//import initSqlJs, { Database } from 'sql.js';
 import DatabaseTauri from '@tauri-apps/plugin-sql';
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import {
   Media,
   MediaHistory,
@@ -12,7 +10,6 @@ import {
   AppSettings,
   ExternalID
 } from '../types/media';
-import { STORAGE_KEYS } from '../constants/appConstants';
 
 export class DatabaseService {
   private db: DatabaseTauri | null = null;
@@ -24,38 +21,9 @@ export class DatabaseService {
     }
 
     this.db = await DatabaseTauri.load('sqlite:test.db');
-  
-    // const savedDb = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.SQLITE_DB) : null;
-    // if (savedDb) {
-    //   const uInt8Array = new Uint8Array(
-    //     atob(savedDb)
-    //       .split('')
-    //       .map(char => char.charCodeAt(0))
-    //   );
-    //   this.db = new SQL.Database(uInt8Array);
-    // } else {
-    //   this.db = new SQL.Database();
-    // }
-
-    this.runMigrations();
-    this.save();
+    await this.runMigrations();
     this.initialized = true;
     return this.db;
-  }
-
-  public save(): void {
-    // if (!this.db) return;
-    // const data = this.db.export();
-    // const buffer = new Uint8Array(data);
-    // let binary = '';
-    // for (let i = 0; i < buffer.byteLength; i++) {
-    //   binary += String.fromCharCode(buffer[i]);
-    // }
-    // const base64 = btoa(binary);
-    // if (typeof localStorage !== 'undefined') {
-    //   localStorage.setItem(STORAGE_KEYS.SQLITE_DB, base64);
-    // }
-    console.warn("Save is not longer used");
   }
 
   private async addColumnIfNotExists(table: string, column: string, type: string): Promise<void> {
@@ -70,8 +38,8 @@ export class DatabaseService {
   private async runMigrations(): Promise<void> {
     if (!this.db) return;
 
-    await this.db.execute(`
-      CREATE TABLE IF NOT EXISTS media (
+    const schema = [
+      `CREATE TABLE IF NOT EXISTS media (
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL,
         title TEXT NOT NULL,
@@ -93,9 +61,8 @@ export class DatabaseService {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         accent_color TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS media_history (
+      )`,
+      `CREATE TABLE IF NOT EXISTS media_history (
         id TEXT PRIMARY KEY,
         media_id TEXT NOT NULL,
         started_at TEXT,
@@ -109,9 +76,8 @@ export class DatabaseService {
         created_at TEXT NOT NULL,
         updated_at TEXT,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
-      );
-
-      CREATE TABLE IF NOT EXISTS local_file (
+      )`,
+      `CREATE TABLE IF NOT EXISTS local_file (
         id TEXT PRIMARY KEY,
         media_id TEXT,
         path TEXT NOT NULL,
@@ -124,9 +90,8 @@ export class DatabaseService {
         file_type TEXT NOT NULL,
         launch_info TEXT,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
-      );
-
-      CREATE TABLE IF NOT EXISTS availability (
+      )`,
+      `CREATE TABLE IF NOT EXISTS availability (
         id TEXT PRIMARY KEY,
         media_id TEXT NOT NULL,
         provider TEXT NOT NULL,
@@ -135,9 +100,8 @@ export class DatabaseService {
         url TEXT,
         last_checked TEXT NOT NULL,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
-      );
-
-      CREATE TABLE IF NOT EXISTS wishlist (
+      )`,
+      `CREATE TABLE IF NOT EXISTS wishlist (
         id TEXT PRIMARY KEY,
         media_id TEXT,
         title TEXT NOT NULL,
@@ -149,9 +113,8 @@ export class DatabaseService {
         target_release_date TEXT,
         poster TEXT,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE SET NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS notion_raw_records (
+      )`,
+      `CREATE TABLE IF NOT EXISTS notion_raw_records (
         id TEXT PRIMARY KEY,
         name_raw TEXT NOT NULL,
         type_raw TEXT NOT NULL,
@@ -164,36 +127,39 @@ export class DatabaseService {
         imported_at TEXT NOT NULL,
         parsed_media_id TEXT,
         parsed_history_id TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS external_ids (
+      )`,
+      `CREATE TABLE IF NOT EXISTS external_ids (
         id TEXT PRIMARY KEY,
         media_id TEXT NOT NULL,
         provider TEXT NOT NULL,
         external_id TEXT NOT NULL,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
-      );
-
-      CREATE TABLE IF NOT EXISTS settings (
+      )`,
+      `CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
-      );
-    `);
+      )`
+    ];
+
+    for (const statement of schema) {
+      await this.db.execute(statement);
+    }
 
     // Migrations for pre-existing SQLite databases
-    this.addColumnIfNotExists('media', 'metadata_refreshed_at', 'TEXT');
-    this.addColumnIfNotExists('media', 'developer', 'TEXT');
-    this.addColumnIfNotExists('media', 'cast', 'TEXT');
-    this.addColumnIfNotExists('media', 'seasons', 'TEXT');
-    this.addColumnIfNotExists('media', 'accent_color', 'TEXT');
-    this.addColumnIfNotExists('media', 'manually_matched', 'INTEGER DEFAULT 0');
-    this.addColumnIfNotExists('media_history', 'updated_at', 'TEXT');
+    await this.addColumnIfNotExists('media', 'metadata_refreshed_at', 'TEXT');
+    await this.addColumnIfNotExists('media', 'developer', 'TEXT');
+    await this.addColumnIfNotExists('media', 'cast', 'TEXT');
+    await this.addColumnIfNotExists('media', 'seasons', 'TEXT');
+    await this.addColumnIfNotExists('media', 'accent_color', 'TEXT');
+    await this.addColumnIfNotExists('media', 'manually_matched', 'INTEGER DEFAULT 0');
+    await this.addColumnIfNotExists('media_history', 'updated_at', 'TEXT');
 
     try {
       await this.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_external_ids_provider_ext ON external_ids(provider, external_id);');
     } catch {
       // Index already exists
     }
+
   }
 
   // ==========================================
@@ -204,23 +170,20 @@ export class DatabaseService {
   public async getAllMedia(): Promise<Media[]> {
     if (!this.db) return [];
     const res = await this.db.select<Media[]>('SELECT * FROM media ORDER BY title ASC');
-    if (!res.length) return [];
-    // return res[0].values.map(row => this.mapMediaRow(res[0].columns, row));
-    return res;
+    return Promise.all(res.map(row => this.mapMediaObject(row)));
   }
 
   public async getMediaById(id: string): Promise<Media | null> {
     if (!this.db) return null;
-    const res = await this.db.select<Media[]>('SELECT * FROM media WHERE id = $1', [id]);
+    const res = await this.db.select<Record<string, unknown>[]>('SELECT * FROM media WHERE id = ?', [id]);
     
     if (res.length > 0) {
-      const row = res[0];
-      return row;
+      return this.mapMediaObject(res[0]);
     }
     return null;
   }
 
-  private mapMediaObject(row: Record<string, any>): Media {
+  private async mapMediaObject(row: Record<string, any>): Promise<Media> {
     let genres: string[] = [];
     try {
       genres = typeof row.genres === 'string' ? JSON.parse(row.genres) : row.genres || [];
@@ -269,16 +232,8 @@ export class DatabaseService {
       updated_at: row.updated_at as string,
       accent_color: (row.accent_color as string) || undefined,
       manually_matched: Boolean(row.manually_matched),
-      external_ids: this.getExternalIdsForMedia(row.id as string)
+      external_ids: await this.getExternalIdsForMedia(row.id as string)
     };
-  }
-
-  private mapMediaRow(columns: string[], values: any[]): Media {
-    const rowObj: Record<string, any> = {};
-    columns.forEach((col, idx) => {
-      rowObj[col] = values[idx];
-    });
-    return this.mapMediaObject(rowObj);
   }
 
   public async saveMedia(media: Media): Promise<void> {
@@ -336,20 +291,19 @@ export class DatabaseService {
     if (media.external_ids) {
       await this.db.execute('DELETE FROM external_ids WHERE media_id = ?', [media.id]);
       for (const ext of media.external_ids) {
-        this.saveExternalId(ext);
+        await this.saveExternalId(ext);
       }
     }
-    this.save();
   }
 
   public async getMediaByExternalId(provider: string, external_id: string): Promise<Media | null> {
     if (!this.db) return null;
-    const res = await this.db.select<ExternalID[]>('SELECT media_id FROM external_ids WHERE provider = $provider AND external_id = $external_id', [provider,external_id]);
+    const res = await this.db.select<Pick<ExternalID, 'media_id'>[]>('SELECT media_id FROM external_ids WHERE provider = ? AND external_id = ?', [provider, external_id]);
     
     if (res.length > 0) {
       const row = res[0];
       if (row.media_id) {
-        return this.getMediaById(row.media_id as string);
+        return this.getMediaById(row.media_id);
       }
     }
     return null;
@@ -417,16 +371,14 @@ export class DatabaseService {
 
     // Update surviving media with overrides if provided
     if (overrides) {
-      const survivingMedia = this.getMediaById(survivingId);
+      const survivingMedia = await this.getMediaById(survivingId);
       if (survivingMedia) {
-        this.saveMedia({
+        await this.saveMedia({
           ...survivingMedia,
           ...overrides,
           updated_at: new Date().toISOString()
         });
       }
-    } else {
-      this.save();
     }
   }
 
@@ -436,7 +388,6 @@ export class DatabaseService {
     await this.db.execute('DELETE FROM external_ids WHERE media_id = ?', [id]);
     await this.db.execute('DELETE FROM media_history WHERE media_id = ?', [id]);
     await this.db.execute('UPDATE local_file SET media_id = NULL WHERE media_id = ?', [id]);
-    this.save();
   }
 
   public async updateMediaArtwork(media_id: string, artwork: {poster?: string; backdrop?:
@@ -453,7 +404,6 @@ export class DatabaseService {
          [artwork.poster || null, artwork.backdrop ||
            null, artwork.logo || null, now, media_id]
       )
-      this.save();
       
   }
 
@@ -464,7 +414,7 @@ export class DatabaseService {
   /** Retrieves linked provider external IDs for a media item. */
   public async getExternalIdsForMedia(media_id: string): Promise<ExternalID[]> {
     if (!this.db) return [];
-    const res = await this.db.select<ExternalID[]>('SELECT * FROM external_ids WHERE media_id = $media_id', [media_id]);
+    const res = await this.db.select<ExternalID[]>('SELECT * FROM external_ids WHERE media_id = ?', [media_id]);
     const results: ExternalID[] = [];
     for (const row of res) {
       results.push({
@@ -494,7 +444,7 @@ export class DatabaseService {
   /** Retrieves interaction logs for a specific media item sorted newest first. */
   public async getHistoryForMedia(media_id: string): Promise<MediaHistory[]> {
     if (!this.db) return [];
-    const res = await this.db.select<MediaHistory[]>('SELECT * FROM media_history WHERE media_id = $media_id ORDER BY created_at DESC',[media_id]);
+    const res = await this.db.select<MediaHistory[]>('SELECT * FROM media_history WHERE media_id = ? ORDER BY created_at DESC', [media_id]);
     const results: MediaHistory[] = [];
     for (const row of res) {
       results.push({
@@ -516,27 +466,26 @@ export class DatabaseService {
     return results;
   }
 
-  public getAllHistory(): MediaHistory[] {
+  public async getAllHistory(): Promise<MediaHistory[]> {
     if (!this.db) return [];
-    const res = this.db.exec('SELECT * FROM media_history ORDER BY created_at DESC');
-    if (!res.length) return [];
-    return res[0].values.map(row => ({
-      id: row[0] as string,
-      media_id: row[1] as string,
-      started_at: (row[2] as string) || undefined,
-      completed_at: (row[3] as string) || undefined,
-      status: row[4] as any,
-      score: row[5] ? Number(row[5]) : undefined,
-      thoughts: (row[6] as string) || undefined,
-      context: (row[7] as string) || undefined,
-      source: row[8] as string,
-      original_source_record_id: (row[9] as string) || undefined,
-      created_at: row[10] as string,
-      updated_at: (row[11] as string) || (row[10] as string)
+    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM media_history ORDER BY created_at DESC');
+    return rows.map(row => ({
+      id: row.id,
+      media_id: row.media_id,
+      started_at: row.started_at || undefined,
+      completed_at: row.completed_at || undefined,
+      status: row.status,
+      score: row.score ? Number(row.score) : undefined,
+      thoughts: row.thoughts || undefined,
+      context: row.context || undefined,
+      source: row.source,
+      original_source_record_id: row.original_source_record_id || undefined,
+      created_at: row.created_at,
+      updated_at: row.updated_at || row.created_at
     }));
   }
 
-  public saveHistory(history: MediaHistory): void {
+  public async saveHistory(history: MediaHistory): Promise<void> {
     if (!this.db) return;
     const updatedAt = history.updated_at || new Date().toISOString();
     await this.db.execute(
@@ -567,11 +516,10 @@ export class DatabaseService {
         updatedAt
       ]
     );
-    this.save();
   }
 
-  public getMediaState(media_id: string): MediaState {
-    const histories = this.getHistoryForMedia(media_id);
+  public async getMediaState(media_id: string): Promise<MediaState> {
+    const histories = await this.getHistoryForMedia(media_id);
     if (!histories.length) {
       return {
         media_id,
@@ -633,14 +581,10 @@ export class DatabaseService {
   // ==========================================
 
   /** Retrieves local system files linked to a specific media item. */
-  public getLocalFilesForMedia(media_id: string): LocalFile[] {
+  public async getLocalFilesForMedia(media_id: string): Promise<LocalFile[]> {
     if (!this.db) return [];
-    const stmt = this.db.prepare('SELECT * FROM local_file WHERE media_id = :media_id');
-    stmt.bind({ ':media_id': media_id });
-    const results: LocalFile[] = [];
-    while (stmt.step()) {
-      const row = stmt.getAsObject();
-      results.push({
+    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM local_file WHERE media_id = ?', [media_id]);
+    return rows.map(row => ({
         id: row.id as string,
         media_id: row.media_id as string,
         path: row.path as string,
@@ -652,38 +596,31 @@ export class DatabaseService {
         exists: Boolean(row.file_exists),
         file_type: row.file_type as any,
         launch_info: (row.launch_info as string) || undefined
-      });
-    }
-    stmt.free();
-    return results;
+      }));
   }
 
-  public getAllLocalFiles(): LocalFile[] {
+  public async getAllLocalFiles(): Promise<LocalFile[]> {
     if (!this.db) return [];
-    const res = this.db.exec('SELECT * FROM local_file');
-    if (!res.length) return [];
-    return res[0].values.map(row => ({
-      id: row[0] as string,
-      media_id: (row[1] as string) || undefined,
-      path: row[2] as string,
-      filename: row[3] as string,
-      extension: row[4] as string,
-      size: Number(row[5]),
-      discovered_at: row[6] as string,
-      last_seen_at: row[7] as string,
-      exists: Boolean(row[8]),
-      file_type: row[9] as any,
-      launch_info: (row[10] as string) || undefined
+    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM local_file');
+    return rows.map(row => ({
+      id: row.id,
+      media_id: row.media_id || undefined,
+      path: row.path,
+      filename: row.filename,
+      extension: row.extension,
+      size: Number(row.size),
+      discovered_at: row.discovered_at,
+      last_seen_at: row.last_seen_at,
+      exists: Boolean(row.file_exists),
+      file_type: row.file_type,
+      launch_info: row.launch_info || undefined
     }));
   }
 
-  public getUnmatchedLocalFiles(): LocalFile[] {
+  public async getUnmatchedLocalFiles(): Promise<LocalFile[]> {
     if (!this.db) return [];
-    const stmt = this.db.prepare('SELECT * FROM local_file WHERE media_id IS NULL OR media_id = ""');
-    const results: LocalFile[] = [];
-    while (stmt.step()) {
-      const row = stmt.getAsObject();
-      results.push({
+    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM local_file WHERE media_id IS NULL OR media_id = ""');
+    return rows.map(row => ({
         id: row.id as string,
         media_id: undefined,
         path: row.path as string,
@@ -695,19 +632,15 @@ export class DatabaseService {
         exists: Boolean(row.file_exists),
         file_type: row.file_type as any,
         launch_info: (row.launch_info as string) || undefined
-      });
-    }
-    stmt.free();
-    return results;
+      }));
   }
 
-  public linkLocalFileToMedia(file_id: string, media_id: string): void {
+  public async linkLocalFileToMedia(file_id: string, media_id: string): Promise<void> {
     if (!this.db) return;
     await this.db.execute('UPDATE local_file SET media_id = ? WHERE id = ?', [media_id, file_id]);
-    this.save();
   }
 
-  public saveLocalFile(file: LocalFile): void {
+  public async saveLocalFile(file: LocalFile): Promise<void> {
     if (!this.db) return;
     await this.db.execute(
       `INSERT INTO local_file (id, media_id, path, filename, extension, size, discovered_at, last_seen_at, file_exists, file_type, launch_info)
@@ -732,7 +665,6 @@ export class DatabaseService {
         file.launch_info || null
       ]
     );
-    this.save();
   }
 
   // ==========================================
@@ -740,14 +672,10 @@ export class DatabaseService {
   // ==========================================
 
   /** Retrieves streaming availability entries for a specific media item. */
-  public getAvailabilityForMedia(media_id: string): Availability[] {
+  public async getAvailabilityForMedia(media_id: string): Promise<Availability[]> {
     if (!this.db) return [];
-    const stmt = this.db.prepare('SELECT * FROM availability WHERE media_id = :media_id');
-    stmt.bind({ ':media_id': media_id });
-    const results: Availability[] = [];
-    while (stmt.step()) {
-      const row = stmt.getAsObject();
-      results.push({
+    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM availability WHERE media_id = ?', [media_id]);
+    return rows.map(row => ({
         id: row.id as string,
         media_id: row.media_id as string,
         provider: row.provider as string,
@@ -755,13 +683,10 @@ export class DatabaseService {
         availability_type: row.availability_type as any,
         url: (row.url as string) || undefined,
         last_checked: row.last_checked as string
-      });
-    }
-    stmt.free();
-    return results;
+      }));
   }
 
-  public saveAvailability(avail: Availability): void {
+  public async saveAvailability(avail: Availability): Promise<void> {
     if (!this.db) return;
     await this.db.execute(
       `INSERT INTO availability (id, media_id, provider, country, availability_type, url, last_checked)
@@ -782,7 +707,6 @@ export class DatabaseService {
         avail.last_checked
       ]
     );
-    this.save();
   }
 
   // ==========================================
@@ -790,25 +714,24 @@ export class DatabaseService {
   // ==========================================
 
   /** Retrieves all wishlist items sorted newest first. */
-  public getAllWishlist(): Wishlist[] {
+  public async getAllWishlist(): Promise<Wishlist[]> {
     if (!this.db) return [];
-    const res = this.db.exec('SELECT * FROM wishlist ORDER BY added_at DESC');
-    if (!res.length) return [];
-    return res[0].values.map(row => ({
-      id: row[0] as string,
-      media_id: (row[1] as string) || undefined,
-      title: row[2] as string,
-      type: row[3] as any,
-      source: row[4] as string,
-      external_url: (row[5] as string) || undefined,
-      notes: (row[6] as string) || undefined,
-      added_at: row[7] as string,
-      target_release_date: (row[8] as string) || undefined,
-      poster: (row[9] as string) || undefined
+    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM wishlist ORDER BY added_at DESC');
+    return rows.map(row => ({
+      id: row.id,
+      media_id: row.media_id || undefined,
+      title: row.title,
+      type: row.type,
+      source: row.source,
+      external_url: row.external_url || undefined,
+      notes: row.notes || undefined,
+      added_at: row.added_at,
+      target_release_date: row.target_release_date || undefined,
+      poster: row.poster || undefined
     }));
   }
 
-  public saveWishlist(item: Wishlist): void {
+  public async saveWishlist(item: Wishlist): Promise<void> {
     if (!this.db) return;
     await this.db.execute(
       `INSERT INTO wishlist (id, media_id, title, type, source, external_url, notes, added_at, target_release_date, poster)
@@ -834,7 +757,6 @@ export class DatabaseService {
         item.poster || null
       ]
     );
-    this.save();
   }
 
   // ==========================================
@@ -842,7 +764,7 @@ export class DatabaseService {
   // ==========================================
 
   /** Persists original un-altered Notion CSV row records. */
-  public saveNotionRawRecord(record: NotionRawRecord): void {
+  public async saveNotionRawRecord(record: NotionRawRecord): Promise<void> {
     if (!this.db) return;
     await this.db.execute(
       `INSERT INTO notion_raw_records (id, name_raw, type_raw, watched_on_raw, score_raw, status_raw, language_raw, thoughts_raw, publisher_raw, imported_at, parsed_media_id, parsed_history_id)
@@ -865,26 +787,24 @@ export class DatabaseService {
         record.parsed_history_id || null
       ]
     );
-    this.save();
   }
 
-  public getAllNotionRawRecords(): NotionRawRecord[] {
+  public async getAllNotionRawRecords(): Promise<NotionRawRecord[]> {
     if (!this.db) return [];
-    const res = this.db.exec('SELECT * FROM notion_raw_records ORDER BY imported_at DESC');
-    if (!res.length) return [];
-    return res[0].values.map(row => ({
-      id: row[0] as string,
-      name_raw: row[1] as string,
-      type_raw: row[2] as string,
-      watched_on_raw: (row[3] as string) || undefined,
-      score_raw: (row[4] as string) || undefined,
-      status_raw: (row[5] as string) || undefined,
-      language_raw: (row[6] as string) || undefined,
-      thoughts_raw: (row[7] as string) || undefined,
-      publisher_raw: (row[8] as string) || undefined,
-      imported_at: row[9] as string,
-      parsed_media_id: (row[10] as string) || undefined,
-      parsed_history_id: (row[11] as string) || undefined
+    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM notion_raw_records ORDER BY imported_at DESC');
+    return rows.map(row => ({
+      id: row.id,
+      name_raw: row.name_raw,
+      type_raw: row.type_raw,
+      watched_on_raw: row.watched_on_raw || undefined,
+      score_raw: row.score_raw || undefined,
+      status_raw: row.status_raw || undefined,
+      language_raw: row.language_raw || undefined,
+      thoughts_raw: row.thoughts_raw || undefined,
+      publisher_raw: row.publisher_raw || undefined,
+      imported_at: row.imported_at,
+      parsed_media_id: row.parsed_media_id || undefined,
+      parsed_history_id: row.parsed_history_id || undefined
     }));
   }
 
@@ -893,14 +813,13 @@ export class DatabaseService {
   // ==========================================
 
   /** Retrieves application settings key-value object. */
-  public getSettings(): AppSettings {
+  public async getSettings(): Promise<AppSettings> {
     if (!this.db) return {};
-    const res = this.db.exec('SELECT key, value FROM settings');
-    if (!res.length) return {};
+    const rows = await this.db.select<{ key: string; value: string }[]>('SELECT key, value FROM settings');
     const settings: Record<string, any> = {};
-    for (const row of res[0].values) {
-      const key = row[0] as string;
-      const val = row[1] as string;
+    for (const row of rows) {
+      const key = row.key;
+      const val = row.value;
       try {
         settings[key] = JSON.parse(val);
       } catch {
@@ -910,14 +829,13 @@ export class DatabaseService {
     return settings as AppSettings;
   }
 
-  public saveSetting(key: keyof AppSettings, value: any): void {
+  public async saveSetting(key: keyof AppSettings, value: any): Promise<void> {
     if (!this.db) return;
     const strVal = typeof value === 'string' ? value : JSON.stringify(value);
     await this.db.execute(
       `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
       [key, strVal]
     );
-    this.save();
   }
 }
 

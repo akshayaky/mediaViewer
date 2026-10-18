@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MediaCard } from './MediaCard';
-import { Media } from '../types/media';
+import { Media, MediaHistory, MediaState } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 
 interface MediaRailProps {
@@ -11,6 +11,27 @@ interface MediaRailProps {
 }
 
 export const MediaRail: React.FC<MediaRailProps> = ({ title, subtitle, items, onSelectMedia }) => {
+  const [states, setStates] = useState<Record<string, MediaState>>({});
+  const [scores, setScores] = useState<Record<string, number | undefined>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all(items.map(async media => {
+      const [state, history] = await Promise.all([
+        dbService.getMediaState(media.id),
+        dbService.getHistoryForMedia(media.id)
+      ]);
+      return [media.id, state, (history[0] as MediaHistory | undefined)?.score] as const;
+    })).then(results => {
+      if (!isMounted) return;
+      setStates(Object.fromEntries(results.map(([id, state]) => [id, state])));
+      setScores(Object.fromEntries(results.map(([id, , score]) => [id, score])));
+    }).catch(err => console.error('Failed to load media rail data:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, [items]);
+
   if (items.length === 0) return null;
 
   return (
@@ -22,16 +43,12 @@ export const MediaRail: React.FC<MediaRailProps> = ({ title, subtitle, items, on
 
       <div className="flex space-x-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none">
         {items.map(media => {
-          const state = dbService.getMediaState(media.id);
-          const history = dbService.getHistoryForMedia(media.id);
-          const score = history[0]?.score;
-
           return (
             <div key={media.id} className="w-48 shrink-0">
               <MediaCard
                 media={media}
-                state={state}
-                score={score}
+                state={states[media.id]}
+                score={scores[media.id]}
                 onClick={onSelectMedia}
               />
             </div>

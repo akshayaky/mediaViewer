@@ -81,7 +81,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
     setIsSaving(true);
     try {
       // 1. Check if external_id is already linked to ANOTHER entity in local library
-      const existingLinkedMedia = dbService.getMediaByExternalId(
+      const existingLinkedMedia = await dbService.getMediaByExternalId(
         selectedResult.provider,
         selectedResult.external_id
       );
@@ -128,7 +128,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
         ]
       };
 
-      dbService.saveMedia(updatedMedia);
+      await dbService.saveMedia(updatedMedia);
 
       if (updatedMedia.poster || updatedMedia.backdrop || updatedMedia.logo) {
         artworkCacheProvider.setCachedArtwork(

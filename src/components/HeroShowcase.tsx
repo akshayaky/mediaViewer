@@ -1,5 +1,5 @@
-import React from 'react';
-import { Media } from '../types/media';
+import React, { useEffect, useState } from 'react';
+import { Media, MediaHistory, MediaState } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { Play, Info, Star, Calendar, Clock, Sparkles } from 'lucide-react';
 
@@ -9,9 +9,22 @@ interface HeroShowcaseProps {
 }
 
 export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ media, onSelectMedia }) => {
-  const history = dbService.getHistoryForMedia(media.id);
-  const latestHistory = history[0];
-  const state = dbService.getMediaState(media.id);
+  const [latestHistory, setLatestHistory] = useState<MediaHistory>();
+  const [state, setState] = useState<MediaState>();
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([dbService.getHistoryForMedia(media.id), dbService.getMediaState(media.id)])
+      .then(([history, mediaState]) => {
+        if (!isMounted) return;
+        setLatestHistory(history[0]);
+        setState(mediaState);
+      })
+      .catch(err => console.error('Failed to load featured media state:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, [media.id]);
 
   return (
     <div className="relative w-full h-[460px] rounded-2xl overflow-hidden border border-[#232736] bg-[#12141c] shadow-2xl mb-8 group">
@@ -110,7 +123,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ media, onSelectMedia
             className="flex items-center space-x-2 bg-gray-800/80 hover:bg-gray-700/80 text-gray-200 font-semibold text-sm px-4 py-2.5 rounded-xl border border-gray-700 backdrop-blur-md transition-all cursor-pointer"
           >
             <Info className="w-4 h-4" />
-            <span>History ({state.total_watch_play_count || history.length})</span>
+            <span>History ({state?.total_watch_play_count || history.length})</span>
           </button>
         </div>
       </div>

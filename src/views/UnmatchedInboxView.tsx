@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LocalFile, Media, MediaType } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { localScannerService } from '../services/LocalScannerService';
@@ -25,25 +25,33 @@ interface UnmatchedInboxViewProps {
 }
 
 export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaMatched }) => {
-  const [unmatchedFiles, setUnmatchedFiles] = useState<LocalFile[]>(dbService.getUnmatchedLocalFiles());
+  const [unmatchedFiles, setUnmatchedFiles] = useState<LocalFile[]>([]);
+  const [allMedia, setAllMedia] = useState<Media[]>([]);
   const [searchQueries, setSearchQueryMap] = useState<Record<string, string>>({});
   const [externalCandidates, setExternalCandidates] = useState<Record<string, MetadataSearchResult[]>>({});
   const [isSearchingExternal, setIsSearchingExternal] = useState<Record<string, boolean>>({});
   const [successMessage, setSavedMessage] = useState('');
 
-  const allMedia = dbService.getAllMedia();
+  useEffect(() => {
+    void refreshFiles();
+  }, []);
 
-  const refreshFiles = () => {
-    setUnmatchedFiles(dbService.getUnmatchedLocalFiles());
+  const refreshFiles = async () => {
+    const [files, media] = await Promise.all([
+      dbService.getUnmatchedLocalFiles(),
+      dbService.getAllMedia()
+    ]);
+    setUnmatchedFiles(files);
+    setAllMedia(media);
     window.dispatchEvent(new CustomEvent('library-scanned'));
     if (onMediaMatched) onMediaMatched();
   };
 
-  const handleLinkToMedia = (fileId: string, mediaId: string) => {
-    dbService.linkLocalFileToMedia(fileId, mediaId);
+  const handleLinkToMedia = async (fileId: string, mediaId: string) => {
+    await dbService.linkLocalFileToMedia(fileId, mediaId);
     setSavedMessage('Local file successfully linked to media entry.');
     setTimeout(() => setSavedMessage(''), 3000);
-    refreshFiles();
+    await refreshFiles();
   };
 
   const handleSearchExternalProviders = async (file: LocalFile) => {
@@ -74,12 +82,12 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
 
   const handleConfirmExternalCandidate = async (file: LocalFile, candidate: MetadataSearchResult) => {
     if (candidate.external_id) {
-      const existingMedia = dbService.getMediaByExternalId(candidate.provider, candidate.external_id);
+      const existingMedia = await dbService.getMediaByExternalId(candidate.provider, candidate.external_id);
       if (existingMedia) {
-        dbService.linkLocalFileToMedia(file.id, existingMedia.id);
+        await dbService.linkLocalFileToMedia(file.id, existingMedia.id);
         setSavedMessage(`Linked local file to existing canonical entry "${existingMedia.title}"!`);
         setTimeout(() => setSavedMessage(''), 3000);
-        refreshFiles();
+        await refreshFiles();
         return;
       }
     }
@@ -130,15 +138,15 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
       ]
     };
 
-    dbService.saveMedia(newMedia);
-    dbService.linkLocalFileToMedia(file.id, newMedia.id);
+    await dbService.saveMedia(newMedia);
+    await dbService.linkLocalFileToMedia(file.id, newMedia.id);
 
     setSavedMessage(`Matched "${newMedia.title}" with external metadata from ${candidate.provider}!`);
     setTimeout(() => setSavedMessage(''), 3000);
-    refreshFiles();
+    await refreshFiles();
   };
 
-  const handleCreateNewMedia = (file: LocalFile) => {
+  const handleCreateNewMedia = async (file: LocalFile) => {
     const parsed = localScannerService.parseFilePath(
       file.path,
       file.file_type === 'game_executable' ? 'VideoGame' : file.file_type === 'tv_episode' ? 'TV Series' : 'Film'
@@ -160,12 +168,12 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
       updated_at: now
     };
 
-    dbService.saveMedia(newMedia);
-    dbService.linkLocalFileToMedia(file.id, newMedia.id);
+    await dbService.saveMedia(newMedia);
+    await dbService.linkLocalFileToMedia(file.id, newMedia.id);
 
     setSavedMessage(`Created new ${mediaType} record "${newMedia.title}" and linked file.`);
     setTimeout(() => setSavedMessage(''), 3000);
-    refreshFiles();
+    await refreshFiles();
   };
 
   const getTypeIcon = (type: MediaType) => {

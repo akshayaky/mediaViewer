@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Media } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { AlertTriangle, Check, X, Film, Tv, Gamepad2, FileText, History, HardDrive } from 'lucide-react';
@@ -22,16 +22,35 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
   const [editableTitle, setEditableTitle] = useState<string>(mediaA.title);
   const [editableYear, setEditableYear] = useState<string>(mediaA.release_year ? String(mediaA.release_year) : '');
   const [editableDescription, setEditableDescription] = useState<string>(mediaA.description || '');
+  const [filesA, setFilesA] = useState<Awaited<ReturnType<typeof dbService.getLocalFilesForMedia>>>([]);
+  const [filesB, setFilesB] = useState<Awaited<ReturnType<typeof dbService.getLocalFilesForMedia>>>([]);
+  const [historyA, setHistoryA] = useState<Awaited<ReturnType<typeof dbService.getHistoryForMedia>>>([]);
+  const [historyB, setHistoryB] = useState<Awaited<ReturnType<typeof dbService.getHistoryForMedia>>>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    Promise.all([
+      dbService.getLocalFilesForMedia(mediaA.id),
+      dbService.getLocalFilesForMedia(mediaB.id),
+      dbService.getHistoryForMedia(mediaA.id),
+      dbService.getHistoryForMedia(mediaB.id)
+    ]).then(([nextFilesA, nextFilesB, nextHistoryA, nextHistoryB]) => {
+      if (!isMounted) return;
+      setFilesA(nextFilesA);
+      setFilesB(nextFilesB);
+      setHistoryA(nextHistoryA);
+      setHistoryB(nextHistoryB);
+    }).catch(err => console.error('Failed to load duplicate records:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, mediaA.id, mediaB.id]);
 
   if (!isOpen) return null;
 
   const survivingMedia = selectedSurvivingId === mediaA.id ? mediaA : mediaB;
   const duplicateMedia = selectedSurvivingId === mediaA.id ? mediaB : mediaA;
-
-  const filesA = dbService.getLocalFilesForMedia(mediaA.id);
-  const filesB = dbService.getLocalFilesForMedia(mediaB.id);
-  const historyA = dbService.getHistoryForMedia(mediaA.id);
-  const historyB = dbService.getHistoryForMedia(mediaB.id);
 
   const handleSelectSurviving = (id: string) => {
     setSelectedSurvivingId(id);
@@ -41,7 +60,7 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
     setEditableDescription(chosen.description || '');
   };
 
-  const handleConfirmMerge = () => {
+  const handleConfirmMerge = async () => {
     try {
       const yearNum = editableYear ? parseInt(editableYear, 10) : undefined;
       const overrides: Partial<Media> = {
@@ -52,8 +71,8 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
         updated_at: new Date().toISOString()
       };
 
-      dbService.mergeMediaEntities(survivingMedia.id, duplicateMedia.id, overrides);
-      const merged = dbService.getMediaById(survivingMedia.id) || survivingMedia;
+      await dbService.mergeMediaEntities(survivingMedia.id, duplicateMedia.id, overrides);
+      const merged = (await dbService.getMediaById(survivingMedia.id)) || survivingMedia;
 
       window.dispatchEvent(new CustomEvent('library-scanned'));
       onMerged(merged);

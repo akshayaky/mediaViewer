@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Media, LocalFile, MediaHistory, MediaState } from '../types/media';
+import { Media, LocalFile, MediaHistory, MediaState, Availability } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { localLauncherService } from '../services/LocalLauncherService';
 import { tmdbProvider } from '../providers/TMDBProvider';
@@ -9,16 +9,17 @@ import { MetadataSearchResult } from '../providers/interfaces';
 
 export function useMediaDetail(initialMedia: Media) {
   const [currentMedia, setCurrentMedia] = useState<Media>(initialMedia);
-  const [historyList, setHistoryList] = useState<MediaHistory[]>(() =>
-    dbService.getHistoryForMedia(initialMedia.id)
-  );
-  const [state, setState] = useState<MediaState>(() =>
-    dbService.getMediaState(initialMedia.id)
-  );
-  const [localFiles, setLocalFiles] = useState<LocalFile[]>(() =>
-    dbService.getLocalFilesForMedia(initialMedia.id)
-  );
-  const availabilities = dbService.getAvailabilityForMedia(initialMedia.id);
+  const [historyList, setHistoryList] = useState<MediaHistory[]>([]);
+  const [state, setState] = useState<MediaState>({
+    media_id: initialMedia.id,
+    current_status: 'Planned',
+    total_watch_play_count: 0,
+    rewatch_count: 0,
+    abandoned_count: 0,
+    currently_watching_playing: false
+  });
+  const [localFiles, setLocalFiles] = useState<LocalFile[]>([]);
+  const [availabilities, setAvailabilities] = useState<Availability[]>([]);
 
   // Related media state
   const [relatedMedia, setRelatedMedia] = useState<MetadataSearchResult[]>([]);
@@ -38,8 +39,8 @@ export function useMediaDetail(initialMedia: Media) {
   const [launchMessage, setLaunchMessage] = useState('');
 
   // Synchronize added external IDs from database
-  const refreshAddedExternalIds = useCallback(() => {
-    const allMedia = dbService.getAllMedia();
+  const refreshAddedExternalIds = useCallback(async () => {
+    const allMedia = await dbService.getAllMedia();
     const set = new Set<string>();
     for (const m of allMedia) {
       if (m.external_ids) {
@@ -53,8 +54,27 @@ export function useMediaDetail(initialMedia: Media) {
   }, []);
 
   useEffect(() => {
-    refreshAddedExternalIds();
+    void refreshAddedExternalIds();
   }, [refreshAddedExternalIds, currentMedia]);
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      dbService.getHistoryForMedia(currentMedia.id),
+      dbService.getMediaState(currentMedia.id),
+      dbService.getLocalFilesForMedia(currentMedia.id),
+      dbService.getAvailabilityForMedia(currentMedia.id)
+    ]).then(([history, mediaState, files, availability]) => {
+      if (!isMounted) return;
+      setHistoryList(history);
+      setState(mediaState);
+      setLocalFiles(files);
+      setAvailabilities(availability);
+    }).catch(err => console.error('Failed to load media details:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, [currentMedia.id]);
 
   // Fetch related media asynchronously
   useEffect(() => {
@@ -109,9 +129,9 @@ export function useMediaDetail(initialMedia: Media) {
   const handleAddRelatedToLibrary = async (candidate: MetadataSearchResult): Promise<Media> => {
     // Check if external_id already exists in local DB
     if (candidate.external_id) {
-      const existing = dbService.getMediaByExternalId(candidate.provider, candidate.external_id);
+      const existing = await dbService.getMediaByExternalId(candidate.provider, candidate.external_id);
       if (existing) {
-        refreshAddedExternalIds();
+        await refreshAddedExternalIds();
         return existing;
       }
     }
@@ -157,8 +177,8 @@ export function useMediaDetail(initialMedia: Media) {
       ] : []
     };
 
-    dbService.saveMedia(newMedia);
-    dbService.saveHistory({
+    await dbService.saveMedia(newMedia);
+    await dbService.saveHistory({
       id: `hist_${Date.now()}`,
       media_id: mediaId,
       status: 'Planned',
@@ -167,15 +187,22 @@ export function useMediaDetail(initialMedia: Media) {
     });
 
     window.dispatchEvent(new CustomEvent('library-scanned'));
-    refreshAddedExternalIds();
+    await refreshAddedExternalIds();
     return newMedia;
   };
 
-  const updateCurrentMedia = useCallback((newMedia: Media) => {
+  const updateCurrentMedia = useCallback(async (newMedia: Media) => {
     setCurrentMedia(newMedia);
-    setHistoryList(dbService.getHistoryForMedia(newMedia.id));
-    setState(dbService.getMediaState(newMedia.id));
-    setLocalFiles(dbService.getLocalFilesForMedia(newMedia.id));
+    const [history, mediaState, files, availability] = await Promise.all([
+      dbService.getHistoryForMedia(newMedia.id),
+      dbService.getMediaState(newMedia.id),
+      dbService.getLocalFilesForMedia(newMedia.id),
+      dbService.getAvailabilityForMedia(newMedia.id)
+    ]);
+    setHistoryList(history);
+    setState(mediaState);
+    setLocalFiles(files);
+    setAvailabilities(availability);
     setArtwork({
       poster: newMedia.poster,
       backdrop: newMedia.backdrop,
@@ -183,13 +210,17 @@ export function useMediaDetail(initialMedia: Media) {
     });
   }, []);
 
-  const refreshLocalFiles = () => {
-    setLocalFiles(dbService.getLocalFilesForMedia(currentMedia.id));
+  const refreshLocalFiles = async () => {
+    setLocalFiles(await dbService.getLocalFilesForMedia(currentMedia.id));
   };
 
-  const refreshHistoryAndState = () => {
-    setHistoryList(dbService.getHistoryForMedia(currentMedia.id));
-    setState(dbService.getMediaState(currentMedia.id));
+  const refreshHistoryAndState = async () => {
+    const [history, mediaState] = await Promise.all([
+      dbService.getHistoryForMedia(currentMedia.id),
+      dbService.getMediaState(currentMedia.id)
+    ]);
+    setHistoryList(history);
+    setState(mediaState);
   };
 
   const handleManualMetadataRefresh = async () => {
@@ -238,7 +269,7 @@ export function useMediaDetail(initialMedia: Media) {
         updated_at: now
       };
 
-      dbService.saveMedia(updatedMedia);
+      await dbService.saveMedia(updatedMedia);
       setCurrentMedia(updatedMedia);
 
       if (updatedMedia.poster || updatedMedia.backdrop || updatedMedia.logo) {
@@ -259,7 +290,7 @@ export function useMediaDetail(initialMedia: Media) {
       }
 
       if (extId && (!currentMedia.external_ids || currentMedia.external_ids.length === 0)) {
-        dbService.saveExternalId({
+        await dbService.saveExternalId({
           id: `ext_${Date.now()}`,
           media_id: currentMedia.id,
           provider: currentMedia.type === 'VideoGame' ? 'IGDB' : 'TMDB',
@@ -287,14 +318,14 @@ export function useMediaDetail(initialMedia: Media) {
     setTimeout(() => setLaunchMessage(''), 4000);
   };
 
-  const logSessionHistory = (params: {
+  const logSessionHistory = async (params: {
     status: any;
     score: number;
     context?: string;
     thoughts?: string;
   }) => {
     const now = new Date().toISOString();
-    dbService.saveHistory({
+    await dbService.saveHistory({
       id: `hist_manual_${Date.now()}`,
       media_id: currentMedia.id,
       completed_at: now.split('T')[0],
@@ -305,10 +336,10 @@ export function useMediaDetail(initialMedia: Media) {
       source: 'Manual',
       created_at: now
     });
-    refreshHistoryAndState();
+    await refreshHistoryAndState();
   };
 
-  const addCustomFilePath = (customPath: string) => {
+  const addCustomFilePath = async (customPath: string) => {
     if (!customPath.trim()) return;
 
     const now = new Date().toISOString();
@@ -329,8 +360,8 @@ export function useMediaDetail(initialMedia: Media) {
       launch_info: customPath.trim()
     };
 
-    dbService.saveLocalFile(newLocalFile);
-    refreshLocalFiles();
+    await dbService.saveLocalFile(newLocalFile);
+    await refreshLocalFiles();
   };
 
   return {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Media } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { History, Star, Film, Tv, Gamepad2, Bookmark } from 'lucide-react';
@@ -8,7 +8,23 @@ interface HistoryViewProps {
 }
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia }) => {
-  const allHistory = dbService.getAllHistory();
+  const [entries, setEntries] = useState<Array<{ history: Awaited<ReturnType<typeof dbService.getAllHistory>>[number]; media: Media }>>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadHistory = async () => {
+      const allHistory = await dbService.getAllHistory();
+      const entriesWithMedia = await Promise.all(allHistory.map(async history => ({
+        history,
+        media: await dbService.getMediaById(history.media_id)
+      })));
+      if (isMounted) {
+        setEntries(entriesWithMedia.filter((entry): entry is { history: typeof allHistory[number]; media: Media } => Boolean(entry.media)));
+      }
+    };
+    void loadHistory().catch(err => console.error('Failed to load history:', err));
+    return () => { isMounted = false; };
+  }, []);
 
   const getTypeIcon = (type?: string) => {
     switch (type) {
@@ -37,15 +53,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia }) => {
       </div>
 
       {/* History Journal List */}
-      {allHistory.length === 0 ? (
+      {entries.length === 0 ? (
         <div className="p-12 text-center text-gray-400 bg-[#14161f] rounded-xl border border-[#232736]">
           <p className="text-base font-medium">No history entries recorded in your journal yet.</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {allHistory.map(h => {
-            const media = dbService.getMediaById(h.media_id);
-            if (!media) return null;
+          {entries.map(({ history: h, media }) => {
 
             return (
               <div

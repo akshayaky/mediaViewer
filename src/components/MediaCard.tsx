@@ -27,12 +27,12 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onCli
           setPosterUrl(res.poster);
           if (res.source !== 'placeholder' && !media.poster) {
             try {
-              dbService.saveMedia({
+              void dbService.saveMedia({
                 ...media,
                 poster: res.poster,
                 backdrop: res.backdrop || media.backdrop,
                 logo: res.logo || media.logo
-              });
+              }).catch(err => console.warn('Failed to auto-save resolved poster:', err));
             } catch (err) {
               console.warn('Failed to auto-save resolved poster:', err);
             }

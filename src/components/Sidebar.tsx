@@ -24,15 +24,22 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isCollapsed, setIsCollapsed }) => {
-  const [unmatchedCount, setUnmatchedCount] = useState<number>(dbService.getUnmatchedLocalFiles().length);
+  const [unmatchedCount, setUnmatchedCount] = useState(0);
 
   useEffect(() => {
-    const handleLibraryUpdate = () => {
-      setUnmatchedCount(dbService.getUnmatchedLocalFiles().length);
+    let isMounted = true;
+    const refreshUnmatchedCount = async () => {
+      const files = await dbService.getUnmatchedLocalFiles();
+      if (isMounted) setUnmatchedCount(files.length);
     };
+    const handleLibraryUpdate = () => { void refreshUnmatchedCount(); };
 
+    void refreshUnmatchedCount();
     window.addEventListener('library-scanned', handleLibraryUpdate);
-    return () => window.removeEventListener('library-scanned', handleLibraryUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('library-scanned', handleLibraryUpdate);
+    };
   }, []);
 
   const navItems = [

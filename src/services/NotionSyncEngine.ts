@@ -48,12 +48,12 @@ export class NotionSyncEngine {
       const notionRows = await notionService.fetchFromApi(token, databaseId);
 
       // 3. Ensure all local media items have at least one history record
-      const allMedia = dbService.getAllMedia();
+      const allMedia = await dbService.getAllMedia();
       const syncStartTime = new Date().toISOString();
       for (const m of allMedia) {
-        const histories = dbService.getHistoryForMedia(m.id);
+        const histories = await dbService.getHistoryForMedia(m.id);
         if (histories.length === 0) {
-          dbService.saveHistory({
+          await dbService.saveHistory({
             id: `hist_init_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
             media_id: m.id,
             status: 'Planned',
@@ -65,8 +65,10 @@ export class NotionSyncEngine {
       }
 
       // 4. Fetch updated local records
-      const localHistories = dbService.getAllHistory();
-      const localMediaList = dbService.getAllMedia();
+      const [localHistories, localMediaList] = await Promise.all([
+        dbService.getAllHistory(),
+        dbService.getAllMedia()
+      ]);
 
       // Map local history by Notion Page ID
       const historyByPageId = new Map<string, MediaHistory>();
@@ -114,7 +116,7 @@ export class NotionSyncEngine {
           if (isNotionNewer) {
             // Update local history from Notion
             const { startedAt, completedAt } = notionService.parseDates(rawWatchedOn, parsedStatus);
-            dbService.saveHistory({
+            await dbService.saveHistory({
               ...existingHistory,
               score: parsedScore !== undefined ? parsedScore : existingHistory.score,
               status: parsedStatus,
@@ -200,9 +202,9 @@ export class NotionSyncEngine {
       }
 
       // Process Local App -> Notion Push for newly logged history records lacking original_source_record_id
-      const currentHistories = dbService.getAllHistory();
+      const currentHistories = await dbService.getAllHistory();
       const currentMediaMap = new Map<string, Media>();
-      for (const m of dbService.getAllMedia()) {
+      for (const m of await dbService.getAllMedia()) {
         currentMediaMap.set(m.id, m);
       }
 
@@ -218,10 +220,10 @@ export class NotionSyncEngine {
             // Link local history to newly created Notion Page ID
             h.original_source_record_id = newPageId;
             h.updated_at = new Date().toISOString();
-            dbService.saveHistory(h);
+            await dbService.saveHistory(h);
 
             // Also record external ID
-            dbService.saveExternalId({
+            await dbService.saveExternalId({
               id: `ext_notion_${newPageId}`,
               media_id: media.id,
               provider: 'Notion',
@@ -237,8 +239,8 @@ export class NotionSyncEngine {
 
       // Record last sync timestamp in settings
       const syncEndTime = new Date().toISOString();
-      dbService.saveSetting('notion_last_sync_time', syncEndTime);
-      dbService.saveSetting('notion_sync_errors', errors);
+      await dbService.saveSetting('notion_last_sync_time', syncEndTime);
+      await dbService.saveSetting('notion_sync_errors', errors);
 
       return {
         importedCount,
@@ -266,7 +268,7 @@ export class NotionSyncEngine {
   ): Promise<void> {
     if (!conflict.historyId) return;
 
-    const history = dbService.getAllHistory().find(h => h.id === conflict.historyId);
+    const history = (await dbService.getAllHistory()).find(h => h.id === conflict.historyId);
     if (!history) return;
 
     const now = new Date().toISOString();
@@ -282,11 +284,11 @@ export class NotionSyncEngine {
         history.thoughts = conflict.notionValue;
       }
       history.updated_at = now;
-      dbService.saveHistory(history);
+      await dbService.saveHistory(history);
     } else if (resolution === 'app' && token && conflict.pageId) {
       // Apply App value to Notion page via API
       try {
-        const media = history.media_id ? dbService.getMediaById(history.media_id) : null;
+        const media = history.media_id ? await dbService.getMediaById(history.media_id) : null;
         if (media && mapping) {
           const props = notionService.buildPageProperties(media, history, mapping, schema);
           await notionService.updatePageProperties(token, conflict.pageId, props);

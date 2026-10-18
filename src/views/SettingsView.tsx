@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
-  const [settings, setSettings] = useState<AppSettings>(dbService.getSettings());
+  const [settings, setSettings] = useState<AppSettings>({});
 
   // Input states
   const [moviesFolder, setMoviesFolder] = useState(settings.movies_folder || DEFAULT_FOLDERS.MOVIES);
@@ -90,7 +90,18 @@ export const SettingsView: React.FC = () => {
   const [selectedDbId, setSelectedDbId] = useState(notionDbId);
 
   useEffect(() => {
-    setSettings(dbService.getSettings());
+    dbService.getSettings().then(nextSettings => {
+      setSettings(nextSettings);
+      setMoviesFolder(nextSettings.movies_folder || DEFAULT_FOLDERS.MOVIES);
+      setTvFolder(nextSettings.tv_folder || DEFAULT_FOLDERS.TV_SHOWS);
+      setGamesFolder(nextSettings.games_folder || DEFAULT_FOLDERS.GAMES);
+      setRegion(nextSettings.country_region || 'United States');
+      setTmdbKey(nextSettings.tmdb_api_key || '');
+      setTwitchClientId(nextSettings.twitch_client_id || '');
+      setTwitchClientSecret(nextSettings.twitch_client_secret || '');
+      setRawgApiKey(nextSettings.rawg_api_key || '');
+      setSteamApiKey(nextSettings.steam_api_key || '');
+    }).catch(err => console.error('Failed to load settings:', err));
   }, []);
 
   useEffect(() => {
@@ -98,11 +109,13 @@ export const SettingsView: React.FC = () => {
     setSelectedDbId(notionDbId);
   }, [notionToken, notionDbId]);
 
-  const handleSaveFolders = (e: React.FormEvent) => {
+  const handleSaveFolders = async (e: React.FormEvent) => {
     e.preventDefault();
-    dbService.saveSetting('movies_folder', moviesFolder);
-    dbService.saveSetting('tv_folder', tvFolder);
-    dbService.saveSetting('games_folder', gamesFolder);
+    await Promise.all([
+      dbService.saveSetting('movies_folder', moviesFolder),
+      dbService.saveSetting('tv_folder', tvFolder),
+      dbService.saveSetting('games_folder', gamesFolder)
+    ]);
     setSavedMessage('Library folder locations saved successfully.');
     setTimeout(() => setSavedMessage(''), 3000);
   };
@@ -115,15 +128,17 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setSavedMessage(''), 4000);
   };
 
-  const handleSaveApiKeys = (e: React.FormEvent) => {
+  const handleSaveApiKeys = async (e: React.FormEvent) => {
     e.preventDefault();
-    dbService.saveSetting('tmdb_api_key', tmdbKey.trim());
-    dbService.saveSetting('twitch_client_id', twitchClientId.trim());
-    dbService.saveSetting('twitch_client_secret', twitchClientSecret.trim());
-    dbService.saveSetting('rawg_api_key', rawgApiKey.trim());
-    dbService.saveSetting('steam_api_key', steamApiKey.trim());
-    dbService.saveSetting('country_region', region.trim());
-    saveNotionConfig(tokenInput, selectedDbId, notionApiMapping);
+    await Promise.all([
+      dbService.saveSetting('tmdb_api_key', tmdbKey.trim()),
+      dbService.saveSetting('twitch_client_id', twitchClientId.trim()),
+      dbService.saveSetting('twitch_client_secret', twitchClientSecret.trim()),
+      dbService.saveSetting('rawg_api_key', rawgApiKey.trim()),
+      dbService.saveSetting('steam_api_key', steamApiKey.trim()),
+      dbService.saveSetting('country_region', region.trim()),
+      saveNotionConfig(tokenInput, selectedDbId, notionApiMapping)
+    ]);
     setSavedMessage('API credentials and preferences saved locally in SQLite.');
     setTimeout(() => setSavedMessage(''), 3000);
   };
@@ -142,7 +157,7 @@ export const SettingsView: React.FC = () => {
           if (key === 'tv') setTvFolder(selected);
           if (key === 'games') setGamesFolder(selected);
 
-          dbService.saveSetting(`${key}_folder`, selected);
+          await dbService.saveSetting(`${key}_folder`, selected);
           setSavedMessage(`Updated ${key} folder path: ${selected}`);
           setTimeout(() => setSavedMessage(''), 3000);
         }
@@ -176,7 +191,7 @@ export const SettingsView: React.FC = () => {
             if (key === 'tv') setTvFolder(displayPath);
             if (key === 'games') setGamesFolder(displayPath);
 
-            dbService.saveSetting(`${key}_folder`, displayPath);
+            await dbService.saveSetting(`${key}_folder`, displayPath);
             setSavedMessage(`Selected web directory "${dirHandle.name}" containing ${files.length} files.`);
             setTimeout(() => setSavedMessage(''), 4000);
             return;
@@ -200,7 +215,7 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleHTMLFolderSelect = (e: React.ChangeEvent<HTMLInputElement>, key: 'movies' | 'tv' | 'games') => {
+  const handleHTMLFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>, key: 'movies' | 'tv' | 'games') => {
     const files = e.target.files;
     const mediaType: MediaType = key === 'movies' ? 'Film' : key === 'tv' ? 'TV Series' : 'VideoGame';
 
@@ -220,7 +235,7 @@ export const SettingsView: React.FC = () => {
       if (key === 'tv') setTvFolder(folderPath);
       if (key === 'games') setGamesFolder(folderPath);
 
-      dbService.saveSetting(`${key}_folder`, folderPath);
+      await dbService.saveSetting(`${key}_folder`, folderPath);
       setSavedMessage(`Loaded ${fileArray.length} files from folder "${folderName}".`);
       setTimeout(() => setSavedMessage(''), 4000);
     }

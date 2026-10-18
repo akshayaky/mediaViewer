@@ -1,8 +1,8 @@
 import { dbService } from './DatabaseService';
 import { Media, MediaHistory, Wishlist, LocalFile, Availability } from '../types/media';
 
-export function seedDatabaseIfEmpty(): void {
-  const existingMedia = dbService.getAllMedia();
+export async function seedDatabaseIfEmpty(): Promise<void> {
+  const existingMedia = await dbService.getAllMedia();
   if (existingMedia.length > 0) {
     return; // Already seeded
   }
@@ -275,10 +275,10 @@ export function seedDatabaseIfEmpty(): void {
   ];
 
   for (const m of allSeedMedia) {
-    dbService.saveMedia(m);
+    await dbService.saveMedia(m);
   }
   for (const h of allSeedHistory) {
-    dbService.saveHistory(h);
+    await dbService.saveHistory(h);
   }
 
   // Seed sample LocalFiles
@@ -310,7 +310,7 @@ export function seedDatabaseIfEmpty(): void {
     }
   ];
   for (const lf of sampleLocalFiles) {
-    dbService.saveLocalFile(lf);
+    await dbService.saveLocalFile(lf);
   }
 
   // Seed sample Availability
@@ -335,7 +335,7 @@ export function seedDatabaseIfEmpty(): void {
     }
   ];
   for (const av of sampleAvailabilities) {
-    dbService.saveAvailability(av);
+    await dbService.saveAvailability(av);
   }
 
   // Seed sample Wishlist
@@ -360,12 +360,12 @@ export function seedDatabaseIfEmpty(): void {
     }
   ];
   for (const w of sampleWishlist) {
-    dbService.saveWishlist(w);
+    await dbService.saveWishlist(w);
   }
 
   // Save initial settings
-  dbService.saveSetting('movies_folder', 'C:\\Media\\Movies');
-  dbService.saveSetting('tv_folder', 'C:\\Media\\TV Shows');
-  dbService.saveSetting('games_folder', 'D:\\Games');
-  dbService.saveSetting('country_region', 'United States');
+  await dbService.saveSetting('movies_folder', 'C:\\Media\\Movies');
+  await dbService.saveSetting('tv_folder', 'C:\\Media\\TV Shows');
+  await dbService.saveSetting('games_folder', 'D:\\Games');
+  await dbService.saveSetting('country_region', 'United States');
 }

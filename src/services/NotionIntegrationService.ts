@@ -394,7 +394,7 @@ export class NotionIntegrationService implements NotionProvider {
     let rawRecordsSaved = 0;
     const errors: string[] = [];
 
-    const existingMediaList = dbService.getAllMedia();
+    const existingMediaList = await dbService.getAllMedia();
     const mediaMap = new Map<string, Media>();
     for (const m of existingMediaList) {
       mediaMap.set(`${m.title.toLowerCase()}_${m.type}`, m);
@@ -440,12 +440,12 @@ export class NotionIntegrationService implements NotionProvider {
         let targetMedia = mediaMap.get(mediaKey);
 
         // Check for suspected duplicates / uncertain matches
-        const suspectedDuplicates = dbService.findSuspectedDuplicates(cleanTitle);
+        const suspectedDuplicates = await dbService.findSuspectedDuplicates(cleanTitle);
 
         if (!targetMedia && suspectedDuplicates.length > 1) {
           // Flag as uncertain match in Notion Raw Record
           notionRaw.parsed_media_id = undefined;
-          dbService.saveNotionRawRecord(notionRaw);
+          await dbService.saveNotionRawRecord(notionRaw);
           rawRecordsSaved++;
           continue;
         }
@@ -463,7 +463,7 @@ export class NotionIntegrationService implements NotionProvider {
             updated_at: now,
             metadata_source: 'Notion Import'
           };
-          dbService.saveMedia(targetMedia);
+          await dbService.saveMedia(targetMedia);
           mediaMap.set(mediaKey, targetMedia);
           importedMediaCount++;
         } else {
@@ -479,13 +479,13 @@ export class NotionIntegrationService implements NotionProvider {
           }
           if (updated) {
             targetMedia.updated_at = now;
-            dbService.saveMedia(targetMedia);
+            await dbService.saveMedia(targetMedia);
           }
         }
 
         // Link Notion External ID to target media if pageId exists
         if (pageId) {
-          dbService.saveExternalId({
+          await dbService.saveExternalId({
             id: `ext_notion_${pageId}`,
             media_id: targetMedia.id,
             provider: 'Notion',
@@ -512,13 +512,13 @@ export class NotionIntegrationService implements NotionProvider {
           created_at: row['_last_edited_time'] || now
         };
 
-        dbService.saveHistory(historyRecord);
+        await dbService.saveHistory(historyRecord);
         importedHistoryCount++;
 
         // Update NotionRawRecord with parsed links
         notionRaw.parsed_media_id = targetMedia.id;
         notionRaw.parsed_history_id = historyId;
-        dbService.saveNotionRawRecord(notionRaw);
+        await dbService.saveNotionRawRecord(notionRaw);
         rawRecordsSaved++;
 
       } catch (err: any) {

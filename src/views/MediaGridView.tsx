@@ -27,14 +27,24 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [languageFilter, setLanguageFilter] = useState<string>('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [mediaList, setMediaList] = useState<Media[]>(() => dbService.getAllMedia());
+  const [mediaList, setMediaList] = useState<Media[]>([]);
+  const [stateByMediaId, setStateByMediaId] = useState<Record<string, Awaited<ReturnType<typeof dbService.getMediaState>>>>({});
+  const [scoreByMediaId, setScoreByMediaId] = useState<Record<string, number | undefined>>({});
 
-  const refreshList = () => {
-    setMediaList(dbService.getAllMedia());
+  const refreshList = async () => {
+    const media = await dbService.getAllMedia();
+    const [states, histories] = await Promise.all([
+      Promise.all(media.map(item => dbService.getMediaState(item.id))),
+      Promise.all(media.map(item => dbService.getHistoryForMedia(item.id)))
+    ]);
+    setMediaList(media);
+    setStateByMediaId(Object.fromEntries(states.map(state => [state.media_id, state])));
+    setScoreByMediaId(Object.fromEntries(media.map((item, index) => [item.id, histories[index][0]?.score])));
   };
 
   useEffect(() => {
-    const handleScanned = () => refreshList();
+    const handleScanned = () => { void refreshList(); };
+    void refreshList();
     window.addEventListener('library-scanned', handleScanned);
     return () => {
       window.removeEventListener('library-scanned', handleScanned);
@@ -72,8 +82,7 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   // Apply status filter
   if (statusFilter !== 'All') {
     items = items.filter(m => {
-      const state = dbService.getMediaState(m.id);
-      return state.current_status === statusFilter;
+      return stateByMediaId[m.id]?.current_status === statusFilter;
     });
   }
 
@@ -181,16 +190,12 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
             : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'
         }`}>
           {items.map(media => {
-            const state = dbService.getMediaState(media.id);
-            const history = dbService.getHistoryForMedia(media.id);
-            const score = history[0]?.score;
-
             return (
               <MediaCard
                 key={media.id}
                 media={media}
-                state={state}
-                score={score}
+                state={stateByMediaId[media.id]}
+                score={scoreByMediaId[media.id]}
                 onClick={onSelectMedia}
               />
             );

@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { resetMockTauriDatabase } from './tauriSqlMock';
+
+vi.mock('@tauri-apps/plugin-sql', async () => {
+  const { loadTauriSqlMock } = await import('./tauriSqlMock');
+  return { default: { load: loadTauriSqlMock } };
+});
+
 import { dbService } from '../services/DatabaseService';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
@@ -7,9 +14,10 @@ import { Media } from '../types/media';
 describe('Canonical Entities, Duplicates & Relationships', () => {
   beforeEach(async () => {
     await dbService.init();
+    resetMockTauriDatabase();
   });
 
-  it('resolves canonical media entity by provider and external ID', () => {
+  it('resolves canonical media entity by provider and external ID', async () => {
     const mediaId = `media_test_${Date.now()}`;
     const testMedia: Media = {
       id: mediaId,
@@ -30,16 +38,16 @@ describe('Canonical Entities, Duplicates & Relationships', () => {
       ]
     };
 
-    dbService.saveMedia(testMedia);
+    await dbService.saveMedia(testMedia);
 
-    const found = dbService.getMediaByExternalId('TMDB', 'movie:693134');
+    const found = await dbService.getMediaByExternalId('TMDB', 'movie:693134');
     expect(found).not.toBeNull();
     expect(found?.id).toBe(mediaId);
     expect(found?.title).toBe('Dune: Part Two');
     expect(found?.manually_matched).toBe(true);
   });
 
-  it('detects suspected duplicate records by title and year', () => {
+  it('detects suspected duplicate records by title and year', async () => {
     const now = new Date().toISOString();
     const media1: Media = {
       id: `m1_${Date.now()}`,
@@ -60,15 +68,15 @@ describe('Canonical Entities, Duplicates & Relationships', () => {
       updated_at: now
     };
 
-    dbService.saveMedia(media1);
-    dbService.saveMedia(media2);
+    await dbService.saveMedia(media1);
+    await dbService.saveMedia(media2);
 
-    const duplicates = dbService.findSuspectedDuplicates('Elden Ring', 2022, media1.id);
+    const duplicates = await dbService.findSuspectedDuplicates('Elden Ring', 2022, media1.id);
     expect(duplicates.length).toBeGreaterThan(0);
     expect(duplicates.some(d => d.id === media2.id)).toBe(true);
   });
 
-  it('safely merges duplicate entities while preserving history and local files', () => {
+  it('safely merges duplicate entities while preserving history and local files', async () => {
     const now = new Date().toISOString();
     const survivingId = `surv_${Date.now()}`;
     const duplicateId = `dup_${Date.now()}`;
@@ -93,11 +101,11 @@ describe('Canonical Entities, Duplicates & Relationships', () => {
       updated_at: now
     };
 
-    dbService.saveMedia(surviving);
-    dbService.saveMedia(duplicate);
+    await dbService.saveMedia(surviving);
+    await dbService.saveMedia(duplicate);
 
     // Save history and local files for both
-    dbService.saveHistory({
+    await dbService.saveHistory({
       id: `h_surv_${Date.now()}`,
       media_id: survivingId,
       status: 'Finished',
@@ -105,7 +113,7 @@ describe('Canonical Entities, Duplicates & Relationships', () => {
       created_at: now
     });
 
-    dbService.saveHistory({
+    await dbService.saveHistory({
       id: `h_dup_${Date.now()}`,
       media_id: duplicateId,
       status: 'Finished',
@@ -113,7 +121,7 @@ describe('Canonical Entities, Duplicates & Relationships', () => {
       created_at: now
     });
 
-    dbService.saveLocalFile({
+    await dbService.saveLocalFile({
       id: `lf_dup_${Date.now()}`,
       media_id: duplicateId,
       path: 'C:\\Movies\\Premalu.mkv',
@@ -126,21 +134,21 @@ describe('Canonical Entities, Duplicates & Relationships', () => {
       file_type: 'movie'
     });
 
-    dbService.mergeMediaEntities(survivingId, duplicateId, {
+    await dbService.mergeMediaEntities(survivingId, duplicateId, {
       title: 'Premalu (2024)',
       manually_matched: true
     });
 
-    const mergedSurviving = dbService.getMediaById(survivingId);
-    const deletedDuplicate = dbService.getMediaById(duplicateId);
+    const mergedSurviving = await dbService.getMediaById(survivingId);
+    const deletedDuplicate = await dbService.getMediaById(duplicateId);
 
     expect(deletedDuplicate).toBeNull();
     expect(mergedSurviving?.title).toBe('Premalu (2024)');
 
-    const combinedHistory = dbService.getHistoryForMedia(survivingId);
+    const combinedHistory = await dbService.getHistoryForMedia(survivingId);
     expect(combinedHistory.length).toBe(2);
 
-    const combinedFiles = dbService.getLocalFilesForMedia(survivingId);
+    const combinedFiles = await dbService.getLocalFilesForMedia(survivingId);
     expect(combinedFiles.length).toBe(1);
     expect(combinedFiles[0].path).toBe('C:\\Movies\\Premalu.mkv');
   });

@@ -1,4 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { resetMockTauriDatabase } from './tauriSqlMock';
+
+vi.mock('@tauri-apps/plugin-sql', async () => {
+  const { loadTauriSqlMock } = await import('./tauriSqlMock');
+  return { default: { load: loadTauriSqlMock } };
+});
+
 import { NotionIntegrationService, notionService } from '../services/NotionIntegrationService';
 import { NotionSyncEngine } from '../services/NotionSyncEngine';
 import { dbService } from '../services/DatabaseService';
@@ -9,6 +16,7 @@ describe('NotionIntegrationService', () => {
 
   beforeEach(async () => {
     await dbService.init();
+    resetMockTauriDatabase();
   });
 
   describe('createMediaDatabaseInWorkspace', () => {
@@ -105,7 +113,7 @@ describe('NotionIntegrationService', () => {
       const olderTime = new Date(now.getTime() - 10000).toISOString();
       const newerTime = new Date(now.getTime()).toISOString();
 
-      dbService.saveMedia({
+      await dbService.saveMedia({
         id: mediaId,
         type: 'Film',
         title: 'Inception',
@@ -114,7 +122,7 @@ describe('NotionIntegrationService', () => {
         updated_at: newerTime
       });
 
-      dbService.saveHistory({
+      await dbService.saveHistory({
         id: 'hist_push_1',
         media_id: mediaId,
         status: 'Finished',
@@ -171,7 +179,7 @@ describe('NotionIntegrationService', () => {
       const mediaId = 'media_new_local_1';
       const now = new Date().toISOString();
 
-      dbService.saveMedia({
+      await dbService.saveMedia({
         id: mediaId,
         type: 'VideoGame',
         title: 'Elden Ring',
@@ -180,7 +188,7 @@ describe('NotionIntegrationService', () => {
         updated_at: now
       });
 
-      dbService.saveHistory({
+      await dbService.saveHistory({
         id: 'hist_new_local_1',
         media_id: mediaId,
         status: 'Currently',
@@ -209,7 +217,7 @@ describe('NotionIntegrationService', () => {
         })
       );
 
-      const updatedHistory = dbService.getHistoryForMedia(mediaId);
+      const updatedHistory = await dbService.getHistoryForMedia(mediaId);
       expect(updatedHistory[0].original_source_record_id).toBe('new_notion_page_999');
     });
   });
@@ -272,22 +280,22 @@ describe('NotionIntegrationService', () => {
       expect(result.totalRows).toBe(6);
       expect(result.importedHistoryCount).toBe(6);
 
-      const allMedia = dbService.getAllMedia();
+      const allMedia = await dbService.getAllMedia();
       const acMedia = allMedia.find(m => m.title === "Assassin's Creed IV: Black Flag");
       expect(acMedia).toBeDefined();
 
       if (acMedia) {
-        const historyList = dbService.getHistoryForMedia(acMedia.id);
+        const historyList = await dbService.getHistoryForMedia(acMedia.id);
         expect(historyList.length).toBe(2);
 
-        const state = dbService.getMediaState(acMedia.id);
+        const state = await dbService.getMediaState(acMedia.id);
         expect(state.current_status).toBe('Currently');
       }
 
       const paperMedia = allMedia.find(m => m.title === 'The Paper');
       expect(paperMedia).toBeDefined();
       if (paperMedia) {
-        const paperHistory = dbService.getHistoryForMedia(paperMedia.id);
+        const paperHistory = await dbService.getHistoryForMedia(paperMedia.id);
         expect(paperHistory[0].started_at).toBe('September 26, 2026');
         expect(paperHistory[0].completed_at).toBe('October 4, 2026');
         expect(paperHistory[0].context).toBe('Season 2');

@@ -12,7 +12,7 @@ export class TMDBProvider implements MetadataProvider {
     if (Object.keys(this.languageMap).length > 0) return;
     
     try {
-      const { url, headers } = this.getFetchConfig('/configuration/languages');
+      const { url, headers } = await this.getFetchConfig('/configuration/languages');
       const res = await fetch(url, { headers });
       if (res.ok) {
         const data = await res.json();
@@ -25,13 +25,13 @@ export class TMDBProvider implements MetadataProvider {
     }
   }
 
-  private getApiKey(): string | undefined {
-    const key = dbService.getSettings().tmdb_api_key;
+  private async getApiKey(): Promise<string | undefined> {
+    const key = (await dbService.getSettings()).tmdb_api_key;
     return key ? key.trim() : undefined;
   }
 
-  private getFetchConfig(endpoint: string, params: Record<string, string> = {}): { url: string; headers: Record<string, string> } {
-    const key = this.getApiKey() || '';
+  private async getFetchConfig(endpoint: string, params: Record<string, string> = {}): Promise<{ url: string; headers: Record<string, string> }> {
+    const key = (await this.getApiKey()) || '';
     const urlParams = new URLSearchParams(params);
     const headers: Record<string, string> = {
       'Accept': 'application/json'
@@ -80,7 +80,7 @@ export class TMDBProvider implements MetadataProvider {
     // Progressive search: start with full cleaned query, then progressively strip trailing words if 0 results returned
     for (let len = words.length; len >= 1; len--) {
       const currentQuery = words.slice(0, len).join(' ');
-      const { url, headers } = this.getFetchConfig(endpoint, {
+      const { url, headers } = await this.getFetchConfig(endpoint, {
         query: currentQuery,
         include_adult: 'false'
       });
@@ -117,7 +117,7 @@ export class TMDBProvider implements MetadataProvider {
   }
 
   public async searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]> {
-    const apiKey = this.getApiKey();
+    const apiKey = await this.getApiKey();
     if (!apiKey) {
       return this.getMockSearchResults(query, type);
     }
@@ -147,7 +147,7 @@ export class TMDBProvider implements MetadataProvider {
   }
 
   public async getRelatedMedia(externalId: string): Promise<MetadataSearchResult[]> {
-    const apiKey = this.getApiKey();
+    const apiKey = await this.getApiKey();
 
     let mediaType: 'movie' | 'tv' = 'movie';
     let tmdbId = externalId;
@@ -168,7 +168,7 @@ export class TMDBProvider implements MetadataProvider {
       const results: MetadataSearchResult[] = [];
 
       if (mediaType === 'movie') {
-        const { url, headers } = this.getFetchConfig(`/movie/${tmdbId}`, {
+        const { url, headers } = await this.getFetchConfig(`/movie/${tmdbId}`, {
           append_to_response: 'belongs_to_collection,recommendations'
         });
         const res = await fetch(url, { headers });
@@ -176,7 +176,7 @@ export class TMDBProvider implements MetadataProvider {
           const data = await res.json();
 
           if (data.belongs_to_collection && data.belongs_to_collection.id) {
-            const collectionFetch = this.getFetchConfig(`/collection/${data.belongs_to_collection.id}`);
+            const collectionFetch = await this.getFetchConfig(`/collection/${data.belongs_to_collection.id}`);
             const colRes = await fetch(collectionFetch.url, { headers: collectionFetch.headers });
             if (colRes.ok) {
               const colData = await colRes.json();
@@ -221,7 +221,7 @@ export class TMDBProvider implements MetadataProvider {
           }
         }
       } else {
-        const { url, headers } = this.getFetchConfig(`/tv/${tmdbId}/recommendations`);
+        const { url, headers } = await this.getFetchConfig(`/tv/${tmdbId}/recommendations`);
         const res = await fetch(url, { headers });
         if (res.ok) {
           const data = await res.json();
@@ -256,12 +256,12 @@ export class TMDBProvider implements MetadataProvider {
     return this.getMockRelatedMedia(externalId, mediaType);
   }
   
-  getMockRelatedMedia(externalId: string, mediaType: string): MetadataSearchResult[] | PromiseLike<MetadataSearchResult[]> {
-    throw new Error('Method not implemented.');
+  private getMockRelatedMedia(_externalId: string, _mediaType: string): MetadataSearchResult[] {
+    return [];
   }
 
   public async getBackdrops(externalId: string): Promise<string[]> {
-    const apiKey = this.getApiKey();
+    const apiKey = await this.getApiKey();
     if (!apiKey) return [];
 
     let mediaType: 'movie' | 'tv' = 'movie';
@@ -276,7 +276,7 @@ export class TMDBProvider implements MetadataProvider {
     }
     console.log(externalId);
     try {
-      const { url, headers } = this.getFetchConfig(`/${mediaType}/${tmdbId}/images`, {
+      const { url, headers } = await this.getFetchConfig(`/${mediaType}/${tmdbId}/images`, {
         include_image_language: 'en,null'
       });
       const res = await fetch(url, { headers });
@@ -291,7 +291,7 @@ export class TMDBProvider implements MetadataProvider {
   }
 
   public async getMediaDetails(externalId: string): Promise<Partial<Media>> {
-    const apiKey = this.getApiKey();
+    const apiKey = await this.getApiKey();
 
     let mediaType: 'movie' | 'tv' = 'movie';
     let tmdbId = externalId;
@@ -320,7 +320,7 @@ export class TMDBProvider implements MetadataProvider {
     }
 
     try {
-      const { url, headers } = this.getFetchConfig(`/${mediaType}/${tmdbId}`, {
+      const { url, headers } = await this.getFetchConfig(`/${mediaType}/${tmdbId}`, {
         append_to_response: 'credits,images',
         include_image_language: 'en,null'
       });
@@ -364,7 +364,7 @@ export class TMDBProvider implements MetadataProvider {
 
           let seasonEpisodes: Episode[] = [];
           try {
-            const seasonFetch = this.getFetchConfig(`/tv/${tmdbId}/season/${s.season_number}`);
+            const seasonFetch = await this.getFetchConfig(`/tv/${tmdbId}/season/${s.season_number}`);
             const seasonRes = await fetch(seasonFetch.url, { headers: seasonFetch.headers });
             if (seasonRes.ok) {
               const seasonData = await seasonRes.json();
