@@ -1,4 +1,5 @@
-import initSqlJs, { Database } from 'sql.js';
+//import initSqlJs, { Database } from 'sql.js';
+import DatabaseTauri from '@tauri-apps/plugin-sql';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import {
   Media,
@@ -14,34 +15,27 @@ import {
 import { STORAGE_KEYS } from '../constants/appConstants';
 
 export class DatabaseService {
-  private db: Database | null = null;
+  private db: DatabaseTauri | null = null;
   private initialized = false;
 
-  async init(): Promise<Database> {
+  async init(): Promise<DatabaseTauri> {
     if (this.db && this.initialized) {
       return this.db;
     }
 
-    const SQL = await initSqlJs({
-      locateFile: file => {
-        if (typeof window === 'undefined') {
-          return `./node_modules/sql.js/dist/${file}`;
-        }
-        return sqlWasmUrl;
-      }
-    });
-
-    const savedDb = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.SQLITE_DB) : null;
-    if (savedDb) {
-      const uInt8Array = new Uint8Array(
-        atob(savedDb)
-          .split('')
-          .map(char => char.charCodeAt(0))
-      );
-      this.db = new SQL.Database(uInt8Array);
-    } else {
-      this.db = new SQL.Database();
-    }
+    this.db = await DatabaseTauri.load('sqlite:test.db');
+  
+    // const savedDb = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.SQLITE_DB) : null;
+    // if (savedDb) {
+    //   const uInt8Array = new Uint8Array(
+    //     atob(savedDb)
+    //       .split('')
+    //       .map(char => char.charCodeAt(0))
+    //   );
+    //   this.db = new SQL.Database(uInt8Array);
+    // } else {
+    //   this.db = new SQL.Database();
+    // }
 
     this.runMigrations();
     this.save();
@@ -50,32 +44,33 @@ export class DatabaseService {
   }
 
   public save(): void {
-    if (!this.db) return;
-    const data = this.db.export();
-    const buffer = new Uint8Array(data);
-    let binary = '';
-    for (let i = 0; i < buffer.byteLength; i++) {
-      binary += String.fromCharCode(buffer[i]);
-    }
-    const base64 = btoa(binary);
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STORAGE_KEYS.SQLITE_DB, base64);
-    }
+    // if (!this.db) return;
+    // const data = this.db.export();
+    // const buffer = new Uint8Array(data);
+    // let binary = '';
+    // for (let i = 0; i < buffer.byteLength; i++) {
+    //   binary += String.fromCharCode(buffer[i]);
+    // }
+    // const base64 = btoa(binary);
+    // if (typeof localStorage !== 'undefined') {
+    //   localStorage.setItem(STORAGE_KEYS.SQLITE_DB, base64);
+    // }
+    console.warn("Save is not longer used");
   }
 
-  private addColumnIfNotExists(table: string, column: string, type: string): void {
+  private async addColumnIfNotExists(table: string, column: string, type: string): Promise<void> {
     if (!this.db) return;
     try {
-      this.db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
+      await this.db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
     } catch {
-      // Column already exists in SQLite table schema
+      console.warn("Column already exists");
     }
   }
 
-  private runMigrations(): void {
+  private async runMigrations(): Promise<void> {
     if (!this.db) return;
 
-    this.db.run(`
+    await this.db.execute(`
       CREATE TABLE IF NOT EXISTS media (
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL,
@@ -195,7 +190,7 @@ export class DatabaseService {
     this.addColumnIfNotExists('media_history', 'updated_at', 'TEXT');
 
     try {
-      this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_external_ids_provider_ext ON external_ids(provider, external_id);');
+      await this.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_external_ids_provider_ext ON external_ids(provider, external_id);');
     } catch {
       // Index already exists
     }
@@ -206,23 +201,22 @@ export class DatabaseService {
   // ==========================================
 
   /** Retrieves all media items sorted alphabetically by title. */
-  public getAllMedia(): Media[] {
+  public async getAllMedia(): Promise<Media[]> {
     if (!this.db) return [];
-    const res = this.db.exec('SELECT * FROM media ORDER BY title ASC');
+    const res = await this.db.select<Media[]>('SELECT * FROM media ORDER BY title ASC');
     if (!res.length) return [];
-    return res[0].values.map(row => this.mapMediaRow(res[0].columns, row));
+    // return res[0].values.map(row => this.mapMediaRow(res[0].columns, row));
+    return res;
   }
 
-  public getMediaById(id: string): Media | null {
+  public async getMediaById(id: string): Promise<Media | null> {
     if (!this.db) return null;
-    const stmt = this.db.prepare('SELECT * FROM media WHERE id = :id');
-    stmt.bind({ ':id': id });
-    if (stmt.step()) {
-      const row = stmt.getAsObject();
-      stmt.free();
-      return this.mapMediaObject(row);
+    const res = await this.db.select<Media[]>('SELECT * FROM media WHERE id = $1', [id]);
+    
+    if (res.length > 0) {
+      const row = res[0];
+      return row;
     }
-    stmt.free();
     return null;
   }
 
@@ -287,9 +281,9 @@ export class DatabaseService {
     return this.mapMediaObject(rowObj);
   }
 
-  public saveMedia(media: Media): void {
+  public async saveMedia(media: Media): Promise<void> {
     if (!this.db) return;
-    this.db.run(
+    await this.db.execute(
       `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at, accent_color, manually_matched)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
@@ -340,7 +334,7 @@ export class DatabaseService {
     );
 
     if (media.external_ids) {
-      this.db.run('DELETE FROM external_ids WHERE media_id = ?', [media.id]);
+      await this.db.execute('DELETE FROM external_ids WHERE media_id = ?', [media.id]);
       for (const ext of media.external_ids) {
         this.saveExternalId(ext);
       }
@@ -348,23 +342,21 @@ export class DatabaseService {
     this.save();
   }
 
-  public getMediaByExternalId(provider: string, external_id: string): Media | null {
+  public async getMediaByExternalId(provider: string, external_id: string): Promise<Media | null> {
     if (!this.db) return null;
-    const stmt = this.db.prepare('SELECT media_id FROM external_ids WHERE provider = :provider AND external_id = :external_id');
-    stmt.bind({ ':provider': provider, ':external_id': external_id });
-    if (stmt.step()) {
-      const row = stmt.getAsObject();
-      stmt.free();
+    const res = await this.db.select<ExternalID[]>('SELECT media_id FROM external_ids WHERE provider = $provider AND external_id = $external_id', [provider,external_id]);
+    
+    if (res.length > 0) {
+      const row = res[0];
       if (row.media_id) {
         return this.getMediaById(row.media_id as string);
       }
     }
-    stmt.free();
     return null;
   }
 
-  public findSuspectedDuplicates(title: string, release_year?: number, excludeMediaId?: string): Media[] {
-    const allMedia = this.getAllMedia();
+  public async findSuspectedDuplicates(title: string, release_year?: number, excludeMediaId?: string): Promise<Media[]> {
+    const allMedia = await this.getAllMedia();
     const cleanTitle = title.toLowerCase().replace(/[\W_]+/g, ' ').trim();
 
     return allMedia.filter(m => {
@@ -382,28 +374,28 @@ export class DatabaseService {
     });
   }
 
-  public mergeMediaEntities(survivingId: string, duplicateId: string, overrides?: Partial<Media>): void {
+  public async mergeMediaEntities(survivingId: string, duplicateId: string, overrides?: Partial<Media>): Promise<void> {
     if (!this.db || survivingId === duplicateId) return;
 
-    this.db.run('BEGIN TRANSACTION;');
+    await this.db.execute('BEGIN TRANSACTION;');
     try {
       // 1. Relink local files
-      this.db.run('UPDATE local_file SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+      await this.db.execute('UPDATE local_file SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
 
       // 2. Relink history
-      this.db.run('UPDATE media_history SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+      await this.db.execute('UPDATE media_history SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
 
       // 3. Relink availability
-      this.db.run('UPDATE availability SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+      await this.db.execute('UPDATE availability SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
 
       // 4. Relink wishlist
-      this.db.run('UPDATE wishlist SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+      await this.db.execute('UPDATE wishlist SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
 
       // 5. Relink notion raw records
-      this.db.run('UPDATE notion_raw_records SET parsed_media_id = ? WHERE parsed_media_id = ?', [survivingId, duplicateId]);
+      await this.db.execute('UPDATE notion_raw_records SET parsed_media_id = ? WHERE parsed_media_id = ?', [survivingId, duplicateId]);
 
       // 6. Handle external_ids reassignments without duplicate provider/external_id conflicts
-      this.db.run(
+      await this.db.execute(
         `DELETE FROM external_ids
          WHERE media_id = ?
          AND provider || ':' || external_id IN (
@@ -411,14 +403,14 @@ export class DatabaseService {
          )`,
         [duplicateId, survivingId]
       );
-      this.db.run('UPDATE external_ids SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+      await this.db.execute('UPDATE external_ids SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
 
       // 7. Delete duplicate media row
-      this.db.run('DELETE FROM media WHERE id = ?', [duplicateId]);
+      await this.db.execute('DELETE FROM media WHERE id = ?', [duplicateId]);
 
-      this.db.run('COMMIT;');
+      await this.db.execute('COMMIT;');
     } catch (err) {
-      this.db.run('ROLLBACK;');
+      await this.db.execute('ROLLBACK;');
       console.error('Failed to merge media entities:', err);
       throw err;
     }
@@ -438,20 +430,20 @@ export class DatabaseService {
     }
   }
 
-  public deleteMedia(id: string): void {
+  public async deleteMedia(id: string): Promise<void> {
     if (!this.db) return;
-    this.db.run('DELETE FROM media WHERE id = ?', [id]);
-    this.db.run('DELETE FROM external_ids WHERE media_id = ?', [id]);
-    this.db.run('DELETE FROM media_history WHERE media_id = ?', [id]);
-    this.db.run('UPDATE local_file SET media_id = NULL WHERE media_id = ?', [id]);
+    await this.db.execute('DELETE FROM media WHERE id = ?', [id]);
+    await this.db.execute('DELETE FROM external_ids WHERE media_id = ?', [id]);
+    await this.db.execute('DELETE FROM media_history WHERE media_id = ?', [id]);
+    await this.db.execute('UPDATE local_file SET media_id = NULL WHERE media_id = ?', [id]);
     this.save();
   }
 
-  public updateMediaArtwork(media_id: string, artwork: {poster?: string; backdrop?:
-    string; logo?: string}): void{
+  public async updateMediaArtwork(media_id: string, artwork: {poster?: string; backdrop?:
+    string; logo?: string}): Promise<void>{
       if(!this.db) return;
       const now = new Date().toISOString();
-      this.db.run(
+      await this.db.execute(
         `UPDATE media SET
           poster = COALESCE(?, poster),
           backdrop = COALESCE(?, backdrop),
@@ -470,13 +462,11 @@ export class DatabaseService {
   // ==========================================
 
   /** Retrieves linked provider external IDs for a media item. */
-  public getExternalIdsForMedia(media_id: string): ExternalID[] {
+  public async getExternalIdsForMedia(media_id: string): Promise<ExternalID[]> {
     if (!this.db) return [];
-    const stmt = this.db.prepare('SELECT * FROM external_ids WHERE media_id = :media_id');
-    stmt.bind({ ':media_id': media_id });
+    const res = await this.db.select<ExternalID[]>('SELECT * FROM external_ids WHERE media_id = $media_id', [media_id]);
     const results: ExternalID[] = [];
-    while (stmt.step()) {
-      const row = stmt.getAsObject();
+    for (const row of res) {
       results.push({
         id: row.id as string,
         media_id: row.media_id as string,
@@ -484,13 +474,12 @@ export class DatabaseService {
         external_id: row.external_id as string
       });
     }
-    stmt.free();
     return results;
   }
 
-  public saveExternalId(ext: ExternalID): void {
+  public async saveExternalId(ext: ExternalID): Promise<void> {
     if (!this.db) return;
-    this.db.run(
+    await this.db.execute(
       `INSERT INTO external_ids (id, media_id, provider, external_id)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET provider=excluded.provider, external_id=excluded.external_id`,
@@ -503,13 +492,11 @@ export class DatabaseService {
   // ==========================================
 
   /** Retrieves interaction logs for a specific media item sorted newest first. */
-  public getHistoryForMedia(media_id: string): MediaHistory[] {
+  public async getHistoryForMedia(media_id: string): Promise<MediaHistory[]> {
     if (!this.db) return [];
-    const stmt = this.db.prepare('SELECT * FROM media_history WHERE media_id = :media_id ORDER BY created_at DESC');
-    stmt.bind({ ':media_id': media_id });
+    const res = await this.db.select<MediaHistory[]>('SELECT * FROM media_history WHERE media_id = $media_id ORDER BY created_at DESC',[media_id]);
     const results: MediaHistory[] = [];
-    while (stmt.step()) {
-      const row = stmt.getAsObject();
+    for (const row of res) {
       results.push({
         id: row.id as string,
         media_id: row.media_id as string,
@@ -524,8 +511,8 @@ export class DatabaseService {
         created_at: row.created_at as string,
         updated_at: (row.updated_at as string) || (row.created_at as string)
       });
+
     }
-    stmt.free();
     return results;
   }
 
@@ -552,7 +539,7 @@ export class DatabaseService {
   public saveHistory(history: MediaHistory): void {
     if (!this.db) return;
     const updatedAt = history.updated_at || new Date().toISOString();
-    this.db.run(
+    await this.db.execute(
       `INSERT INTO media_history (id, media_id, started_at, completed_at, status, score, thoughts, context, source, original_source_record_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
@@ -716,13 +703,13 @@ export class DatabaseService {
 
   public linkLocalFileToMedia(file_id: string, media_id: string): void {
     if (!this.db) return;
-    this.db.run('UPDATE local_file SET media_id = ? WHERE id = ?', [media_id, file_id]);
+    await this.db.execute('UPDATE local_file SET media_id = ? WHERE id = ?', [media_id, file_id]);
     this.save();
   }
 
   public saveLocalFile(file: LocalFile): void {
     if (!this.db) return;
-    this.db.run(
+    await this.db.execute(
       `INSERT INTO local_file (id, media_id, path, filename, extension, size, discovered_at, last_seen_at, file_exists, file_type, launch_info)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
@@ -776,7 +763,7 @@ export class DatabaseService {
 
   public saveAvailability(avail: Availability): void {
     if (!this.db) return;
-    this.db.run(
+    await this.db.execute(
       `INSERT INTO availability (id, media_id, provider, country, availability_type, url, last_checked)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
@@ -823,7 +810,7 @@ export class DatabaseService {
 
   public saveWishlist(item: Wishlist): void {
     if (!this.db) return;
-    this.db.run(
+    await this.db.execute(
       `INSERT INTO wishlist (id, media_id, title, type, source, external_url, notes, added_at, target_release_date, poster)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
@@ -857,7 +844,7 @@ export class DatabaseService {
   /** Persists original un-altered Notion CSV row records. */
   public saveNotionRawRecord(record: NotionRawRecord): void {
     if (!this.db) return;
-    this.db.run(
+    await this.db.execute(
       `INSERT INTO notion_raw_records (id, name_raw, type_raw, watched_on_raw, score_raw, status_raw, language_raw, thoughts_raw, publisher_raw, imported_at, parsed_media_id, parsed_history_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
@@ -926,7 +913,7 @@ export class DatabaseService {
   public saveSetting(key: keyof AppSettings, value: any): void {
     if (!this.db) return;
     const strVal = typeof value === 'string' ? value : JSON.stringify(value);
-    this.db.run(
+    await this.db.execute(
       `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
       [key, strVal]
     );
