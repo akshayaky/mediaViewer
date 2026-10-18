@@ -7,6 +7,7 @@ import { dbService } from '../services/DatabaseService';
 import './MediaDetailView.css';
 import { MetadataSearchResult } from '../providers/interfaces';
 import { FixMatchModal } from '../components/FixMatchModal';
+import { BackdropPickerModal } from '../components/BackdropPickerModal';
 import { MergeDuplicateModal } from '../components/MergeDuplicateModal';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
@@ -41,7 +42,8 @@ import {
   Sparkles,
   X,
   Check,
-  Info
+  Info,
+  Wallpaper
 } from 'lucide-react';
 
 interface MediaDetailViewProps {
@@ -101,6 +103,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   // Duplicates & Merge modal state
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [mergePair, setMergePair] = useState<{ mediaA: Media; mediaB: Media } | null>(null);
+  const [showBackdropPicker, setShowBackdropPicker] = useState(false);
 
   // Ephemeral preview modal for related items
   const [previewRelatedItem, setPreviewRelatedItem] = useState<MetadataSearchResult | null>(null);
@@ -303,6 +306,16 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 >
                   <LinkIcon className="w-4 h-4 text-sky-400 shrink-0" />
                   <span>Fix Match / Change Metadata</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    setShowBackdropPicker(true);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-rose-950/50 hover:text-rose-300 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736]"
+                >
+                  <Wallpaper className="w-4 h-4 text-sky-400 shrink-0" />
+                  <span>Change Background Image</span>
                 </button>
               </div>
             )}
@@ -972,6 +985,18 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           onRequestMerge={(mediaA, mediaB) => {
             setMergePair({ mediaA, mediaB });
             setShowMergeModal(true);
+          }}
+        />
+      )}
+
+      {/* Backdrop Picker Modal */}
+      {showBackdropPicker && (
+        <BackdropPickerModal
+          media={currentMedia}
+          isOpen={showBackdropPicker}
+          onClose={() => setShowBackdropPicker(false)}
+          onBackgroundUpdated={(updated) => {
+            updateCurrentMedia(updated);
           }}
         />
       )}

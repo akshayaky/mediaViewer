@@ -255,9 +255,39 @@ export class TMDBProvider implements MetadataProvider {
 
     return this.getMockRelatedMedia(externalId, mediaType);
   }
+  
+  getMockRelatedMedia(externalId: string, mediaType: string): MetadataSearchResult[] | PromiseLike<MetadataSearchResult[]> {
+    throw new Error('Method not implemented.');
+  }
 
-  private getMockRelatedMedia(_externalId: string, _mediaType: 'movie' | 'tv'): MetadataSearchResult[] {
-    return [];
+  public async getBackdrops(externalId: string): Promise<string[]> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) return [];
+
+    let mediaType: 'movie' | 'tv' = 'movie';
+    let tmdbId = externalId;
+
+    if (externalId.startsWith('movie:')) {
+      mediaType = 'movie';
+      tmdbId = externalId.replace('movie:', '');
+    } else if (externalId.startsWith('tv:')) {
+      mediaType = 'tv';
+      tmdbId = externalId.replace('tv:', '');
+    }
+    console.log(externalId);
+    try {
+      const { url, headers } = this.getFetchConfig(`/${mediaType}/${tmdbId}/images`, {
+        include_image_language: 'en,null'
+      });
+      const res = await fetch(url, { headers });
+      if (!res.ok) return [];
+
+      const data = await res.json();
+      return (data.backdrops || []).map((b: any) => `${this.imageBaseUrl}/w1280${b.file_path}`);
+    } catch (err) {
+      console.error('TMDB getBackdrops failed:', err);
+      return [];
+    }
   }
 
   public async getMediaDetails(externalId: string): Promise<Partial<Media>> {

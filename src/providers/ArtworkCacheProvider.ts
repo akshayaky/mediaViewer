@@ -109,6 +109,16 @@ export class ArtworkCacheProvider implements ArtworkProvider {
     // Priority 1: Check local cached artwork (excluding placeholders)
     const cached = this.getCachedArtwork(cacheKey);
     if (cached && cached.source !== 'placeholder' && (cached.poster || cached.backdrop || cached.logo)) {
+      // IMPORTANT: If the media object itself has a more recent backdrop (e.g. manually changed), 
+      // and it differs from the cache, prioritize the media object to avoid "stale image" bug.
+      if (media.backdrop && cached.backdrop && media.backdrop !== cached.backdrop) {
+        const updatedResult: ArtworkResult = {
+          ...cached,
+          backdrop: media.backdrop
+        };
+        this.setCachedArtwork(cacheKey, updatedResult, cached.source);
+        return updatedResult;
+      }
       return cached;
     }
 
