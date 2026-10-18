@@ -67,6 +67,11 @@ export const SettingsView: React.FC = () => {
     token: notionToken,
     isOAuth,
     oauthWorkspace,
+    oauthClientId,
+    oauthRedirectUri,
+    oauthBackendUrl,
+    oauthDevClientSecret,
+    saveOAuthCredentials,
     databaseId: notionDbId,
     databases,
     schema,
@@ -91,6 +96,11 @@ export const SettingsView: React.FC = () => {
 
   const [tokenInput, setTokenInput] = useState(notionToken);
   const [selectedDbId, setSelectedDbId] = useState(notionDbId);
+  const [clientIdInput, setClientIdInput] = useState(oauthClientId);
+  const [redirectUriInput, setRedirectUriInput] = useState(oauthRedirectUri);
+  const [backendUrlInput, setBackendUrlInput] = useState(oauthBackendUrl);
+  const [devSecretInput, setDevSecretInput] = useState(oauthDevClientSecret);
+  const [oauthError, setOauthError] = useState('');
 
   useEffect(() => {
     setSettings(dbService.getSettings());
@@ -99,7 +109,40 @@ export const SettingsView: React.FC = () => {
   useEffect(() => {
     setTokenInput(notionToken);
     setSelectedDbId(notionDbId);
-  }, [notionToken, notionDbId]);
+    setClientIdInput(oauthClientId);
+    setRedirectUriInput(oauthRedirectUri);
+    setBackendUrlInput(oauthBackendUrl);
+    setDevSecretInput(oauthDevClientSecret);
+  }, [notionToken, notionDbId, oauthClientId, oauthRedirectUri, oauthBackendUrl, oauthDevClientSecret]);
+
+  const handleSaveOAuthSetup = (e: React.FormEvent) => {
+    e.preventDefault();
+    setOauthError('');
+    if (!clientIdInput.trim()) {
+      setOauthError('Notion Client ID is required for OAuth authorization.');
+      return;
+    }
+    if (!redirectUriInput.trim()) {
+      setOauthError('Redirect URI matching your Notion Developer Portal setup is required.');
+      return;
+    }
+    saveOAuthCredentials(clientIdInput, redirectUriInput, backendUrlInput, devSecretInput);
+    setSavedMessage('Notion OAuth credentials saved.');
+    setTimeout(() => setSavedMessage(''), 3000);
+  };
+
+  const handleConnectClick = async () => {
+    setOauthError('');
+    if (!clientIdInput.trim() || !redirectUriInput.trim()) {
+      setOauthError('Please configure and save your Notion Client ID and Redirect URI before connecting.');
+      return;
+    }
+    try {
+      await connectNotionOAuth();
+    } catch (err: any) {
+      setOauthError(err.message || String(err));
+    }
+  };
 
   const handleSaveFolders = (e: React.FormEvent) => {
     e.preventDefault();
@@ -323,30 +366,89 @@ export const SettingsView: React.FC = () => {
         <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center space-x-2">
             <Key className="w-4 h-4 text-purple-400" />
-            <span>1. Connect Notion Workspace (OAuth or Developer Legacy Token)</span>
+            <span>1. Connect Notion Workspace (OAuth Credentials or Developer Legacy Token)</span>
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-[#13151f] p-4 rounded-xl border border-[#232736] space-y-3 flex flex-col justify-between">
-              <div>
-                <h4 className="text-xs font-bold text-purple-300">Recommended: Notion OAuth Connection</h4>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Connect securely via official Notion OAuth authorization code flow without exposing client secrets.
+            {/* OAuth Credentials Form */}
+            <form onSubmit={handleSaveOAuthSetup} className="bg-[#13151f] p-4 rounded-xl border border-[#232736] space-y-3 flex flex-col justify-between">
+              <div className="space-y-2 text-xs">
+                <h4 className="font-bold text-purple-300">Recommended: Notion OAuth Setup</h4>
+                <p className="text-[11px] text-gray-400">
+                  Configure your Notion Public Integration credentials from <a href="https://www.notion.so/my-integrations" target="_blank" rel="noreferrer" className="text-purple-400 underline">Notion Developer Portal</a>.
                 </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => connectNotionOAuth()}
-                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center space-x-2 transition-all shadow-md cursor-pointer"
-              >
-                <ExternalLink className="w-4 h-4" />
-                <span>Connect via Notion OAuth</span>
-              </button>
-            </div>
 
+                <div>
+                  <label className="text-[11px] text-gray-300 font-bold block mb-0.5">Notion Client ID *</label>
+                  <input
+                    type="text"
+                    value={clientIdInput}
+                    onChange={e => setClientIdInput(e.target.value)}
+                    placeholder="e.g. 177678f2-xxxx-xxxx-xxxx"
+                    className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-gray-300 font-bold block mb-0.5">Redirect URI *</label>
+                  <input
+                    type="text"
+                    value={redirectUriInput}
+                    onChange={e => setRedirectUriInput(e.target.value)}
+                    placeholder="e.g. https://your-domain.com/oauth/notion/callback"
+                    className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-gray-300 font-bold block mb-0.5">Backend Token Exchange URL (Production Proxy)</label>
+                  <input
+                    type="text"
+                    value={backendUrlInput}
+                    onChange={e => setBackendUrlInput(e.target.value)}
+                    placeholder="e.g. https://api.yourbackend.com/notion/oauth/token"
+                    className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-amber-400 font-bold block mb-0.5">Dev Mode Client Secret (Local Dev Only)</label>
+                  <input
+                    type="password"
+                    value={devSecretInput}
+                    onChange={e => setDevSecretInput(e.target.value)}
+                    placeholder="secret_... (Use for local testing only)"
+                    className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-[#232736]">
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="submit"
+                    className="bg-[#242838] hover:bg-[#2d3247] text-white font-semibold text-xs px-3.5 py-2 rounded-xl border border-[#3b4059] transition-all cursor-pointer"
+                  >
+                    Save OAuth Credentials
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleConnectClick}
+                    disabled={!clientIdInput.trim() || !redirectUriInput.trim()}
+                    className="flex-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-bold text-xs py-2 rounded-xl flex items-center justify-center space-x-1.5 transition-all shadow-md cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Connect via Notion OAuth</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Developer Fallback Form */}
             <div className="bg-[#13151f] p-4 rounded-xl border border-[#232736] space-y-3 flex flex-col justify-between">
               <div>
-                <h4 className="text-xs font-bold text-gray-300">Developer Fallback: Integration Token</h4>
+                <h4 className="text-xs font-bold text-gray-300">Developer Fallback: Internal Integration Token</h4>
                 <p className="text-[11px] text-gray-400 mt-1">
                   Optional legacy fallback for internal tokens (`secret_...`). Preserves existing user setups.
                 </p>
@@ -369,6 +471,13 @@ export const SettingsView: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {oauthError && (
+            <div className="bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs p-3 rounded-xl flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{oauthError}</span>
+            </div>
+          )}
         </div>
 
         {/* 2. Select Database OR Create New Database in Notion */}

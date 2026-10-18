@@ -11,6 +11,10 @@ export function useNotionSync() {
   const [token, setToken] = useState<string>('');
   const [isOAuth, setIsOAuth] = useState<boolean>(false);
   const [oauthWorkspace, setOauthWorkspace] = useState<string>('');
+  const [oauthClientId, setOauthClientId] = useState<string>('');
+  const [oauthRedirectUri, setOauthRedirectUri] = useState<string>('');
+  const [oauthBackendUrl, setOauthBackendUrl] = useState<string>('');
+  const [oauthDevClientSecret, setOauthDevClientSecret] = useState<string>('');
   const [databaseId, setDatabaseId] = useState<string>('');
   const [databases, setDatabases] = useState<NotionDatabase[]>([]);
   const [schema, setSchema] = useState<Record<string, NotionPropertySchema>>({});
@@ -39,6 +43,10 @@ export function useNotionSync() {
     setToken(active.token);
     setIsOAuth(active.isOAuth);
     setOauthWorkspace(oauthData?.workspace_name || '');
+    setOauthClientId(settings.notion_oauth_client_id || '');
+    setOauthRedirectUri(settings.notion_oauth_redirect_uri || '');
+    setOauthBackendUrl(settings.notion_oauth_backend_url || '');
+    setOauthDevClientSecret(settings.notion_oauth_dev_client_secret || '');
     setDatabaseId(savedDbId);
     setMapping(savedMapping);
     setLastSyncTime(settings.notion_last_sync_time || '');
@@ -96,11 +104,24 @@ export function useNotionSync() {
     }
   };
 
-  const connectNotionOAuth = async (clientId?: string, redirectUri?: string) => {
-    const targetClientId = clientId || 'notion_app_client_id';
-    const targetRedirectUri = redirectUri || 'https://localhost/oauth/notion/callback';
+  const saveOAuthCredentials = (clientId: string, redirectUri: string, backendUrl: string, devSecret?: string) => {
+    setOauthClientId(clientId.trim());
+    setOauthRedirectUri(redirectUri.trim());
+    setOauthBackendUrl(backendUrl.trim());
+    setOauthDevClientSecret(devSecret ? devSecret.trim() : '');
 
-    const { url } = notionOAuthService.generateAuthUrl(targetClientId, targetRedirectUri);
+    dbService.saveSetting('notion_oauth_client_id', clientId.trim());
+    dbService.saveSetting('notion_oauth_redirect_uri', redirectUri.trim());
+    dbService.saveSetting('notion_oauth_backend_url', backendUrl.trim());
+    dbService.saveSetting('notion_oauth_dev_client_secret', devSecret ? devSecret.trim() : '');
+  };
+
+  const connectNotionOAuth = async () => {
+    if (!oauthClientId || !oauthRedirectUri) {
+      throw new Error('Please enter a valid Notion Client ID and Redirect URI in OAuth settings first.');
+    }
+
+    const { url } = notionOAuthService.generateAuthUrl(oauthClientId.trim(), oauthRedirectUri.trim());
 
     try {
       if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
@@ -212,6 +233,11 @@ export function useNotionSync() {
     token,
     isOAuth,
     oauthWorkspace,
+    oauthClientId,
+    oauthRedirectUri,
+    oauthBackendUrl,
+    oauthDevClientSecret,
+    saveOAuthCredentials,
     databaseId,
     databases,
     schema,

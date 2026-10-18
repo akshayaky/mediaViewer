@@ -18,10 +18,18 @@ describe('Notion OAuth Service & Robust Bidirectional Sync Engine', () => {
   });
 
   describe('OAuth Flow & Token Persistence', () => {
-    it('generates valid OAuth authorization URL with CSRF state token', () => {
-      const { url, state } = notionOAuthService.generateAuthUrl('test_client_id', 'https://localhost/callback');
+    it('throws error when generating OAuth URL without Client ID or Redirect URI', () => {
+      expect(() => notionOAuthService.generateAuthUrl('', 'https://localhost/callback'))
+        .toThrow('Missing Notion Client ID');
+      expect(() => notionOAuthService.generateAuthUrl('test_client_id', ''))
+        .toThrow('Missing Redirect URI');
+    });
+
+    it('generates valid OAuth authorization URL with CSRF state token when configured', () => {
+      const { url, state } = notionOAuthService.generateAuthUrl('valid_client_123', 'https://my-app.com/oauth/callback');
       expect(url).toContain('https://api.notion.com/v1/oauth/authorize');
-      expect(url).toContain('client_id=test_client_id');
+      expect(url).toContain('client_id=valid_client_123');
+      expect(url).toContain('redirect_uri=https%3A%2F%2Fmy-app.com%2Foauth%2Fcallback');
       expect(url).toContain(`state=${state}`);
       expect(state.length).toBeGreaterThan(10);
     });

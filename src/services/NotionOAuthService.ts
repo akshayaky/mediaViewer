@@ -25,6 +25,13 @@ export class NotionOAuthService {
    * Generates a random CSRF state token and constructs the Notion OAuth Authorization URL.
    */
   public generateAuthUrl(clientId: string, redirectUri: string): { url: string; state: string } {
+    if (!clientId || !clientId.trim()) {
+      throw new Error('Missing Notion Client ID for OAuth authorization.');
+    }
+    if (!redirectUri || !redirectUri.trim()) {
+      throw new Error('Missing Redirect URI for OAuth authorization.');
+    }
+
     const state = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(NotionOAuthService.STORAGE_KEY_STATE, state);
@@ -32,10 +39,10 @@ export class NotionOAuthService {
     dbService.saveSetting('notion_oauth_state' as any, state);
 
     const params = new URLSearchParams({
-      client_id: clientId,
+      client_id: clientId.trim(),
       response_type: 'code',
       owner: 'user',
-      redirect_uri: redirectUri,
+      redirect_uri: redirectUri.trim(),
       state
     });
 

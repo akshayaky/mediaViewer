@@ -159,5 +159,9 @@ export interface AppSettings {
   notion_field_mapping?: any;
   notion_last_sync_time?: string;
   notion_sync_errors?: string[];
+  notion_oauth_client_id?: string;
+  notion_oauth_redirect_uri?: string;
+  notion_oauth_backend_url?: string;
+  notion_oauth_dev_client_secret?: string;
   streaming_preferences?: string[];
 }
