@@ -19,7 +19,7 @@
 
 .mdv-page {
   /* Sizes */
-  --mdv-hero-height: 700px;
+  --mdv-hero-height: 1200px;
   --mdv-max-width: 80rem;
 
   /* Always-dark UI (pills, genre tags, glass buttons) - same in both tones */
@@ -134,7 +134,8 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.45;
+  object-position: top center;
+  opacity: 0.80;
 }
 
 .mdv-backdrop-fallback {

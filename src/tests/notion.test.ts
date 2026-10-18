@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NotionIntegrationService } from '../services/NotionIntegrationService';
 import { dbService } from '../services/DatabaseService';
 
@@ -7,6 +7,20 @@ describe('NotionIntegrationService', () => {
 
   beforeEach(async () => {
     await dbService.init();
+  });
+
+  describe('createMediaDatabaseInWorkspace', () => {
+    it('does not attempt creation without an accessible parent page', async () => {
+      const testService = new NotionIntegrationService();
+      const fetchNotionApi = vi.spyOn(testService as any, 'fetchNotionApi')
+        .mockResolvedValue({ results: [] });
+
+      await expect(testService.createMediaDatabaseInWorkspace('token'))
+        .rejects.toThrow('No accessible Notion page found');
+
+      expect(fetchNotionApi).toHaveBeenCalledTimes(1);
+      expect(fetchNotionApi).toHaveBeenCalledWith('/search', 'token', expect.any(Object));
+    });
   });
 
   describe('parseTitle', () => {

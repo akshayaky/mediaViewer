@@ -17,7 +17,7 @@ export class NotionIntegrationService implements NotionProvider {
     const url = `https://api.notion.com/v1${endpoint}`;
     const headers = {
       'Authorization': `Bearer ${token}`,
-      'Notion-Version': '2022-06-08',
+      'Notion-Version': "2022-06-28",
       'Content-Type': 'application/json',
       ...(options.headers || {})
     };
@@ -45,30 +45,25 @@ export class NotionIntegrationService implements NotionProvider {
   public async createMediaDatabaseInWorkspace(token: string, parentPageId?: string): Promise<NotionDatabase> {
     if (!token) throw new Error('Notion token is required to create database.');
 
-    let parentObj: any = { type: 'workspace', workspace: true };
+    let resolvedParentPageId = parentPageId;
 
-    if (parentPageId) {
-      parentObj = { type: 'page_id', page_id: parentPageId };
-    } else {
-      try {
-        const pagesSearch = await this.fetchNotionApi('/search', token, {
-          method: 'POST',
-          body: JSON.stringify({
-            filter: { value: 'page', property: 'object' },
-            page_size: 1
-          })
-        });
+    if (!resolvedParentPageId) {
+      const pagesSearch = await this.fetchNotionApi('/search', token, {
+        method: 'POST',
+        body: JSON.stringify({
+          filter: { value: 'page', property: 'object' },
+          page_size: 1
+        })
+      });
 
-        if (pagesSearch.results && pagesSearch.results.length > 0) {
-          parentObj = { type: 'page_id', page_id: pagesSearch.results[0].id };
-        }
-      } catch {
-        // Fallback to workspace parent
+      resolvedParentPageId = pagesSearch.results?.[0]?.id;
+      if (!resolvedParentPageId) {
+        throw new Error('No accessible Notion page found. Share a page with your integration, then try creating the database again.');
       }
     }
 
     const payload = {
-      parent: parentObj,
+      parent: { type: 'page_id', page_id: resolvedParentPageId },
       title: [
         {
           type: 'text',
