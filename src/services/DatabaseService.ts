@@ -653,7 +653,7 @@ export class DatabaseService {
          launch_info=excluded.launch_info`,
       [
         file.id,
-        file.media_id || '',
+        file.media_id || null,
         file.path,
         file.filename,
         file.extension,
