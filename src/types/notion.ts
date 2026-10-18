@@ -36,6 +36,17 @@ export interface NotionPage {
   properties: Record<string, NotionPagePropertyValue>;
 }
 
+export interface NotionSyncStateRecord {
+  pageId: string;
+  historyId: string;
+  mediaId: string;
+  lastSyncedAt: string;
+  notionLastEditedAt: string;
+  appLastEditedAt: string;
+  syncedFieldsSnapshot: Record<string, any>;
+  archivedRemote?: boolean;
+}
+
 export interface NotionSyncConflict {
   id: string;
   pageId: string;

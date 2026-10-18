@@ -65,6 +65,8 @@ export const SettingsView: React.FC = () => {
 
   const {
     token: notionToken,
+    isOAuth,
+    oauthWorkspace,
     databaseId: notionDbId,
     databases,
     schema,
@@ -79,6 +81,7 @@ export const SettingsView: React.FC = () => {
     lastSyncTime,
     syncErrors,
     connectNotionOAuth,
+    disconnectNotion,
     createDatabaseInNotion,
     saveNotionConfig,
     triggerImportFromApi,
@@ -295,10 +298,19 @@ export const SettingsView: React.FC = () => {
 
           <div className="flex items-center space-x-2">
             {notionToken ? (
-              <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-xs px-3 py-1 rounded-full font-bold flex items-center space-x-1.5">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Notion Connected</span>
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-xs px-3 py-1 rounded-full font-bold flex items-center space-x-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>{isOAuth ? `OAuth Connected (${oauthWorkspace || 'Workspace'})` : 'Legacy Token Connected'}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={disconnectNotion}
+                  className="bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 text-[11px] font-bold px-2.5 py-1 rounded-full transition-all cursor-pointer"
+                >
+                  Disconnect
+                </button>
+              </div>
             ) : (
               <span className="bg-amber-950 text-amber-400 border border-amber-500/40 text-xs px-3 py-1 rounded-full font-semibold">
                 Disconnected
@@ -311,35 +323,50 @@ export const SettingsView: React.FC = () => {
         <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center space-x-2">
             <Key className="w-4 h-4 text-purple-400" />
-            <span>1. Connect Notion Workspace</span>
+            <span>1. Connect Notion Workspace (OAuth or Developer Legacy Token)</span>
           </h3>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <button
-              type="button"
-              onClick={connectNotionOAuth}
-              className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl flex items-center justify-center space-x-2 transition-all shadow-md cursor-pointer shrink-0"
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span>Connect Notion Workspace</span>
-            </button>
-
-            <div className="flex-1 flex items-center space-x-2">
-              <input
-                type="password"
-                value={tokenInput}
-                onChange={e => setTokenInput(e.target.value)}
-                placeholder="Or paste Notion integration token (secret_...)"
-                className="w-full bg-[#13151f] border border-[#2d3145] rounded-xl p-2.5 text-xs text-gray-100 font-mono"
-              />
-
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-[#13151f] p-4 rounded-xl border border-[#232736] space-y-3 flex flex-col justify-between">
+              <div>
+                <h4 className="text-xs font-bold text-purple-300">Recommended: Notion OAuth Connection</h4>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Connect securely via official Notion OAuth authorization code flow without exposing client secrets.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => saveNotionConfig(tokenInput, selectedDbId, notionApiMapping)}
-                className="bg-[#242838] hover:bg-[#2d3247] text-white font-semibold text-xs px-4 py-2.5 rounded-xl border border-[#3b4059] transition-all shrink-0 cursor-pointer"
+                onClick={() => connectNotionOAuth()}
+                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center space-x-2 transition-all shadow-md cursor-pointer"
               >
-                Save
+                <ExternalLink className="w-4 h-4" />
+                <span>Connect via Notion OAuth</span>
               </button>
+            </div>
+
+            <div className="bg-[#13151f] p-4 rounded-xl border border-[#232736] space-y-3 flex flex-col justify-between">
+              <div>
+                <h4 className="text-xs font-bold text-gray-300">Developer Fallback: Integration Token</h4>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Optional legacy fallback for internal tokens (`secret_...`). Preserves existing user setups.
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="password"
+                  value={tokenInput}
+                  onChange={e => setTokenInput(e.target.value)}
+                  placeholder="secret_..."
+                  className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl p-2 text-xs text-gray-100 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => saveNotionConfig(tokenInput, selectedDbId, notionApiMapping)}
+                  className="bg-[#242838] hover:bg-[#2d3247] text-white font-semibold text-xs px-3.5 py-2 rounded-xl border border-[#3b4059] transition-all shrink-0 cursor-pointer"
+                >
+                  Save Token
+                </button>
+              </div>
             </div>
           </div>
         </div>

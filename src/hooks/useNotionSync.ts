@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { dbService } from '../services/DatabaseService';
 import { notionService } from '../services/NotionIntegrationService';
 import { notionSyncEngine } from '../services/NotionSyncEngine';
+import { notionOAuthService } from '../services/NotionOAuthService';
 import { NotionDatabase, NotionPropertySchema, NotionSyncConflict, NotionSyncResult } from '../types/notion';
 import { NotionColumnMapping } from '../providers/interfaces';
 import { DEFAULT_NOTION_COLUMN_MAPPING } from '../constants/appConstants';
 
 export function useNotionSync() {
   const [token, setToken] = useState<string>('');
+  const [isOAuth, setIsOAuth] = useState<boolean>(false);
+  const [oauthWorkspace, setOauthWorkspace] = useState<string>('');
   const [databaseId, setDatabaseId] = useState<string>('');
   const [databases, setDatabases] = useState<NotionDatabase[]>([]);
   const [schema, setSchema] = useState<Record<string, NotionPropertySchema>>({});
@@ -23,7 +26,9 @@ export function useNotionSync() {
 
   useEffect(() => {
     const settings = dbService.getSettings();
-    const savedToken = settings.notion_integration_token || '';
+    const active = notionOAuthService.getActiveToken();
+    const oauthData = notionOAuthService.getOAuthData();
+
     const savedDbId = settings.notion_database_id || '';
     const savedMapping = settings.notion_field_mapping
       ? (typeof settings.notion_field_mapping === 'string'
@@ -31,17 +36,19 @@ export function useNotionSync() {
           : settings.notion_field_mapping)
       : DEFAULT_NOTION_COLUMN_MAPPING;
 
-    setToken(savedToken);
+    setToken(active.token);
+    setIsOAuth(active.isOAuth);
+    setOauthWorkspace(oauthData?.workspace_name || '');
     setDatabaseId(savedDbId);
     setMapping(savedMapping);
     setLastSyncTime(settings.notion_last_sync_time || '');
     setSyncErrors(settings.notion_sync_errors || []);
 
-    if (savedToken) {
-      loadDatabases(savedToken);
+    if (active.token) {
+      loadDatabases(active.token);
     }
-    if (savedToken && savedDbId) {
-      loadSchema(savedToken, savedDbId);
+    if (active.token && savedDbId) {
+      loadSchema(active.token, savedDbId);
     }
   }, []);
 
@@ -89,21 +96,33 @@ export function useNotionSync() {
     }
   };
 
-  const connectNotionOAuth = async () => {
-    // Open Notion integrations portal so the user can connect/create an integration token in 1 click
-    const notionIntegrationsUrl = 'https://www.notion.so/my-integrations';
+  const connectNotionOAuth = async (clientId?: string, redirectUri?: string) => {
+    const targetClientId = clientId || 'notion_app_client_id';
+    const targetRedirectUri = redirectUri || 'https://localhost/oauth/notion/callback';
+
+    const { url } = notionOAuthService.generateAuthUrl(targetClientId, targetRedirectUri);
 
     try {
       if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
         const { openUrl } = await import('@tauri-apps/plugin-opener');
-        await openUrl(notionIntegrationsUrl);
+        await openUrl(url);
       } else {
-        window.open(notionIntegrationsUrl, '_blank');
+        window.open(url, '_blank');
       }
     } catch (err) {
-      console.warn('Failed to open external Notion integrations URL, falling back to window.open:', err);
-      window.open(notionIntegrationsUrl, '_blank');
+      console.warn('Failed to open Notion OAuth URL, falling back to window.open:', err);
+      window.open(url, '_blank');
     }
+  };
+
+  const disconnectNotion = () => {
+    notionOAuthService.disconnect();
+    setToken('');
+    setIsOAuth(false);
+    setOauthWorkspace('');
+    setDatabaseId('');
+    setDatabases([]);
+    setSchema({});
   };
 
   const createDatabaseInNotion = async () => {
@@ -191,6 +210,8 @@ export function useNotionSync() {
 
   return {
     token,
+    isOAuth,
+    oauthWorkspace,
     databaseId,
     databases,
     schema,
@@ -205,6 +226,7 @@ export function useNotionSync() {
     lastSyncTime,
     syncErrors,
     connectNotionOAuth,
+    disconnectNotion,
     createDatabaseInNotion,
     saveNotionConfig,
     loadDatabases,

@@ -11,6 +11,7 @@ import {
   AppSettings,
   ExternalID
 } from '../types/media';
+import { NotionSyncStateRecord } from '../types/notion';
 import { STORAGE_KEYS } from '../constants/appConstants';
 
 export class DatabaseService {
@@ -181,6 +182,17 @@ export class DatabaseService {
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS notion_sync_state (
+        page_id TEXT PRIMARY KEY,
+        history_id TEXT NOT NULL,
+        media_id TEXT NOT NULL,
+        last_synced_at TEXT NOT NULL,
+        notion_last_edited_at TEXT NOT NULL,
+        app_last_edited_at TEXT NOT NULL,
+        synced_fields_snapshot TEXT NOT NULL,
+        archived_remote INTEGER DEFAULT 0
       );
     `);
 
@@ -922,6 +934,91 @@ export class DatabaseService {
       `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
       [key, strVal]
     );
+    this.save();
+  }
+
+  // ==========================================
+  // 9. NOTION SYNC STATE BASELINE REPOSITORY
+  // ==========================================
+
+  public getNotionSyncState(pageId: string): NotionSyncStateRecord | null {
+    if (!this.db) return null;
+    const stmt = this.db.prepare('SELECT * FROM notion_sync_state WHERE page_id = :page_id');
+    stmt.bind({ ':page_id': pageId });
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      stmt.free();
+      let snapshot = {};
+      try {
+        snapshot = JSON.parse(row.synced_fields_snapshot as string);
+      } catch {}
+      return {
+        pageId: row.page_id as string,
+        historyId: row.history_id as string,
+        mediaId: row.media_id as string,
+        lastSyncedAt: row.last_synced_at as string,
+        notionLastEditedAt: row.notion_last_edited_at as string,
+        appLastEditedAt: row.app_last_edited_at as string,
+        syncedFieldsSnapshot: snapshot,
+        archivedRemote: Boolean(row.archived_remote)
+      };
+    }
+    stmt.free();
+    return null;
+  }
+
+  public getAllNotionSyncStates(): NotionSyncStateRecord[] {
+    if (!this.db) return [];
+    const res = this.db.exec('SELECT * FROM notion_sync_state');
+    if (!res.length) return [];
+    return res[0].values.map(row => {
+      let snapshot = {};
+      try {
+        snapshot = JSON.parse(row[6] as string);
+      } catch {}
+      return {
+        pageId: row[0] as string,
+        historyId: row[1] as string,
+        mediaId: row[2] as string,
+        lastSyncedAt: row[3] as string,
+        notionLastEditedAt: row[4] as string,
+        appLastEditedAt: row[5] as string,
+        syncedFieldsSnapshot: snapshot,
+        archivedRemote: Boolean(row[7])
+      };
+    });
+  }
+
+  public saveNotionSyncState(record: NotionSyncStateRecord): void {
+    if (!this.db) return;
+    this.db.run(
+      `INSERT INTO notion_sync_state (page_id, history_id, media_id, last_synced_at, notion_last_edited_at, app_last_edited_at, synced_fields_snapshot, archived_remote)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(page_id) DO UPDATE SET
+         history_id=excluded.history_id,
+         media_id=excluded.media_id,
+         last_synced_at=excluded.last_synced_at,
+         notion_last_edited_at=excluded.notion_last_edited_at,
+         app_last_edited_at=excluded.app_last_edited_at,
+         synced_fields_snapshot=excluded.synced_fields_snapshot,
+         archived_remote=excluded.archived_remote`,
+      [
+        record.pageId,
+        record.historyId,
+        record.mediaId,
+        record.lastSyncedAt,
+        record.notionLastEditedAt,
+        record.appLastEditedAt,
+        JSON.stringify(record.syncedFieldsSnapshot || {}),
+        record.archivedRemote ? 1 : 0
+      ]
+    );
+    this.save();
+  }
+
+  public deleteNotionSyncState(pageId: string): void {
+    if (!this.db) return;
+    this.db.run('DELETE FROM notion_sync_state WHERE page_id = ?', [pageId]);
     this.save();
   }
 }

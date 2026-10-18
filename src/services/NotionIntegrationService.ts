@@ -11,31 +11,53 @@ import { isTauri } from '../services/LocalScannerService';
 
 export class NotionIntegrationService implements NotionProvider {
   /**
-   * Helper to perform HTTP requests to Notion REST API
+   * Helper to perform HTTP requests to Notion REST API with exponential backoff and 429 retry-after handling
    */
-  private async fetchNotionApi(endpoint: string, token: string, options: RequestInit = {}): Promise<any> {
-    const url = `https://api.notion.com/v1${endpoint}`;
+  public async fetchNotionApi(endpoint: string, token: string, options: RequestInit = {}, maxRetries = 3): Promise<any> {
+    const url = endpoint.startsWith('http') ? endpoint : `https://api.notion.com/v1${endpoint}`;
     const headers = {
       'Authorization': `Bearer ${token}`,
-      'Notion-Version': "2022-06-28",
+      'Notion-Version': '2022-06-28',
       'Content-Type': 'application/json',
       ...(options.headers || {})
     };
 
-    let response: Response;
-    if (isTauri()) {
-      const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
-      response = await tauriFetch(url, { ...options, headers });
-    } else {
-      response = await fetch(url, { ...options, headers });
-    }
+    let attempt = 0;
+    while (attempt <= maxRetries) {
+      let response: Response;
+      if (isTauri()) {
+        const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
+        response = await tauriFetch(url, { ...options, headers });
+      } else {
+        response = await fetch(url, { ...options, headers });
+      }
 
-    if (!response.ok) {
+      if (response.ok) {
+        return response.json();
+      }
+
+      // Handle Rate Limiting (429) or Server Errors (5xx)
+      if ((response.status === 429 || response.status >= 500) && attempt < maxRetries) {
+        attempt++;
+        let delayMs = Math.pow(2, attempt) * 500 + Math.random() * 200; // exponential backoff + jitter
+
+        const retryAfterHeader = response.headers.get('Retry-After');
+        if (retryAfterHeader) {
+          const parsedSec = parseFloat(retryAfterHeader);
+          if (!isNaN(parsedSec)) {
+            delayMs = Math.max(delayMs, parsedSec * 1000);
+          }
+        }
+
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+
       const errorText = await response.text();
-      throw new Error(`Notion API Error (${response.status}): ${errorText}`);
+      const err = new Error(`Notion API Error (${response.status}): ${errorText}`);
+      (err as any).status = response.status;
+      throw err;
     }
-
-    return response.json();
   }
 
   /**
@@ -210,7 +232,8 @@ export class NotionIntegrationService implements NotionProvider {
       Name: '',
       _page_id: page.id,
       _url: page.url,
-      _last_edited_time: page.last_edited_time
+      _last_edited_time: page.last_edited_time,
+      _archived: String(page.archived || false)
     };
 
     for (const [propName, propVal] of Object.entries(page.properties)) {
@@ -536,13 +559,22 @@ export class NotionIntegrationService implements NotionProvider {
   }
 
   /**
-   * Updates an existing Notion page using Notion API (for sync)
+   * Updates an existing Notion page properties or archived state using Notion API (for sync)
    */
-  public async updatePageProperties(token: string, pageId: string, properties: Record<string, any>): Promise<void> {
+  public async updatePageProperties(
+    token: string,
+    pageId: string,
+    properties: Record<string, any>,
+    archived?: boolean
+  ): Promise<any> {
     if (!token || !pageId) return;
-    await this.fetchNotionApi(`/pages/${pageId}`, token, {
+    const body: any = { properties };
+    if (archived !== undefined) {
+      body.archived = archived;
+    }
+    return await this.fetchNotionApi(`/pages/${pageId}`, token, {
       method: 'PATCH',
-      body: JSON.stringify({ properties })
+      body: JSON.stringify(body)
     });
   }
 
