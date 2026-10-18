@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Media } from '../types/media';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { Image as ImageIcon, X, Loader2, CheckCircle2 } from 'lucide-react';
+import { dbService } from '../services/DatabaseService';
 
 interface BackdropPickerModalProps {
   media: Media;
@@ -22,6 +23,15 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+
+  const initialBackdropRef = useRef<string | null>(media.backdrop || null);
+  
+  useEffect(() => {
+    if (media.backdrop) {
+      setSelectedBackdrop(media.backdrop);
+    }
+  }, [media.backdrop]);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -36,9 +46,9 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
         if (tmdbExtId) {
           const results = await tmdbProvider.getBackdrops(tmdbExtId);
           setBackdrops(results);
-          if (results.length > 0) {
-            setSelectedBackdrop(results[0]);
-          }
+          // if (results.length > 0) {
+          //   setSelectedBackdrop(results[0]);
+          // }
         }
       } catch (err) {
         console.error('Failed to fetch backdrops for picker:', err);
@@ -48,29 +58,32 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
     };
 
     fetchBackdrops();
-  }, [isOpen, media]);
+  }, [isOpen]);
 
-  const handleApply = async () => {
-    if (!selectedBackdrop) return;
-
+  const handleApply = async (overrideUrl?: string, shouldClose: boolean = false) => {
+    const finalUrl = overrideUrl || selectedBackdrop;
+    if (!finalUrl) return;
+    console.warn(overrideUrl);
     setIsSaving(true);
     try {
       const now = new Date().toISOString();
       const updatedMedia: Media = {
         ...media,
-        backdrop: selectedBackdrop,
+        backdrop: finalUrl,
         updated_at: now,
       };
 
       // Update cache so it's immediate
       artworkCacheProvider.setCachedArtwork(
         media.id,
-        { backdrop: selectedBackdrop }
-        // 'manual_picker'
+        { backdrop: finalUrl }
       );
 
       onBackgroundUpdated(updatedMedia);
-      onClose();
+      if (shouldClose) {
+        dbService.updateMediaArtwork(media.id, {poster: media.poster, backdrop: finalUrl,logo: media.logo});
+        onClose();
+      }
     } catch (err) {
       console.error('Failed to apply selected backdrop:', err);
     } finally {
@@ -91,7 +104,12 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
               <p className="text-xs text-gray-400">Choose from available backdrops for {media.title}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#1f222e] transition-colors cursor-pointer">
+          <button onClick={() =>{
+              handleApply(undefined,true);
+              //onClose();
+            }
+          }
+             className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#1f222e] transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -112,7 +130,10 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
               {backdrops.map((url, idx) => (
                 <div
                   key={idx}
-                  onClick={() => setSelectedBackdrop(url)}
+                  onClick={() => {
+                    //setSelectedBackdrop(url);
+                    handleApply(url, false);
+                  }}
                   className={`group relative aspect-video rounded-xl overflow-hidden cursor-pointer transition-all border-4 ${
                     selectedBackdrop === url ? 'border-sky-500 scale-95 shadow-lg' : 'border-transparent hover:border-gray-600'
                   }`}
@@ -130,11 +151,15 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
         </div>
 
         <div className="p-4 border-t border-[#232736] flex items-center justify-end space-x-3 bg-[#11131c]">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-[#2d3145] text-gray-300 hover:bg-[#1a1c29] text-xs font-semibold transition-colors cursor-pointer">
+          <button onClick={() => {
+              handleApply(initialBackdropRef.current!!, false);
+              onClose();
+            }
+          } className="px-4 py-2 rounded-xl border border-[#2d3145] text-gray-300 hover:bg-[#1a1c29] text-xs font-semibold transition-colors cursor-pointer">
             Cancel
           </button>
           <button
-            onClick={handleApply}
+            onClick={() => handleApply(undefined, true)}
             disabled={!selectedBackdrop || isSaving}
             className="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
           >
