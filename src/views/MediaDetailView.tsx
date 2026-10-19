@@ -115,7 +115,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     handleManualMetadataRefresh();
   }
 
-  const [loadedArtworkSrc, setLoadedArtworkSrc] = useState<string>();
   const [failedBackdropSrc, setFailedBackdropSrc] = useState<string>();
   const [calculatedAccent, setCalculatedAccent] = useState<{ src: string; color: string } | null>(null);
   const [isPlayButtonStuck, setIsPlayButtonStuck] = useState(false);
@@ -126,7 +125,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
  // Resolve the accent color based on the current artwork source
   const accentColorForPage = (calculatedAccent?.src === artworkSource ? calculatedAccent!.color : undefined)
-    || initialMedia.accent_color;
+    || currentMedia.accent_color;
 
   const handleDominantColorCalculated = useCallback((color: string) => {
     if (!artworkSource) return;
@@ -136,14 +135,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
     try {
       void dbService.saveMedia({
-        ...initialMedia,
+        ...currentMedia,
         accent_color: color,
         updated_at: new Date().toISOString()
       }).catch(error => console.error('Failed to save calculated accent color:', error));
     } catch (error) {
       console.error('Failed to save calculated accent color:', error);
     }
-  }, [initialMedia, artworkSource]);
+  }, [currentMedia, artworkSource]);
 
   const theme = getMediaTheme(accentColorForPage);
 
@@ -236,12 +235,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             src={artwork.backdrop}
             alt={currentMedia.title}
             className="mdv-backdrop-img"
-            onLoad={() => setLoadedArtworkSrc(artwork.backdrop)}
             onError={() => {
               setFailedBackdropSrc(artwork.backdrop);
-              setLoadedArtworkSrc(loadedSrc =>
-                loadedSrc === artwork.backdrop ? undefined : loadedSrc
-              );
             }}
           />
         ) : (
@@ -253,10 +248,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             alt=""
             aria-hidden="true"
             className="mdv-hidden-img"
-            onLoad={() => setLoadedArtworkSrc(artwork.poster)}
-            onError={() => setLoadedArtworkSrc(loadedSrc =>
-              loadedSrc === artwork.poster ? undefined : loadedSrc
-            )}
           />
         )}
         {artworkSource && (
