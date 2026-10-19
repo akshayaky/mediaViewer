@@ -509,6 +509,63 @@ export class IGDBProvider implements MetadataProvider {
       metadata_refreshed_at: new Date().toISOString()
     };
   }
+
+  public async getBackdrops(externalId: string): Promise<string[]> {
+    const { clientId, clientSecret } = await this.getTwitchCredentials();
+    if (!clientId || !clientSecret) return [];
+
+    if (externalId.startsWith('igdb:')) {
+      const igdbId = externalId.replace('igdb:', '');
+      const token = await this.getTwitchAccessToken(clientId, clientSecret);
+      if (!token) return [];
+
+      try {
+        const body = `where game = ${igdbId}; fields image_id;`;
+        const res = await smartFetch(`${this.igdbBaseUrl}/artworks`, {
+          method: 'POST',
+          headers: {
+            'Client-ID': clientId,
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'text/plain'
+          },
+          body
+        });
+
+        if (res.ok) {
+          const artworks = await res.json();
+          const artworkUrls = (artworks || []).map((a: any) => 
+            `https://images.igdb.com/igdb/image/upload/t_1080p_2x/${a.image_id}.jpg`
+          );
+
+          // Also try to get screenshots to supplement the backdrops
+          const screenBody = `where game = ${igdbId}; fields image_id;`;
+          const screenRes = await smartFetch(`${this.igdbBaseUrl}/screenshots`, {
+            method: 'POST',
+            headers: {
+              'Client-ID': clientId,
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'text/plain'
+            },
+            body: screenBody
+          });
+
+          if (screenRes.ok) {
+            const screenshots = await screenRes.json();
+            const screenshotUrls = (screenshots || []).map((s: any) => 
+              `https://images.igdb.com/igdb/image/upload/t_1080p_2x/${s.image_id}.jpg`
+            );
+            return [...artworkUrls, ...screenshotUrls];
+          }
+
+          return artworkUrls;
+        }
+      } catch (err) {
+        console.error('IGDB getBackdrops failed:', err);
+      }
+    }
+
+    return [];
+  }
 }
 
 export const igdbProvider = new IGDBProvider();

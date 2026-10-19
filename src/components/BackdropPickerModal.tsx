@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Media } from '../types/media';
 import { tmdbProvider } from '../providers/TMDBProvider';
+import { igdbProvider } from '../providers/IGDBProvider';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { Image as ImageIcon, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { dbService } from '../services/DatabaseService';
@@ -40,16 +41,20 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
       try {
         // We assume TMDB is the provider for backdrops as it has the best images API
         // Find the TMDB external ID
-        const tmdbExtId = media.external_ids?.find(ext => ext.provider === 'TMDB')?.external_id 
-          || media.external_ids?.[0]?.external_id;
-
+        const tmdbExtId = media.external_ids?.find(ext => ext.provider === 'TMDB')?.external_id;
+        const igdbExtId = media.external_ids?.find(ext => ext.provider === 'IGDB')?.external_id;
+        
+        let results: string[] = [];
         if (tmdbExtId) {
-          const results = await tmdbProvider.getBackdrops(tmdbExtId);
-          setBackdrops(results);
-          // if (results.length > 0) {
-          //   setSelectedBackdrop(results[0]);
-          // }
+          const tmdbResults = await tmdbProvider.getBackdrops(tmdbExtId);
+          results = [...results, ...tmdbResults];
         }
+        if (igdbExtId) {
+          const igdbResults = await igdbProvider.getBackdrops(igdbExtId);
+          results = [...results, ...igdbResults];
+        }
+        
+        setBackdrops(results);
       } catch (err) {
         console.error('Failed to fetch backdrops for picker:', err);
       } finally {
@@ -118,7 +123,7 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 space-y-4">
               <Loader2 className="w-8 h-8 animate-spin text-sky-400" />
-              <p className="text-gray-400 text-sm">Fetching official backdrops from TMDB...</p>
+              <p className="text-gray-400 text-sm">Fetching official backdrops...</p>
             </div>
           ) : backdrops.length === 0 ? (
             <div className="text-center py-20">
