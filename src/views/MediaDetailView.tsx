@@ -62,14 +62,15 @@ const DominantColorExtractor: React.FC<DominantColorExtractorProps> = ({
   onColorCalculated
 }) => {
   const dominantColor = useDominantColor(imageSrc);
-  const hasReportedColor = useRef(false);
+  const hasReportedColor = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!dominantColor || hasReportedColor.current) return;
+    // Check if the current dominantColor belongs to the expected imageSrc
+    if (!dominantColor || hasReportedColor.current === imageSrc) return;
 
-    hasReportedColor.current = true;
+    hasReportedColor.current = imageSrc;
     onColorCalculated(`rgb(${dominantColor.join(',')})`);
-  }, [dominantColor, onColorCalculated]);
+  }, [dominantColor, imageSrc, onColorCalculated]);
 
   return null;
 };
@@ -116,19 +117,22 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
   const [loadedArtworkSrc, setLoadedArtworkSrc] = useState<string>();
   const [failedBackdropSrc, setFailedBackdropSrc] = useState<string>();
-  const [calculatedAccent, setCalculatedAccent] = useState<{ mediaId: string; color: string }>();
+  const [calculatedAccent, setCalculatedAccent] = useState<{ src: string; color: string } | null>(null);
   const [isPlayButtonStuck, setIsPlayButtonStuck] = useState(false);
   const playButtonRowRef = useRef<HTMLDivElement>(null);
   const artworkSource = artwork.backdrop && failedBackdropSrc !== artwork.backdrop
     ? artwork.backdrop
     : artwork.poster;
-  const accentColorForPage = initialMedia.accent_color
-    || (calculatedAccent?.mediaId === initialMedia.id ? calculatedAccent.color : undefined);
+
+ // Resolve the accent color based on the current artwork source
+  const accentColorForPage = (calculatedAccent?.src === artworkSource ? calculatedAccent!.color : undefined)
+    || initialMedia.accent_color;
 
   const handleDominantColorCalculated = useCallback((color: string) => {
-    setCalculatedAccent({ mediaId: initialMedia.id, color });
+    if (!artworkSource) return;
+    setCalculatedAccent({ src: artworkSource, color });
 
-    if (initialMedia.accent_color) return;
+    //if (initialMedia.accent_color) return;
 
     try {
       void dbService.saveMedia({
@@ -139,7 +143,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     } catch (error) {
       console.error('Failed to save calculated accent color:', error);
     }
-  }, [initialMedia]);
+  }, [initialMedia, artworkSource]);
 
   const theme = getMediaTheme(accentColorForPage);
 
@@ -255,9 +259,9 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             )}
           />
         )}
-        {!accentColorForPage && artworkSource && loadedArtworkSrc === artworkSource && (
+        {artworkSource && (
           <DominantColorExtractor
-            key={`${initialMedia.id}:${artworkSource}`}
+            key={artworkSource}
             imageSrc={artworkSource}
             onColorCalculated={handleDominantColorCalculated}
           />
