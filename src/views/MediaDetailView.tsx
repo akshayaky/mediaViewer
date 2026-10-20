@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Media } from '../types/media';
+import { LocalFile, Media } from '../types/media';
 import { useMediaDetail } from '../hooks/useMediaDetail';
 import { useDominantColor } from '../helper/useDominantColour';
 import { getMediaTheme } from '../helper/mediaDetailTheme';
+import { getHighQualityBackdropUrl, getLastWatchedEpisodeArtwork, isEpisodeWatched } from '../helper/episodeProgress';
 import { dbService } from '../services/DatabaseService';
 import './MediaDetailView.css';
 import { MetadataSearchResult } from '../providers/interfaces';
@@ -95,18 +96,6 @@ function getFileQualityLabel(file: LocalFile): string {
   return 'SD / Default';
 }
 
-function isEpisodeWatched(historyList: any[], seasonNumber: number, episodeNumber: number): boolean {
-  const padS = String(seasonNumber).padStart(2, '0');
-  const padE = String(episodeNumber).padStart(2, '0');
-  const tag1 = `S${padS}E${padE}`;
-  const tag2 = `S${seasonNumber}E${episodeNumber}`;
-  return historyList.some(h =>
-    h.status === 'Finished' &&
-    h.context &&
-    (h.context.toUpperCase().includes(tag1.toUpperCase()) || h.context.toUpperCase().includes(tag2.toUpperCase()))
-  );
-}
-
 export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isSidebarCollapsed, onSelectMedia, onAccentColorChange }) => {
   const {
     currentMedia,
@@ -150,48 +139,12 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     handleManualMetadataRefresh();
   }
 
-  const [failedBackdropSrc, setFailedBackdropSrc] = useState<string>();
+  const [failedBackdropSources, setFailedBackdropSources] = useState<string[]>([]);
   const [calculatedAccent, setCalculatedAccent] = useState<{ src: string; color: string } | null>(null);
   const [isPlayButtonStuck, setIsPlayButtonStuck] = useState(false);
   const playButtonRowRef = useRef<HTMLDivElement>(null);
 
-  // Determine next episode artwork for dynamic backdrop
-  let nextEpisodeStill: string | undefined = undefined;
-  if (currentMedia.type === 'TV Series' && currentMedia.seasons && currentMedia.seasons.length > 0) {
-    const allEpisodesList: { season_number: number; season_poster?: string; episode: any }[] = [];
-    const sortedSeasons = [...currentMedia.seasons].sort((a, b) => a.season_number - b.season_number);
-    for (const season of sortedSeasons) {
-      if (season.episodes && season.episodes.length > 0) {
-        const sortedEps = [...season.episodes].sort((a, b) => a.episode_number - b.episode_number);
-        for (const ep of sortedEps) {
-          allEpisodesList.push({
-            season_number: season.season_number,
-            season_poster: season.poster_path,
-            episode: ep
-          });
-        }
-      }
-    }
-
-    if (allEpisodesList.length > 0) {
-      let lastWatchedIdx = -1;
-      for (let i = 0; i < allEpisodesList.length; i++) {
-        const epObj = allEpisodesList[i];
-        if (isEpisodeWatched(historyList, epObj.season_number, epObj.episode.episode_number)) {
-          lastWatchedIdx = i;
-        }
-      }
-
-      const nextIdx = lastWatchedIdx >= 0 && lastWatchedIdx + 1 < allEpisodesList.length
-        ? lastWatchedIdx + 1
-        : 0;
-
-      const nextEp = allEpisodesList[nextIdx];
-      if (nextEp) {
-        nextEpisodeStill = nextEp.episode.still_path || nextEp.season_poster;
-      }
-    }
-  }
+  const lastWatchedEpisodeArtwork = getLastWatchedEpisodeArtwork(currentMedia, historyList);
 
   // Episode UI State
   const [selectedEpFiles, setSelectedEpFiles] = useState<Record<string, string>>({});
@@ -199,9 +152,17 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const [linkEpTarget, setLinkEpTarget] = useState<{ season: number; episode: number } | null>(null);
   const [selectedFileToLink, setSelectedFileToLink] = useState<string>('');
 
-  const artworkSource = nextEpisodeStill || (artwork.backdrop && failedBackdropSrc !== artwork.backdrop
-    ? artwork.backdrop
-    : artwork.poster);
+  const artworkCandidates = [
+    getHighQualityBackdropUrl(lastWatchedEpisodeArtwork.still),
+    getHighQualityBackdropUrl(lastWatchedEpisodeArtwork.seasonPoster),
+    artwork.backdrop,
+    artwork.poster
+  ].filter((source): source is string => Boolean(source));
+  const artworkSource = artworkCandidates.find(source => !failedBackdropSources.includes(source));
+
+  useEffect(() => {
+    setFailedBackdropSources([]);
+  }, [currentMedia.id]);
 
  // Resolve the accent color based on the current artwork source
   const accentColorForPage = (calculatedAccent?.src === artworkSource ? calculatedAccent!.color : undefined)
@@ -311,25 +272,21 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     >
       {/* Pinned Backdrop */}
       <div className="mdv-backdrop">
-        {artwork.backdrop && failedBackdropSrc !== artwork.backdrop ? (
+        {artworkSource ? (
           <img
-            src={artwork.backdrop}
+            src={artworkSource}
             alt={currentMedia.title}
             className="mdv-backdrop-img"
             onError={() => {
-              setFailedBackdropSrc(artwork.backdrop);
+              setFailedBackdropSources(failedSources =>
+                failedSources.includes(artworkSource)
+                  ? failedSources
+                  : [...failedSources, artworkSource]
+              );
             }}
           />
         ) : (
           <div className="mdv-backdrop-fallback" />
-        )}
-        {(!artwork.backdrop || failedBackdropSrc === artwork.backdrop) && artwork.poster && (
-          <img
-            src={artwork.poster}
-            alt=""
-            aria-hidden="true"
-            className="mdv-hidden-img"
-          />
         )}
         {artworkSource && (
           <DominantColorExtractor
