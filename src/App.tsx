@@ -8,12 +8,13 @@ import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
 import { UnmatchedInboxView } from './views/UnmatchedInboxView';
 import { dbService } from './services/DatabaseService';
-import { seedDatabaseIfEmpty } from './services/seedData';
+// import { seedDatabaseIfEmpty } from './services/seedData';
 import { Media } from './types/media';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [selectedMedia, setSelectedMedia] = useState<Media | null>(null);
+  const [selectedAccentColor, setSelectedAccentColor] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -34,14 +35,17 @@ export function App() {
   const handleSelectTab = (tab: NavTab) => {
     setActiveTab(tab);
     setSelectedMedia(null);
+    setSelectedAccentColor(undefined);
   };
 
   const handleSelectMedia = (media: Media) => {
     setSelectedMedia(media);
+    setSelectedAccentColor(media.accent_color);
   };
 
   const handleBackToTab = () => {
     setSelectedMedia(null);
+    setSelectedAccentColor(undefined);
   };
 
   if (isLoading) {
@@ -59,7 +63,14 @@ export function App() {
 
   const renderActiveView = () => {
     if (selectedMedia) {
-      return <MediaDetailView media={selectedMedia} onBack={handleBackToTab} />;
+      return (
+        <MediaDetailView
+          media={selectedMedia}
+          onBack={handleBackToTab}
+          isSidebarCollapsed={isCollapsed}
+          onAccentColorChange={setSelectedAccentColor}
+        />
+      );
     }
 
     switch (activeTab) {
@@ -111,7 +122,13 @@ export function App() {
   return (
     <div className="flex h-screen bg-[#0c0d10] text-gray-100 font-sans overflow-hidden">
       {/* Navigation Sidebar */}
-      <Sidebar activeTab={activeTab} onSelectTab={handleSelectTab} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+      <Sidebar
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        isCollapsed={isCollapsed}
+        setIsCollapsed={setIsCollapsed}
+        accentColor={selectedMedia ? selectedAccentColor || selectedMedia.accent_color : undefined}
+      />
 
       {/* Main View Area */}
       <main className="flex-1 overflow-y-auto bg-[#0c0d10]">

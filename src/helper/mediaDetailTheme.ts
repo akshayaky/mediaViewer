@@ -60,9 +60,55 @@ function mix(a: RGB, b: RGB, amount: number): RGB {
   ];
 }
 
+function mixToLuminanceLimit(from: RGB, toward: RGB, maxLuminance: number): RGB {
+  const fromLuminance = luminance(from);
+  const towardLuminance = luminance(toward);
+  if (fromLuminance <= maxLuminance && towardLuminance <= maxLuminance) return toward;
+  if (fromLuminance > maxLuminance && towardLuminance > maxLuminance) return fromLuminance < towardLuminance ? from : toward;
+
+  let low = 0;
+  let high = 1;
+  for (let i = 0; i < 16; i++) {
+    const amount = (low + high) / 2;
+    const isWithinLimit = luminance(mix(from, toward, amount)) <= maxLuminance;
+    if (fromLuminance <= maxLuminance) {
+      if (isWithinLimit) low = amount;
+      else high = amount;
+    } else if (isWithinLimit) {
+      high = amount;
+    } else {
+      low = amount;
+    }
+  }
+  return mix(from, toward, fromLuminance <= maxLuminance ? low : high);
+}
+
 const toCss = (c: RGB) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 const BLACK: RGB = [0, 0, 0];
 const WHITE: RGB = [255, 255, 255];
+
+export interface SidebarAccentColors {
+  background: string;
+  activeBackground: string;
+  inactiveForeground: string;
+}
+
+export function getSidebarAccentColors(accentColor: string): SidebarAccentColors {
+  const accent = parseColor(accentColor) ?? parseColor(DEFAULT_ACCENT)!;
+  const background = luminance(accent) <= 0.035
+    ? accent
+    : mixToLuminanceLimit(accent, BLACK, 0.035);
+  const activeTone = luminance(accent) <= 0.16
+    ? mixToLuminanceLimit(accent, WHITE, 0.16)
+    : mixToLuminanceLimit(accent, BLACK, 0.16);
+  const activeBackground = mixToLuminanceLimit(background, activeTone, 0.16);
+
+  return {
+    background: `rgba(${accent.join(', ')}, 0.28)`,
+    activeBackground: toCss(activeBackground),
+    inactiveForeground: luminance(accent) > 0.42 ? '#111827' : 'rgba(255, 255, 255, 0.92)'
+  };
+}
 
 /** "r, g, b" string used by rgba(var(--accent-rgb), 0.3) in the stylesheet. */
 export function getAccentRgb(accentColor?: string): string {

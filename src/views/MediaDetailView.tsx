@@ -49,7 +49,9 @@ import {
 interface MediaDetailViewProps {
   media: Media;
   onBack: () => void;
+  isSidebarCollapsed: boolean;
   onSelectMedia?: (media: Media) => void;
+  onAccentColorChange?: (color: string) => void;
 }
 
 interface DominantColorExtractorProps {
@@ -75,7 +77,7 @@ const DominantColorExtractor: React.FC<DominantColorExtractorProps> = ({
   return null;
 };
 
-export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, onSelectMedia }) => {
+export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isSidebarCollapsed, onSelectMedia, onAccentColorChange }) => {
   const {
     currentMedia,
     historyList,
@@ -130,6 +132,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const handleDominantColorCalculated = useCallback((color: string) => {
     if (!artworkSource) return;
     setCalculatedAccent({ src: artworkSource, color });
+    onAccentColorChange?.(color);
 
     //if (initialMedia.accent_color) return;
 
@@ -142,7 +145,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     } catch (error) {
       console.error('Failed to save calculated accent color:', error);
     }
-  }, [currentMedia, artworkSource]);
+  }, [currentMedia, artworkSource, onAccentColorChange]);
 
   const theme = getMediaTheme(accentColorForPage);
 
@@ -263,7 +266,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
       {/* Pinned Header Bar Actions */}
       <div className={`mdv-header ${isPlayButtonStuck ? 'mdv-header--stuck' : ''}`}>
-        <div className="mdv-header-actions">
+        <div className="mdv-header-actions" style={{ left: isSidebarCollapsed ? '6.5rem' : '17.5rem' }}>
           <button onClick={onBack} className="mdv-btn mdv-btn-glass cursor-pointer">
             <ArrowLeft className="mdv-icon-md" />
             <span>Back to Library</span>

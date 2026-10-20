@@ -100,7 +100,10 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   };
 
   return (
-    <div className={`p-8 space-y-6 mx-auto ${isCollapsed ? 'max-w-none' : 'max-w-7xl'}`}>
+    <div
+      className="p-8 space-y-6 mx-auto max-w-none"
+      style={{ paddingLeft: isCollapsed ? '6rem' : '18rem' }}
+    >
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1f222e] pb-6">
         <div>
@@ -120,7 +123,7 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-wrap items-center gap-4 bg-[#14161f] p-4 rounded-xl border border-[#232736]">
+      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-4 bg-[#14161f] p-4 rounded-xl border border-[#232736] shadow-lg">
         {/* Search Box */}
         <div className="relative flex-1 min-w-[240px]">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -184,11 +187,14 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
           <p className="text-base font-medium">No media found matching your filter criteria.</p>
         </div>
       ) : (
-        <div className={`grid gap-5 ${
-          isCollapsed 
-            ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-8' 
-            : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'
-        }`}>
+        <div
+          className="grid gap-5"
+          style={{
+            gridTemplateColumns: isCollapsed
+              ? 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))'
+              : 'repeat(auto-fill, minmax(min(100%, 320px), 220px))'
+          }}
+        >
           {items.map(media => {
             return (
               <MediaCard
