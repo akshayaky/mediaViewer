@@ -11,6 +11,7 @@ export interface ParsedFileInfo {
   year?: number;
   season?: number;
   episode?: number;
+  endEpisode?: number;
   fileType: 'movie' | 'tv_episode' | 'game_executable' | 'other';
 }
 
@@ -60,16 +61,59 @@ export class LocalScannerService {
       clean = clean.replace(yearRegex, ' ');
     }
 
-    const sxxexxRegex = /\b[Ss](\d{1,2})[Ee](\d{1,2})\b/;
+    let extractedEndEpisode: number | undefined = undefined;
+
+    // Pattern 1: S01E03, S01E03-E04, S01E03E04, S01E03-04
+    const sxxexxRegex = /\b[Ss](\d{1,2})[Ee](\d{1,2})(?:[-_~]?[Ee]?(\d{1,2}))?\b/;
     const seMatch = sxxexxRegex.exec(clean);
+
     if (seMatch) {
       extractedSeason = parseInt(seMatch[1], 10);
       extractedEpisode = parseInt(seMatch[2], 10);
+      if (seMatch[3]) {
+        const endEp = parseInt(seMatch[3], 10);
+        if (endEp > extractedEpisode) {
+          extractedEndEpisode = endEp;
+        }
+      }
       clean = clean.replace(sxxexxRegex, ' ');
     } else {
-      const seasonDirMatch = /\b[Ss]eason\s*(\d{1,2})\b/i.exec(normalized);
-      if (seasonDirMatch) {
-        extractedSeason = parseInt(seasonDirMatch[1], 10);
+      // Pattern 2: 1x03, 01x03, 1x03-04, 1x03-E04
+      const nxnRegex = /\b(\d{1,2})[xX](\d{1,2})(?:[-_~]?[Ee]?(\d{1,2}))?\b/;
+      const nxnMatch = nxnRegex.exec(clean);
+      if (nxnMatch) {
+        extractedSeason = parseInt(nxnMatch[1], 10);
+        extractedEpisode = parseInt(nxnMatch[2], 10);
+        if (nxnMatch[3]) {
+          const endEp = parseInt(nxnMatch[3], 10);
+          if (endEp > extractedEpisode) {
+            extractedEndEpisode = endEp;
+          }
+        }
+        clean = clean.replace(nxnRegex, ' ');
+      } else {
+        // Fallback: check season folder in path
+        const seasonDirMatch = /\b[Ss]eason\s*(\d{1,2})\b/i.exec(normalized);
+        if (seasonDirMatch) {
+          extractedSeason = parseInt(seasonDirMatch[1], 10);
+
+          const epOnlyRegex = /\b(?:[Ee]|ep|episode)\.?\s*(\d{1,2})(?:[-_~]?[Ee]?(\d{1,2}))?\b/i;
+          const epMatch = epOnlyRegex.exec(clean);
+          if (epMatch) {
+            extractedEpisode = parseInt(epMatch[1], 10);
+            if (epMatch[2]) {
+              const endEp = parseInt(epMatch[2], 10);
+              if (endEp > extractedEpisode) extractedEndEpisode = endEp;
+            }
+            clean = clean.replace(epOnlyRegex, ' ');
+          } else {
+            const numPrefixMatch = /^\s*(\d{1,2})\s*[-_\.]\s*/.exec(clean);
+            if (numPrefixMatch) {
+              extractedEpisode = parseInt(numPrefixMatch[1], 10);
+              clean = clean.replace(/^\s*\d{1,2}\s*[-_\.]\s*/, ' ');
+            }
+          }
+        }
       }
     }
 
@@ -80,7 +124,12 @@ export class LocalScannerService {
     clean = clean.replace(noiseRegex, ' ');
     clean = clean.replace(/[\._\-]/g, ' ').replace(/\s+/g, ' ').trim();
 
-    if ((!clean || /^\d+$/.test(clean) || clean.length < 3) && pathParts.length >= 2) {
+    if (extractedSeason !== undefined && pathParts.length >= 3 && /\b[Ss]eason\s*\d{1,2}\b/i.test(pathParts[pathParts.length - 2])) {
+      const showFolder = pathParts[pathParts.length - 3];
+      if (showFolder && showFolder.trim().length > 1) {
+        clean = showFolder.replace(/[\._\-]/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+    } else if ((!clean || /^\d+$/.test(clean) || clean.length < 3) && pathParts.length >= 2) {
       const parentFolder = pathParts[pathParts.length - 2];
       const seasonClean = parentFolder.replace(/\b[Ss]eason\s*\d{1,2}\b/gi, '').replace(/[\(\. _-](19\d\d|20\d\d)[\)\. _-]/g, '');
       if (seasonClean.trim().length > 2) {
@@ -102,6 +151,7 @@ export class LocalScannerService {
       year: extractedYear,
       season: extractedSeason,
       episode: extractedEpisode,
+      endEpisode: extractedEndEpisode,
       fileType
     };
   }
@@ -215,6 +265,11 @@ export class LocalScannerService {
         } else if (!localFileRecord.media_id) {
           unmatchedCount++;
         }
+        localFileRecord.season = parsed.season !== undefined ? parsed.season : localFileRecord.season;
+        localFileRecord.episode = parsed.episode !== undefined ? parsed.episode : localFileRecord.episode;
+        localFileRecord.end_episode = parsed.endEpisode !== undefined ? parsed.endEpisode : localFileRecord.end_episode;
+        localFileRecord.parsed_title = parsed.cleanTitle || localFileRecord.parsed_title;
+        localFileRecord.parsed_year = parsed.year !== undefined ? parsed.year : localFileRecord.parsed_year;
       } else {
         const newId = `lf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         localFileRecord = {
@@ -232,7 +287,8 @@ export class LocalScannerService {
           parsed_title: parsed.cleanTitle,
           parsed_year: parsed.year,
           season: parsed.season,
-          episode: parsed.episode
+          episode: parsed.episode,
+          end_episode: parsed.endEpisode
         };
 
         if (matchedMedia) {

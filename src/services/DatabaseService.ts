@@ -89,6 +89,11 @@ export class DatabaseService {
         file_exists INTEGER NOT NULL,
         file_type TEXT NOT NULL,
         launch_info TEXT,
+        season INTEGER,
+        episode INTEGER,
+        end_episode INTEGER,
+        parsed_title TEXT,
+        parsed_year INTEGER,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
       )`,
       `CREATE TABLE IF NOT EXISTS availability (
@@ -153,6 +158,11 @@ export class DatabaseService {
     await this.addColumnIfNotExists('media', 'accent_color', 'TEXT');
     await this.addColumnIfNotExists('media', 'manually_matched', 'INTEGER DEFAULT 0');
     await this.addColumnIfNotExists('media_history', 'updated_at', 'TEXT');
+    await this.addColumnIfNotExists('local_file', 'season', 'INTEGER');
+    await this.addColumnIfNotExists('local_file', 'episode', 'INTEGER');
+    await this.addColumnIfNotExists('local_file', 'end_episode', 'INTEGER');
+    await this.addColumnIfNotExists('local_file', 'parsed_title', 'TEXT');
+    await this.addColumnIfNotExists('local_file', 'parsed_year', 'INTEGER');
 
     try {
       await this.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_external_ids_provider_ext ON external_ids(provider, external_id);');
@@ -584,55 +594,40 @@ export class DatabaseService {
   public async getLocalFilesForMedia(media_id: string): Promise<LocalFile[]> {
     if (!this.db) return [];
     const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM local_file WHERE media_id = ?', [media_id]);
-    return rows.map(row => ({
-        id: row.id as string,
-        media_id: row.media_id as string,
-        path: row.path as string,
-        filename: row.filename as string,
-        extension: row.extension as string,
-        size: Number(row.size),
-        discovered_at: row.discovered_at as string,
-        last_seen_at: row.last_seen_at as string,
-        exists: Boolean(row.file_exists),
-        file_type: row.file_type as any,
-        launch_info: (row.launch_info as string) || undefined
-      }));
+    return rows.map(row => this.mapLocalFileObject(row));
   }
 
   public async getAllLocalFiles(): Promise<LocalFile[]> {
     if (!this.db) return [];
     const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM local_file');
-    return rows.map(row => ({
-      id: row.id,
-      media_id: row.media_id || undefined,
-      path: row.path,
-      filename: row.filename,
-      extension: row.extension,
-      size: Number(row.size),
-      discovered_at: row.discovered_at,
-      last_seen_at: row.last_seen_at,
-      exists: Boolean(row.file_exists),
-      file_type: row.file_type,
-      launch_info: row.launch_info || undefined
-    }));
+    return rows.map(row => this.mapLocalFileObject(row));
   }
 
   public async getUnmatchedLocalFiles(): Promise<LocalFile[]> {
     if (!this.db) return [];
     const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM local_file WHERE media_id IS NULL OR media_id = ""');
-    return rows.map(row => ({
-        id: row.id as string,
-        media_id: undefined,
-        path: row.path as string,
-        filename: row.filename as string,
-        extension: row.extension as string,
-        size: Number(row.size),
-        discovered_at: row.discovered_at as string,
-        last_seen_at: row.last_seen_at as string,
-        exists: Boolean(row.file_exists),
-        file_type: row.file_type as any,
-        launch_info: (row.launch_info as string) || undefined
-      }));
+    return rows.map(row => this.mapLocalFileObject(row));
+  }
+
+  private mapLocalFileObject(row: Record<string, any>): LocalFile {
+    return {
+      id: row.id as string,
+      media_id: row.media_id ? (row.media_id as string) : undefined,
+      path: row.path as string,
+      filename: row.filename as string,
+      extension: row.extension as string,
+      size: Number(row.size),
+      discovered_at: row.discovered_at as string,
+      last_seen_at: row.last_seen_at as string,
+      exists: Boolean(row.file_exists),
+      file_type: row.file_type as any,
+      launch_info: (row.launch_info as string) || undefined,
+      season: row.season !== null && row.season !== undefined ? Number(row.season) : undefined,
+      episode: row.episode !== null && row.episode !== undefined ? Number(row.episode) : undefined,
+      end_episode: row.end_episode !== null && row.end_episode !== undefined ? Number(row.end_episode) : undefined,
+      parsed_title: (row.parsed_title as string) || undefined,
+      parsed_year: row.parsed_year !== null && row.parsed_year !== undefined ? Number(row.parsed_year) : undefined
+    };
   }
 
   public async linkLocalFileToMedia(file_id: string, media_id: string): Promise<void> {
@@ -640,17 +635,54 @@ export class DatabaseService {
     await this.db.execute('UPDATE local_file SET media_id = ? WHERE id = ?', [media_id, file_id]);
   }
 
+  public async updateLocalFileAssociation(
+    file_id: string,
+    media_id?: string,
+    season?: number,
+    episode?: number,
+    end_episode?: number
+  ): Promise<void> {
+    if (!this.db) return;
+    await this.db.execute(
+      `UPDATE local_file SET media_id = ?, season = ?, episode = ?, end_episode = ? WHERE id = ?`,
+      [
+        media_id || null,
+        season !== undefined ? season : null,
+        episode !== undefined ? episode : null,
+        end_episode !== undefined ? end_episode : null,
+        file_id
+      ]
+    );
+  }
+
+  public async deleteHistoryForEpisode(media_id: string, season: number, episode: number): Promise<void> {
+    if (!this.db) return;
+    const padS = String(season).padStart(2, '0');
+    const padE = String(episode).padStart(2, '0');
+    const tag1 = `S${padS}E${padE}`;
+    const tag2 = `S${season}E${episode}`;
+    await this.db.execute(
+      `DELETE FROM media_history WHERE media_id = ? AND (context LIKE ? OR context LIKE ?)`,
+      [media_id, `%${tag1}%`, `%${tag2}%`]
+    );
+  }
+
   public async saveLocalFile(file: LocalFile): Promise<void> {
     if (!this.db) return;
     await this.db.execute(
-      `INSERT INTO local_file (id, media_id, path, filename, extension, size, discovered_at, last_seen_at, file_exists, file_type, launch_info)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO local_file (id, media_id, path, filename, extension, size, discovered_at, last_seen_at, file_exists, file_type, launch_info, season, episode, end_episode, parsed_title, parsed_year)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          media_id=excluded.media_id,
          path=excluded.path,
          last_seen_at=excluded.last_seen_at,
          file_exists=excluded.file_exists,
-         launch_info=excluded.launch_info`,
+         launch_info=excluded.launch_info,
+         season=excluded.season,
+         episode=excluded.episode,
+         end_episode=excluded.end_episode,
+         parsed_title=excluded.parsed_title,
+         parsed_year=excluded.parsed_year`,
       [
         file.id,
         file.media_id || null,
@@ -662,7 +694,12 @@ export class DatabaseService {
         file.last_seen_at,
         file.exists ? 1 : 0,
         file.file_type,
-        file.launch_info || null
+        file.launch_info || null,
+        file.season !== undefined ? file.season : null,
+        file.episode !== undefined ? file.episode : null,
+        file.end_episode !== undefined ? file.end_episode : null,
+        file.parsed_title || null,
+        file.parsed_year !== undefined ? file.parsed_year : null
       ]
     );
   }
