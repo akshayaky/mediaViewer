@@ -2,13 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { Media, MediaHistory, MediaState } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { Play, Info, Star, Calendar, Clock, Sparkles } from 'lucide-react';
+import { getAccentRgb } from '../helper/mediaDetailTheme';
 
 interface HeroShowcaseProps {
   media: Media;
   onSelectMedia: (media: Media) => void;
+  accentColor: string;
+  contentPaddingLeft: string;
 }
 
-export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ media, onSelectMedia }) => {
+export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
+  media,
+  onSelectMedia,
+  accentColor,
+  contentPaddingLeft
+}) => {
   const [latestHistory, setLatestHistory] = useState<MediaHistory>();
   const [state, setState] = useState<MediaState>();
 
@@ -27,27 +35,43 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ media, onSelectMedia
   }, [media.id]);
 
   return (
-    <div className="relative w-full h-[960px] rounded-2xl overflow-hidden border border-[#232736] bg-[#12141c] shadow-2xl mb-8 group">
+    <div
+      className="relative w-full h-[min(76vh,780px)] min-h-[1080px] overflow-hidden group"
+      style={{
+        '--hero-accent': accentColor,
+        '--hero-accent-rgb': getAccentRgb(accentColor),
+        backgroundColor: accentColor
+      } as React.CSSProperties}
+    >
       {/* Background Backdrop Image */}
       {media.backdrop ? (
         <img
           src={media.backdrop}
           alt={media.title}
-          className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-700 opacity-60"
+          className="absolute inset-0 w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 opacity-75"
         />
       ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-rose-950/40 via-purple-950/20 to-[#0c0d10]" />
+        <div className="absolute inset-0" style={{
+          background: 'linear-gradient(135deg, rgba(var(--hero-accent-rgb), 0.18), rgba(var(--hero-accent-rgb), 0.05) 48%, var(--hero-accent) 100%)'
+        }} />
       )}
 
-      {/* Cinematic Gradient Overlays */}
-      <div className="absolute inset-0 bg-gradient-to-r from-[#0c0d10] via-[#0c0d10]/80 to-transparent w-3/4" />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d10] via-transparent to-transparent" />
+      {/* Soft overlays keep the artwork readable while blending its accent into the page. */}
+      <div className="absolute inset-0" style={{
+        background: 'linear-gradient(to top, var(--hero-accent) 0%, var(--hero-accent) 0%, rgba(var(--hero-accent-rgb), 0) 36%, rgba(0, 0, 0, 0.4) 100%)'
+      }} />
 
       {/* Content Container */}
-      <div className="relative h-full flex flex-col justify-end p-8 max-w-2xl space-y-4">
+      <div
+        className="relative h-full flex flex-col justify-end py-8 pr-8 max-w-4xl space-y-4"
+        style={{ paddingLeft: contentPaddingLeft }}
+      >
         {/* Featured Tag */}
         <div className="flex items-center space-x-2">
-          <span className="bg-rose-600/90 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center space-x-1.5 shadow-md">
+          <span
+            className="text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center space-x-1.5 shadow-md"
+            style={{ backgroundColor: 'rgba(var(--hero-accent-rgb), 0.88)' }}
+          >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Featured Selection</span>
           </span>
@@ -81,13 +105,13 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ media, onSelectMedia
         <div className="flex items-center space-x-4 text-xs font-semibold text-gray-300">
           {media.release_year && (
             <span className="flex items-center space-x-1">
-              <Calendar className="w-3.5 h-3.5 text-rose-400" />
+              <Calendar className="w-3.5 h-3.5" style={{ color: 'var(--hero-accent)' }} />
               <span>{media.release_year}</span>
             </span>
           )}
           {media.runtime && (
             <span className="flex items-center space-x-1">
-              <Clock className="w-3.5 h-3.5 text-rose-400" />
+              <Clock className="w-3.5 h-3.5" style={{ color: 'var(--hero-accent)' }} />
               <span>{media.runtime} mins</span>
             </span>
           )}
@@ -98,7 +122,14 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ media, onSelectMedia
             </span>
           )}
           {latestHistory?.context && (
-            <span className="bg-rose-950/80 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded text-[11px]">
+            <span
+              className="px-2 py-0.5 rounded text-[11px]"
+              style={{
+                backgroundColor: 'rgba(var(--hero-accent-rgb), 0.16)',
+                color: 'rgba(var(--hero-accent-rgb), 0.95)',
+                border: '1px solid rgba(var(--hero-accent-rgb), 0.3)'
+              }}
+            >
               {latestHistory.context}
             </span>
           )}
@@ -113,7 +144,11 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ media, onSelectMedia
         <div className="flex items-center space-x-3 pt-2">
           <button
             onClick={() => onSelectMedia(media)}
-            className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-rose-900/40 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+            className="flex items-center space-x-2 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all transform hover:-translate-y-0.5 cursor-pointer"
+            style={{
+              backgroundColor: 'var(--hero-accent)',
+              boxShadow: '0 12px 28px rgba(var(--hero-accent-rgb), 0.24)'
+            }}
           >
             <Play className="w-4 h-4 fill-current" />
             <span>View Details</span>

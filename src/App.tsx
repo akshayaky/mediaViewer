@@ -75,10 +75,13 @@ export function App() {
 
     switch (activeTab) {
       case 'home':
-        return <HomeView 
-        onSelectMedia={handleSelectMedia}
-        isCollapsed={isCollapsed}
-         />;
+        return (
+          <HomeView
+            onSelectMedia={handleSelectMedia}
+            onAccentColorChange={setSelectedAccentColor}
+            isCollapsed={isCollapsed}
+          />
+        );
       case 'movies':
         return (
           <MediaGridView
@@ -118,9 +121,20 @@ export function App() {
       case 'settings':
         return <SettingsView />;
       default:
-        return <HomeView onSelectMedia={handleSelectMedia} />;
+        return (
+          <HomeView
+            onSelectMedia={handleSelectMedia}
+            onAccentColorChange={setSelectedAccentColor}
+          />
+        );
     }
   };
+
+  const pageAccentColor = selectedMedia
+    ? selectedAccentColor || selectedMedia.accent_color
+    : activeTab === 'home'
+      ? selectedAccentColor
+      : undefined;
 
   return (
     <div className="flex h-screen bg-[#0c0d10] text-gray-100 font-sans overflow-hidden">
@@ -130,11 +144,14 @@ export function App() {
         onSelectTab={handleSelectTab}
         isCollapsed={isCollapsed}
         setIsCollapsed={setIsCollapsed}
-        accentColor={selectedMedia ? selectedAccentColor || selectedMedia.accent_color : undefined}
+        accentColor={pageAccentColor}
       />
 
       {/* Main View Area */}
-      <main className="flex-1 overflow-y-auto bg-[#0c0d10]">
+      <main
+        className="flex-1 overflow-y-auto transition-colors duration-350"
+        style={{ backgroundColor: pageAccentColor || '#0c0d10' }}
+      >
         {renderActiveView()}
       </main>
     </div>

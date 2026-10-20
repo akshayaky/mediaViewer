@@ -58,7 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
 
   return (
     <aside 
-      className={`fixed inset-y-0 left-0 bg-[#111319] border-r border-[#1f222e] flex flex-col justify-between select-none z-40 transition-all duration-300 ease-in-out ${
+      className={`fixed inset-y-0 left-0 bg-[#111319] border-r border-[#1f222e] flex flex-col justify-between select-none z-40 transition-all duration-400 ease-in-out ${
         isCollapsed ? 'w-20' : 'w-64'
       } ${accentColors ? 'backdrop-blur-xl' : ''}`}
       style={accentColors ? {
@@ -109,11 +109,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
                 key={item.id}
                 onClick={() => onSelectTab(item.id)}
                 title={isCollapsed ? item.label : undefined}
-                className={`w-full flex items-center rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
+                className={`w-full flex items-center rounded-lg text-sm font-medium transition-all duration-400 cursor-pointer ${
                   isCollapsed ? 'justify-center p-3' : 'justify-between px-4 py-3'
                 } ${
                   isActive
-                    ? `${accentColors ? '' : 'bg-rose-600/15 text-rose-400 border-rose-500'} border-l-4 font-semibold shadow-sm`
+                    ? `${accentColors ? '' : 'bg-rose-600/15 text-rose-400 border-rose-500'} font-semibold shadow-sm`
                     : accentColors ? 'hover:opacity-80' : 'text-gray-400 hover:text-gray-200 hover:bg-[#181a24]'
                 }`}
                 style={accentColors ? isActive ? {

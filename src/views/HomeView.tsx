@@ -3,14 +3,18 @@ import { HeroShowcase } from '../components/HeroShowcase';
 import { MediaRail } from '../components/MediaRail';
 import { Media } from '../types/media';
 import { dbService } from '../services/DatabaseService';
+import { getAccentRgb } from '../helper/mediaDetailTheme';
+import { useDominantColor } from '../helper/useDominantColour';
 
 interface HomeViewProps {
   onSelectMedia: (media: Media) => void,
+  onAccentColorChange: (color?: string) => void,
   isCollapsed?: boolean;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
    onSelectMedia,
+   onAccentColorChange,
    isCollapsed
   }) => {
   const [homeData, setHomeData] = useState<{
@@ -62,6 +66,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
   }, []);
 
   const { allMedia, continueWatching, recentlyWatched, rewatchCandidates, abandonedList, localLibraryList } = homeData;
+  const heroMedia = allMedia.find(m => m.title.includes("Ted Lasso")) || allMedia[0];
+  const dominantColor = useDominantColor(heroMedia?.backdrop || heroMedia?.poster);
+  const heroAccentColor = heroMedia?.accent_color || (
+    dominantColor ? `rgb(${dominantColor.join(', ')})` : '#e11d48'
+  );
+  useEffect(() => {
+    onAccentColorChange(heroMedia ? heroAccentColor : undefined);
+  }, [heroAccentColor, heroMedia, onAccentColorChange]);
+
   if (allMedia.length === 0) {
     return (
       <div className="p-8 text-center text-gray-400">
@@ -70,50 +83,63 @@ export const HomeView: React.FC<HomeViewProps> = ({
     );
   }
 
-  // Hero feature (Assassin's Creed IV or first item)
-  const heroMedia = allMedia.find(m => m.title.includes("Assassin's Creed")) || allMedia[0];
+  const homeStyle = {
+    '--hero-accent': heroAccentColor,
+    '--hero-accent-rgb': getAccentRgb(heroAccentColor),
+    backgroundColor: heroAccentColor
+  } as React.CSSProperties;
 
   return (
-    <div className="p-8 space-y-6 mx-auto"
-    style={{ paddingLeft: isCollapsed ? '6rem' : '18rem' }}>
+    <div className="min-h-full space-y-6 mx-auto"
+    style={{
+      ...homeStyle,
+      backgroundImage: 'radial-gradient(ellipse 85% 48% at 50% 0%, rgba(var(--hero-accent-rgb), 0.11), transparent 78%)'
+    }}>
       {/* Featured Hero Banner */}
-      <HeroShowcase media={heroMedia} onSelectMedia={onSelectMedia} />
+      <HeroShowcase
+        media={heroMedia}
+        onSelectMedia={onSelectMedia}
+        accentColor={heroAccentColor}
+        contentPaddingLeft={isCollapsed ? '6rem' : '18rem'}
+      />
 
       {/* Media Rails */}
-      <MediaRail
-        title="Continue Watching / Playing"
-        subtitle="Pick up where you left off"
-        items={continueWatching}
-        onSelectMedia={onSelectMedia}
-      />
+      <div className="space-y-6 px-8 pb-8" style={{ paddingLeft: isCollapsed ? '6rem' : '18rem' }}>
+        <MediaRail
+          title="Continue Watching / Playing"
+          subtitle="Pick up where you left off"
+          items={continueWatching}
+          onSelectMedia={onSelectMedia}
+        />
 
-      <MediaRail
-        title="Recently Completed"
-        subtitle="Your latest logged watches and plays"
-        items={recentlyWatched}
-        onSelectMedia={onSelectMedia}
-      />
+        <MediaRail
+          title="Recently Completed"
+          subtitle="Your latest logged watches and plays"
+          items={recentlyWatched}
+          onSelectMedia={onSelectMedia}
+        />
 
-      <MediaRail
-        title="Rewatch Candidates"
-        subtitle="Personal favorites revisited multiple times"
-        items={rewatchCandidates}
-        onSelectMedia={onSelectMedia}
-      />
+        <MediaRail
+          title="Rewatch Candidates"
+          subtitle="Personal favorites revisited multiple times"
+          items={rewatchCandidates}
+          onSelectMedia={onSelectMedia}
+        />
 
-      <MediaRail
-        title="Local Library Files"
-        subtitle="Detected media files on local system"
-        items={localLibraryList}
-        onSelectMedia={onSelectMedia}
-      />
+        <MediaRail
+          title="Local Library Files"
+          subtitle="Detected media files on local system"
+          items={localLibraryList}
+          onSelectMedia={onSelectMedia}
+        />
 
-      <MediaRail
-        title="Paused & Abandoned"
-        subtitle="Sessions currently on hold"
-        items={abandonedList}
-        onSelectMedia={onSelectMedia}
-      />
+        <MediaRail
+          title="Paused & Abandoned"
+          subtitle="Sessions currently on hold"
+          items={abandonedList}
+          onSelectMedia={onSelectMedia}
+        />
+      </div>
     </div>
   );
 };
