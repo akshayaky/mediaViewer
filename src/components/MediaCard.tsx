@@ -149,14 +149,14 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onCli
       </div>
 
       {/* Card Info */}
-      <div className="p-3.5 flex flex-col justify-between flex-1">
+      {/* <div className="p-3.5 flex flex-col justify-between flex-1">
         <h3 className="font-semibold text-sm text-gray-100 group-hover:text-rose-400 transition-colors line-clamp-1">
           {media.title}
         </h3>
         <p className="text-xs text-gray-400 mt-1 line-clamp-1">
           {media.genres && media.genres.length > 0 ? media.genres.join(', ') : media.type}
         </p>
-      </div>
+      </div> */}
     </div>
   );
 };
