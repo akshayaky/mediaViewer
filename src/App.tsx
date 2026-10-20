@@ -28,6 +28,7 @@ export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [cardTransition, setCardTransition] = useState<CardTransitionState | null>(null);
+  const mainViewRef = useRef<HTMLElement>(null);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewStartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transitionFrame = useRef<number | null>(null);
@@ -53,7 +54,7 @@ export function App() {
 
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-    const radius = Math.min(99060, Math.hypot(
+    const radius = Math.min(9060, Math.hypot(
       Math.max(centerX, window.innerWidth - centerX),
       Math.max(centerY, window.innerHeight - centerY)
     ) * 0.99);
@@ -120,11 +121,13 @@ export function App() {
   };
 
   const handleSelectMedia = (media: Media) => {
+    const continuesCardTransition = cardTransition?.mediaId === media.id && cardTransition.phase !== 'reverse';
     setSelectedMedia(media);
-    setSelectedAccentColor(media.accent_color || (
-      cardTransition?.mediaId === media.id ? cardTransition.color : undefined
-    ));
-    if (cardTransition?.mediaId !== media.id || cardTransition.phase === 'reverse') return;
+    setSelectedAccentColor(continuesCardTransition
+      ? media.accent_color || cardTransition.color
+      : media.accent_color);
+    mainViewRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+    if (!continuesCardTransition) return;
 
     clearTransitionTimer();
     clearPreviewStartTimer();
@@ -133,8 +136,14 @@ export function App() {
       transitionFrame.current = null;
     }
     setCardTransition(current => current?.mediaId === media.id
-      ? { ...current, phase: 'commit', entered: true }
+      ? { ...current, phase: 'commit', entered: false }
       : current);
+    transitionFrame.current = requestAnimationFrame(() => {
+      setCardTransition(current => current?.mediaId === media.id && current.phase === 'commit'
+        ? { ...current, entered: true }
+        : current);
+      transitionFrame.current = null;
+    });
     transitionTimer.current = setTimeout(() => {
       setCardTransition(current => current?.mediaId === media.id
         ? { ...current, phase: 'reveal' }
@@ -143,7 +152,7 @@ export function App() {
         setCardTransition(current => current?.mediaId === media.id ? null : current);
         transitionTimer.current = null;
       }, 70);
-    }, 170);
+    }, 2100);
   };
 
   const handleBackToTab = () => {
@@ -172,6 +181,8 @@ export function App() {
           onBack={handleBackToTab}
           isSidebarCollapsed={isCollapsed}
           onAccentColorChange={setSelectedAccentColor}
+          cardTransition={cardTransition?.mediaId === selectedMedia.id ? cardTransition : undefined}
+          accentColorOverride={selectedAccentColor}
         />
       );
     }
@@ -258,6 +269,7 @@ export function App() {
 
       {/* Main View Area */}
       <main
+        ref={mainViewRef}
         className="relative isolate flex-1 overflow-y-auto transition-colors duration-350"
         style={{
           backgroundColor: !selectedMedia && activeTab === 'home'
@@ -274,14 +286,14 @@ export function App() {
               backgroundColor: cardTransition.color,
               opacity: cardTransition.phase === 'preview'
                 ? cardTransition.entered ? 0.46 : 0
-                : cardTransition.phase === 'reverse' ? 0.46 : cardTransition.phase === 'reveal' ? 0 : 0.46,
-              clipPath: `circle(${cardTransition.phase === 'reverse' || (cardTransition.phase === 'preview' && !cardTransition.entered) ? 0 : cardTransition.radius}px at ${cardTransition.centerX}px ${cardTransition.centerY}px)`,
+                : cardTransition.phase === 'reveal' ? 0 : cardTransition.phase === 'commit' ? 1 : 0.46,
+              clipPath: `circle(${cardTransition.phase === 'reverse' || !cardTransition.entered ? 0 : cardTransition.radius}px at ${cardTransition.centerX}px ${cardTransition.centerY}px)`,
               transition: cardTransition.phase === 'preview'
-                ? 'clip-path 1150ms cubic-bezier(0.42, 0, 0.58, 1), opacity 450ms cubic-bezier(0.42, 0, 0.58, 1)'
+                ? 'clip-path 11500ms cubic-bezier(0.42, 0, 0.58, 1), opacity 450ms cubic-bezier(0.42, 0, 0.58, 1)'
                 : cardTransition.phase === 'reverse'
-                ? 'clip-path 160ms cubic-bezier(0.42, 0, 0.58, 1), opacity 160ms ease-in-out'
+                ? 'clip-path 16000ms cubic-bezier(0.42, 0, 0.58, 1), opacity 1600000ms ease-in-out'
                   : cardTransition.phase === 'commit'
-                    ? 'clip-path 170ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 170ms ease-in-out'
+                    ? 'clip-path 2100ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 2100ms ease-in-out'
                     : 'opacity 70ms ease-out'
             }}
           />
