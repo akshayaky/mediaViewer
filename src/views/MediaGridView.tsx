@@ -10,6 +10,8 @@ interface MediaGridViewProps {
   title: string;
   subtitle: string;
   onSelectMedia: (media: Media) => void;
+  onPreviewStart?: (media: Media, rect: DOMRect) => void;
+  onPreviewEnd?: () => void;
   onAddNewMedia?: () => void;
   isCollapsed?: boolean;
 }
@@ -19,6 +21,8 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   title,
   subtitle,
   onSelectMedia,
+  onPreviewStart,
+  onPreviewEnd,
   onAddNewMedia,
   isCollapsed
 }) => {
@@ -203,6 +207,8 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
                 state={stateByMediaId[media.id]}
                 score={scoreByMediaId[media.id]}
                 onClick={onSelectMedia}
+                onPreviewStart={onPreviewStart}
+                onPreviewEnd={onPreviewEnd}
               />
             );
           })}

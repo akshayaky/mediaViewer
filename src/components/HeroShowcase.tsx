@@ -48,22 +48,22 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
         <img
           src={media.backdrop}
           alt={media.title}
-          className="absolute inset-0 w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 opacity-75"
+          className="absolute inset-0 z-0 w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 opacity-75"
         />
       ) : (
-        <div className="absolute inset-0" style={{
+        <div className="absolute inset-0 z-0" style={{
           background: 'linear-gradient(135deg, rgba(var(--hero-accent-rgb), 0.18), rgba(var(--hero-accent-rgb), 0.05) 48%, var(--hero-accent) 100%)'
         }} />
       )}
 
       {/* Soft overlays keep the artwork readable while blending its accent into the page. */}
-      <div className="absolute inset-0" style={{
+      <div className="absolute inset-0 z-10" style={{
         background: 'linear-gradient(to top, var(--hero-accent) 0%, var(--hero-accent) 0%, rgba(var(--hero-accent-rgb), 0) 36%, rgba(0, 0, 0, 0.4) 100%)'
       }} />
 
       {/* Content Container */}
       <div
-        className="relative h-full flex flex-col justify-end py-8 pr-8 max-w-4xl space-y-4"
+        className="relative z-30 h-full flex flex-col justify-end py-8 pr-8 max-w-4xl space-y-4"
         style={{ paddingLeft: contentPaddingLeft }}
       >
         {/* Featured Tag */}

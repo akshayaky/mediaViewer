@@ -9,9 +9,11 @@ interface MediaCardProps {
   state?: MediaState;
   score?: number;
   onClick: (media: Media) => void;
+  onPreviewStart?: (media: Media, rect: DOMRect) => void;
+  onPreviewEnd?: () => void;
 }
 
-export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onClick }) => {
+export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onClick, onPreviewStart, onPreviewEnd }) => {
   const [posterUrl, setPosterUrl] = useState<string | undefined>(media.poster);
   const [imgFailed, setImgFailed] = useState<boolean>(false);
 
@@ -99,6 +101,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onCli
   return (
     <div
       onClick={() => onClick(media)}
+      onMouseEnter={event => onPreviewStart?.(media, event.currentTarget.getBoundingClientRect())}
+      onMouseLeave={() => onPreviewEnd?.()}
       className="group relative cursor-pointer flex flex-col bg-[#151720] rounded-xl overflow-hidden border border-[#232736] hover:border-rose-500/50 hover:shadow-xl hover:shadow-rose-950/20 transition-all duration-300 transform hover:-translate-y-1"
     >
       {/* Poster Image Container */}

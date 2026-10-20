@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { HeroShowcase } from '../components/HeroShowcase';
 import { MediaRail } from '../components/MediaRail';
 import { Media } from '../types/media';
@@ -66,12 +66,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
   }, []);
 
   const { allMedia, continueWatching, recentlyWatched, rewatchCandidates, abandonedList, localLibraryList } = homeData;
-  const heroMedia = allMedia.find(m => m.title.includes("Ted Lasso")) || allMedia[0];
+  const heroMedia = allMedia.find(m => m.title.includes("House of the Dragon")) || allMedia[0];
   const dominantColor = useDominantColor(heroMedia?.backdrop || heroMedia?.poster);
   const heroAccentColor = heroMedia?.accent_color || (
     dominantColor ? `rgb(${dominantColor.join(', ')})` : '#e11d48'
   );
-  useEffect(() => {
+  useLayoutEffect(() => {
     onAccentColorChange(heroMedia ? heroAccentColor : undefined);
   }, [heroAccentColor, heroMedia, onAccentColorChange]);
 
@@ -85,16 +85,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   const homeStyle = {
     '--hero-accent': heroAccentColor,
-    '--hero-accent-rgb': getAccentRgb(heroAccentColor),
-    backgroundColor: heroAccentColor
+    '--hero-accent-rgb': getAccentRgb(heroAccentColor)
   } as React.CSSProperties;
-
   return (
-    <div className="min-h-full space-y-6 mx-auto"
+    <div
+      className="min-h-full space-y-6 mx-auto"
     style={{
       ...homeStyle,
       backgroundImage: 'radial-gradient(ellipse 85% 48% at 50% 0%, rgba(var(--hero-accent-rgb), 0.11), transparent 78%)'
     }}>
+      <div className="relative z-10 space-y-6">
       {/* Featured Hero Banner */}
       <HeroShowcase
         media={heroMedia}
@@ -139,6 +139,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           items={abandonedList}
           onSelectMedia={onSelectMedia}
         />
+      </div>
       </div>
     </div>
   );

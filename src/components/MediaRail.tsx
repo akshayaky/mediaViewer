@@ -8,9 +8,11 @@ interface MediaRailProps {
   subtitle?: string;
   items: Media[];
   onSelectMedia: (media: Media) => void;
+  onPreviewStart?: (media: Media, rect: DOMRect) => void;
+  onPreviewEnd?: () => void;
 }
 
-export const MediaRail: React.FC<MediaRailProps> = ({ title, subtitle, items, onSelectMedia }) => {
+export const MediaRail: React.FC<MediaRailProps> = ({ title, subtitle, items, onSelectMedia, onPreviewStart, onPreviewEnd }) => {
   const [states, setStates] = useState<Record<string, MediaState>>({});
   const [scores, setScores] = useState<Record<string, number | undefined>>({});
 
@@ -50,6 +52,8 @@ export const MediaRail: React.FC<MediaRailProps> = ({ title, subtitle, items, on
                 state={states[media.id]}
                 score={scores[media.id]}
                 onClick={onSelectMedia}
+                onPreviewStart={onPreviewStart}
+                onPreviewEnd={onPreviewEnd}
               />
             </div>
           );
