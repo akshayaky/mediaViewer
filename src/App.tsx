@@ -75,7 +75,10 @@ export function App() {
 
     switch (activeTab) {
       case 'home':
-        return <HomeView onSelectMedia={handleSelectMedia} />;
+        return <HomeView 
+        onSelectMedia={handleSelectMedia}
+        isCollapsed={isCollapsed}
+         />;
       case 'movies':
         return (
           <MediaGridView

@@ -27,7 +27,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ media, onSelectMedia
   }, [media.id]);
 
   return (
-    <div className="relative w-full h-[460px] rounded-2xl overflow-hidden border border-[#232736] bg-[#12141c] shadow-2xl mb-8 group">
+    <div className="relative w-full h-[960px] rounded-2xl overflow-hidden border border-[#232736] bg-[#12141c] shadow-2xl mb-8 group">
       {/* Background Backdrop Image */}
       {media.backdrop ? (
         <img

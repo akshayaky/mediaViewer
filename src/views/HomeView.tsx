@@ -5,10 +5,14 @@ import { Media } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 
 interface HomeViewProps {
-  onSelectMedia: (media: Media) => void;
+  onSelectMedia: (media: Media) => void,
+  isCollapsed?: boolean;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onSelectMedia }) => {
+export const HomeView: React.FC<HomeViewProps> = ({
+   onSelectMedia,
+   isCollapsed
+  }) => {
   const [homeData, setHomeData] = useState<{
     allMedia: Media[];
     continueWatching: Media[];
@@ -70,7 +74,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onSelectMedia }) => {
   const heroMedia = allMedia.find(m => m.title.includes("Assassin's Creed")) || allMedia[0];
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="p-8 space-y-6 mx-auto"
+    style={{ paddingLeft: isCollapsed ? '6rem' : '18rem' }}>
       {/* Featured Hero Banner */}
       <HeroShowcase media={heroMedia} onSelectMedia={onSelectMedia} />
 
