@@ -364,6 +364,33 @@ export function useMediaDetail(initialMedia: Media) {
     await refreshLocalFiles();
   };
 
+  const toggleEpisodeWatchStatus = async (seasonNumber: number, episodeNumber: number, isCurrentlyWatched: boolean) => {
+    const padS = String(seasonNumber).padStart(2, '0');
+    const padE = String(episodeNumber).padStart(2, '0');
+    const contextTag = `S${padS}E${padE}`;
+
+    if (isCurrentlyWatched) {
+      await dbService.deleteHistoryForEpisode(currentMedia.id, seasonNumber, episodeNumber);
+    } else {
+      const now = new Date().toISOString();
+      await dbService.saveHistory({
+        id: `hist_ep_${Date.now()}_${seasonNumber}_${episodeNumber}`,
+        media_id: currentMedia.id,
+        completed_at: now.split('T')[0],
+        status: 'Finished',
+        context: contextTag,
+        source: 'Manual',
+        created_at: now
+      });
+    }
+    await refreshHistoryAndState();
+  };
+
+  const linkFileToEpisode = async (fileId: string, seasonNumber: number, episodeNumber: number) => {
+    await dbService.updateLocalFileAssociation(fileId, currentMedia.id, seasonNumber, episodeNumber);
+    await refreshLocalFiles();
+  };
+
   return {
     currentMedia,
     historyList,
@@ -382,6 +409,9 @@ export function useMediaDetail(initialMedia: Media) {
     isLoadingRelated,
     addedExternalIds,
     handleAddRelatedToLibrary,
-    updateCurrentMedia
+    updateCurrentMedia,
+    toggleEpisodeWatchStatus,
+    linkFileToEpisode,
+    refreshLocalFiles
   };
 }

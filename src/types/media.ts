@@ -103,6 +103,7 @@ export interface LocalFile {
   parsed_year?: number;
   season?: number;
   episode?: number;
+  end_episode?: number;
 }
 
 export interface Availability {

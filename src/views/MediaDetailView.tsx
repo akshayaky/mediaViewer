@@ -77,6 +77,36 @@ const DominantColorExtractor: React.FC<DominantColorExtractorProps> = ({
   return null;
 };
 
+function getFileQualityRank(file: LocalFile): number {
+  const str = (file.filename + ' ' + file.path).toLowerCase();
+  if (str.includes('2160p') || str.includes('4k') || str.includes('uhd')) return 4;
+  if (str.includes('1080p') || str.includes('fhd') || str.includes('bluray') || str.includes('remux')) return 3;
+  if (str.includes('720p') || str.includes('hd')) return 2;
+  if (str.includes('480p') || str.includes('dvd') || str.includes('sd')) return 1;
+  return 0;
+}
+
+function getFileQualityLabel(file: LocalFile): string {
+  const rank = getFileQualityRank(file);
+  if (rank === 4) return '4K / 2160p';
+  if (rank === 3) return '1080p';
+  if (rank === 2) return '720p';
+  if (rank === 1) return '480p';
+  return 'SD / Default';
+}
+
+function isEpisodeWatched(historyList: any[], seasonNumber: number, episodeNumber: number): boolean {
+  const padS = String(seasonNumber).padStart(2, '0');
+  const padE = String(episodeNumber).padStart(2, '0');
+  const tag1 = `S${padS}E${padE}`;
+  const tag2 = `S${seasonNumber}E${episodeNumber}`;
+  return historyList.some(h =>
+    h.status === 'Finished' &&
+    h.context &&
+    (h.context.toUpperCase().includes(tag1.toUpperCase()) || h.context.toUpperCase().includes(tag2.toUpperCase()))
+  );
+}
+
 export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isSidebarCollapsed, onSelectMedia, onAccentColorChange }) => {
   const {
     currentMedia,
@@ -96,7 +126,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     isLoadingRelated,
     addedExternalIds,
     handleAddRelatedToLibrary,
-    updateCurrentMedia
+    updateCurrentMedia,
+    toggleEpisodeWatchStatus,
+    linkFileToEpisode,
+    refreshLocalFiles
   } = useMediaDetail(initialMedia);
 
   // Three dot menu state
@@ -121,9 +154,54 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const [calculatedAccent, setCalculatedAccent] = useState<{ src: string; color: string } | null>(null);
   const [isPlayButtonStuck, setIsPlayButtonStuck] = useState(false);
   const playButtonRowRef = useRef<HTMLDivElement>(null);
-  const artworkSource = artwork.backdrop && failedBackdropSrc !== artwork.backdrop
+
+  // Determine next episode artwork for dynamic backdrop
+  let nextEpisodeStill: string | undefined = undefined;
+  if (currentMedia.type === 'TV Series' && currentMedia.seasons && currentMedia.seasons.length > 0) {
+    const allEpisodesList: { season_number: number; season_poster?: string; episode: any }[] = [];
+    const sortedSeasons = [...currentMedia.seasons].sort((a, b) => a.season_number - b.season_number);
+    for (const season of sortedSeasons) {
+      if (season.episodes && season.episodes.length > 0) {
+        const sortedEps = [...season.episodes].sort((a, b) => a.episode_number - b.episode_number);
+        for (const ep of sortedEps) {
+          allEpisodesList.push({
+            season_number: season.season_number,
+            season_poster: season.poster_path,
+            episode: ep
+          });
+        }
+      }
+    }
+
+    if (allEpisodesList.length > 0) {
+      let lastWatchedIdx = -1;
+      for (let i = 0; i < allEpisodesList.length; i++) {
+        const epObj = allEpisodesList[i];
+        if (isEpisodeWatched(historyList, epObj.season_number, epObj.episode.episode_number)) {
+          lastWatchedIdx = i;
+        }
+      }
+
+      const nextIdx = lastWatchedIdx >= 0 && lastWatchedIdx + 1 < allEpisodesList.length
+        ? lastWatchedIdx + 1
+        : 0;
+
+      const nextEp = allEpisodesList[nextIdx];
+      if (nextEp) {
+        nextEpisodeStill = nextEp.episode.still_path || nextEp.season_poster;
+      }
+    }
+  }
+
+  // Episode UI State
+  const [selectedEpFiles, setSelectedEpFiles] = useState<Record<string, string>>({});
+  const [activeEpMenu, setActiveEpMenu] = useState<string | null>(null);
+  const [linkEpTarget, setLinkEpTarget] = useState<{ season: number; episode: number } | null>(null);
+  const [selectedFileToLink, setSelectedFileToLink] = useState<string>('');
+
+  const artworkSource = nextEpisodeStill || (artwork.backdrop && failedBackdropSrc !== artwork.backdrop
     ? artwork.backdrop
-    : artwork.poster;
+    : artwork.poster);
 
  // Resolve the accent color based on the current artwork source
   const accentColorForPage = (calculatedAccent?.src === artworkSource ? calculatedAccent!.color : undefined)
@@ -559,24 +637,145 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
                           {season.episodes && season.episodes.length > 0 ? (
                             <div className="mdv-episodes">
-                              {season.episodes.map(ep => (
-                                <div key={ep.episode_number} className="mdv-tile mdv-tile--sm mdv-episode">
-                                  {ep.still_path && (
-                                    <img src={ep.still_path} alt={ep.name} className="mdv-episode-still" />
-                                  )}
-                                  <div className="mdv-episode-info">
-                                    <div className="mdv-episode-head">
-                                      <h4 className="mdv-episode-title">
-                                        E{ep.episode_number}. {ep.name}
-                                      </h4>
-                                      {ep.air_date && <span className="mdv-episode-date">{ep.air_date}</span>}
-                                    </div>
-                                    {ep.overview && (
-                                      <p className="mdv-episode-overview">{ep.overview}</p>
+                              {season.episodes.map(ep => {
+                                const epKey = `${season.season_number}_${ep.episode_number}`;
+                                const epWatched = isEpisodeWatched(historyList, season.season_number, ep.episode_number);
+
+                                const matchingFiles = localFiles.filter(lf =>
+                                  lf.exists &&
+                                  lf.media_id === currentMedia.id &&
+                                  lf.season === season.season_number &&
+                                  (lf.episode === ep.episode_number ||
+                                    (lf.episode !== undefined && lf.end_episode !== undefined && lf.episode <= ep.episode_number && lf.end_episode >= ep.episode_number))
+                                );
+
+                                const sortedFiles = [...matchingFiles].sort((a, b) => getFileQualityRank(b) - getFileQualityRank(a) || b.size - a.size);
+                                const selectedFileId = selectedEpFiles[epKey] || (sortedFiles[0] ? sortedFiles[0].id : undefined);
+                                const activeEpFile = sortedFiles.find(f => f.id === selectedFileId) || sortedFiles[0];
+
+                                return (
+                                  <div key={ep.episode_number} className="mdv-tile mdv-tile--sm mdv-episode relative group">
+                                    {ep.still_path ? (
+                                      <img src={ep.still_path} alt={ep.name} className="mdv-episode-still" />
+                                    ) : (
+                                      <div className="w-28 h-16 bg-[#1a1c29] rounded-lg shrink-0 flex items-center justify-center text-gray-500 border border-[#2d3145]">
+                                        <Tv className="w-6 h-6 text-sky-400" />
+                                      </div>
                                     )}
+
+                                    <div className="mdv-episode-info flex-1 min-w-0">
+                                      <div className="mdv-episode-head flex items-center justify-between gap-2">
+                                        <div className="flex items-center space-x-2 truncate">
+                                          <h4 className="mdv-episode-title font-bold text-white text-sm truncate">
+                                            E{ep.episode_number}. {ep.name}
+                                          </h4>
+
+                                          {epWatched ? (
+                                            <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center space-x-1 shrink-0">
+                                              <CheckCircle2 className="w-3 h-3" />
+                                              <span>Watched</span>
+                                            </span>
+                                          ) : (
+                                            <span className="bg-[#1e212d] text-gray-400 border border-[#2f3448] text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0">
+                                              Unwatched
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {ep.air_date && <span className="mdv-episode-date text-xs text-gray-400 shrink-0">{ep.air_date}</span>}
+                                      </div>
+
+                                      {ep.overview && (
+                                        <p className="mdv-episode-overview text-xs text-gray-300 line-clamp-2 mt-1">{ep.overview}</p>
+                                      )}
+
+                                      {/* Episode Playback & File Selector Row */}
+                                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 mt-1 border-t border-[#232736]">
+                                        <div className="flex items-center space-x-2">
+                                          {sortedFiles.length > 0 ? (
+                                            <>
+                                              <button
+                                                onClick={() => handlePlayFile(activeEpFile)}
+                                                className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3 py-1 rounded-lg flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer"
+                                              >
+                                                <Play className="w-3.5 h-3.5" fill="currentColor" />
+                                                <span>Play Episode</span>
+                                              </button>
+
+                                              {sortedFiles.length > 1 ? (
+                                                <select
+                                                  value={activeEpFile.id}
+                                                  onChange={(e) => setSelectedEpFiles({ ...selectedEpFiles, [epKey]: e.target.value })}
+                                                  className="bg-[#181a26] text-gray-200 border border-[#2d3145] text-[11px] rounded px-2 py-1 cursor-pointer"
+                                                >
+                                                  {sortedFiles.map(f => (
+                                                    <option key={f.id} value={f.id}>
+                                                      {getFileQualityLabel(f)} ({f.filename})
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                              ) : (
+                                                <span className="text-[11px] text-emerald-400 font-semibold flex items-center space-x-1">
+                                                  <FolderCheck className="w-3.5 h-3.5" />
+                                                  <span>{getFileQualityLabel(activeEpFile)}</span>
+                                                </span>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <span className="text-[11px] text-gray-500 flex items-center space-x-1 italic">
+                                              <FolderX className="w-3.5 h-3.5" />
+                                              <span>No associated local video file</span>
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Three-dot menu for Episode Options */}
+                                        <div className="relative">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setActiveEpMenu(activeEpMenu === epKey ? null : epKey);
+                                            }}
+                                            className="text-gray-400 hover:text-white p-1 rounded hover:bg-[#25293a] transition-colors cursor-pointer"
+                                            title="Episode options"
+                                          >
+                                            <MoreVertical className="w-4 h-4" />
+                                          </button>
+
+                                          {activeEpMenu === epKey && (
+                                            <div
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="absolute right-0 bottom-full mb-1 w-48 bg-[#181a26] border border-[#2d3145] rounded-xl shadow-xl py-1 z-30 animate-fadeIn text-xs"
+                                            >
+                                              <button
+                                                onClick={() => {
+                                                  setActiveEpMenu(null);
+                                                  toggleEpisodeWatchStatus(season.season_number, ep.episode_number, epWatched);
+                                                }}
+                                                className="w-full text-left px-3 py-2 text-gray-200 hover:bg-rose-950/50 hover:text-rose-300 flex items-center space-x-2 transition-colors cursor-pointer"
+                                              >
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                                <span>{epWatched ? 'Mark as Unwatched' : 'Mark as Watched'}</span>
+                                              </button>
+
+                                              <button
+                                                onClick={() => {
+                                                  setActiveEpMenu(null);
+                                                  setLinkEpTarget({ season: season.season_number, episode: ep.episode_number });
+                                                }}
+                                                className="w-full text-left px-3 py-2 text-gray-200 hover:bg-rose-950/50 hover:text-rose-300 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736]"
+                                              >
+                                                <LinkIcon className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                                                <span>Link / Reassign File</span>
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           ) : (
                             <p className="mdv-empty mdv-empty--sm">No individual episode listing downloaded.</p>
@@ -1083,6 +1282,110 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Link File to Episode Modal */}
+      {linkEpTarget && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-[#232736] pb-3">
+              <h3 className="font-bold text-base text-white flex items-center space-x-2">
+                <LinkIcon className="w-5 h-5 text-sky-400" />
+                <span>Link Local File to Season {linkEpTarget.season} Episode {linkEpTarget.episode}</span>
+              </h3>
+              <button
+                onClick={() => setLinkEpTarget(null)}
+                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#1f222e] transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300">
+              Select an existing local file from your library or enter a custom file path to associate with Season {linkEpTarget.season} Episode {linkEpTarget.episode}.
+            </p>
+
+            <div className="space-y-3">
+              {localFiles.length > 0 && (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-400">Select Existing Library File</label>
+                  <select
+                    value={selectedFileToLink}
+                    onChange={(e) => setSelectedFileToLink(e.target.value)}
+                    className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl px-3 py-2 text-xs text-white"
+                  >
+                    <option value="">-- Choose Local File --</option>
+                    {localFiles.map(f => (
+                      <option key={f.id} value={f.id}>
+                        {f.filename} ({f.path})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-400">Or Enter Custom File Path</label>
+                <input
+                  type="text"
+                  placeholder="C:\Media\TV\Show\S01E03.mkv"
+                  value={customPath}
+                  onChange={(e) => setCustomPath(e.target.value)}
+                  className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl px-3 py-2 text-xs text-white font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-[#232736]">
+              <button
+                onClick={() => {
+                  setLinkEpTarget(null);
+                  setSelectedFileToLink('');
+                  setCustomPath('');
+                }}
+                className="px-4 py-2 rounded-xl border border-[#2d3145] text-gray-300 hover:bg-[#1a1c29] text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={async () => {
+                  if (selectedFileToLink) {
+                    await linkFileToEpisode(selectedFileToLink, linkEpTarget.season, linkEpTarget.episode);
+                  } else if (customPath.trim()) {
+                    const now = new Date().toISOString();
+                    const filename = customPath.split(/\\|\//).pop() || customPath;
+                    const ext = filename.split('.').pop() || 'mkv';
+                    const newFile: LocalFile = {
+                      id: `lf_ep_${Date.now()}`,
+                      media_id: currentMedia.id,
+                      path: customPath.trim(),
+                      filename,
+                      extension: ext,
+                      size: 1500000000,
+                      discovered_at: now,
+                      last_seen_at: now,
+                      exists: true,
+                      file_type: 'tv_episode',
+                      launch_info: customPath.trim(),
+                      season: linkEpTarget.season,
+                      episode: linkEpTarget.episode
+                    };
+                    await dbService.saveLocalFile(newFile);
+                    await refreshLocalFiles();
+                  }
+                  setLinkEpTarget(null);
+                  setSelectedFileToLink('');
+                  setCustomPath('');
+                }}
+                disabled={!selectedFileToLink && !customPath.trim()}
+                className="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+              >
+                Save Link
+              </button>
+            </div>
           </div>
         </div>
       )}

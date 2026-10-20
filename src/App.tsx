@@ -8,7 +8,7 @@ import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
 import { UnmatchedInboxView } from './views/UnmatchedInboxView';
 import { dbService } from './services/DatabaseService';
-// import { seedDatabaseIfEmpty } from './services/seedData';
+import { seedDatabaseIfEmpty } from './services/seedData';
 import { Media } from './types/media';
 
 interface CardTransitionState {
@@ -103,7 +103,7 @@ export function App() {
     async function initApp() {
       try {
         await dbService.init();
-        //await seedDatabaseIfEmpty();
+        await seedDatabaseIfEmpty();
       } catch (err) {
         console.error('Failed to initialize database:', err);
       } finally {
