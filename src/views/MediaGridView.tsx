@@ -9,7 +9,7 @@ interface MediaGridViewProps {
   typeFilter?: MediaType;
   title: string;
   subtitle: string;
-  onSelectMedia: (media: Media) => void;
+  onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
   onPreviewStart?: (media: Media, rect: DOMRect) => void;
   onPreviewEnd?: () => void;
   onAddNewMedia?: () => void;

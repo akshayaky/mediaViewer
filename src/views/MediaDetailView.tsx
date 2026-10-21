@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LocalFile, Media } from '../types/media';
 import { useMediaDetail } from '../hooks/useMediaDetail';
 import { useDominantColor } from '../helper/useDominantColour';
@@ -58,6 +58,8 @@ interface MediaDetailViewProps {
     mediaId: string;
     centerX: number;
     centerY: number;
+    detailCenterX: number;
+    detailCenterY: number;
     radius: number;
     phase: 'preview' | 'reverse' | 'commit' | 'reveal';
     entered: boolean;
@@ -151,9 +153,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
   const [failedBackdropSources, setFailedBackdropSources] = useState<string[]>([]);
   const [calculatedAccent, setCalculatedAccent] = useState<{ src: string; color: string } | null>(null);
-  const [detailTransitionCenter, setDetailTransitionCenter] = useState<{ x: number; y: number } | null>(null);
   const [isPlayButtonStuck, setIsPlayButtonStuck] = useState(false);
-  const backdropRef = useRef<HTMLDivElement>(null);
   const playButtonRowRef = useRef<HTMLDivElement>(null);
 
   const lastWatchedEpisodeArtwork = getLastWatchedEpisodeArtwork(currentMedia, historyList);
@@ -201,18 +201,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const detailAccentColor = accentColorForPage || accentColorOverride;
   const theme = getMediaTheme(detailAccentColor);
   const isTransitioningBackground = Boolean(cardTransition && cardTransition.phase !== 'reveal');
-
-  useLayoutEffect(() => {
-    if (!cardTransition || !backdropRef.current) {
-      setDetailTransitionCenter(null);
-      return;
-    }
-    const rect = backdropRef.current.getBoundingClientRect();
-    setDetailTransitionCenter({
-      x: cardTransition.centerX - rect.left,
-      y: cardTransition.centerY - rect.top
-    });
-  }, [cardTransition?.mediaId, cardTransition?.centerX, cardTransition?.centerY]);
 
   // Season accordion state
   const [expandedSeason, setExpandedSeason] = useState<number | null>(1);
@@ -296,30 +284,19 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       data-tone={theme.tone}
       style={{
         ...theme.cssVars,
-        backgroundColor: isTransitioningBackground
-          ? 'transparent'
-          : detailAccentColor || currentMedia.accent_color || '#423e3f',
-        transition: cardTransition ? 'none' : undefined
+        backgroundColor: detailAccentColor || currentMedia.accent_color || '#423e3f',
+        clipPath: cardTransition && isTransitioningBackground
+          ? `circle(${cardTransition.phase !== 'reverse' && cardTransition.entered ? cardTransition.radius : 0}px at ${cardTransition.detailCenterX}px ${cardTransition.detailCenterY}px)`
+          : undefined,
+        transition: cardTransition?.phase === 'commit'
+          ? 'clip-path 710ms cubic-bezier(0.2, 0.8, 0.2, 1)'
+          : cardTransition?.phase === 'preview'
+            ? 'clip-path 115ms cubic-bezier(0.42, 0, 0.58, 1)'
+            : undefined,
       }}
     >
       {/* Pinned Backdrop */}
-      <div
-        ref={backdropRef}
-        className="mdv-backdrop"
-        style={cardTransition && isTransitioningBackground
-          ? {
-              backgroundColor: 'transparent',
-              clipPath: `circle(${cardTransition.phase !== 'reverse' && cardTransition.entered ? cardTransition.radius : 0}px at ${detailTransitionCenter?.x || 0}px ${detailTransitionCenter?.y || 0}px)`,
-              transition: cardTransition.phase === 'preview'
-                ? 'clip-path 11500ms cubic-bezier(0.42, 0, 0.58, 1)'
-                : cardTransition.phase === 'reverse'
-                  ? 'clip-path 1600ms cubic-bezier(0.42, 0, 0.58, 1)'
-                  : cardTransition.phase === 'commit'
-                    ? 'clip-path 2100ms cubic-bezier(0.2, 0.8, 0.2, 1)'
-                    : 'none'
-            }
-          : undefined}
-      >
+      <div className="mdv-backdrop">
         {artworkSource ? (
           <img
             src={artworkSource}

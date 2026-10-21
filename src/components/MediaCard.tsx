@@ -8,7 +8,7 @@ interface MediaCardProps {
   media: Media;
   state?: MediaState;
   score?: number;
-  onClick: (media: Media) => void;
+  onClick: (media: Media, clickedCardRect?: DOMRect) => void;
   onPreviewStart?: (media: Media, rect: DOMRect) => void;
   onPreviewEnd?: () => void;
 }
@@ -100,7 +100,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onCli
 
   return (
     <div
-      onClick={() => onClick(media)}
+      onClick={event => onClick(media, event.currentTarget.getBoundingClientRect())}
       onMouseEnter={event => onPreviewStart?.(media, event.currentTarget.getBoundingClientRect())}
       onMouseLeave={() => onPreviewEnd?.()}
       className="group relative cursor-pointer flex flex-col bg-[#151720] rounded-xl overflow-hidden border border-[#232736] hover:border-rose-500/50 hover:shadow-xl hover:shadow-rose-950/20 transition-all duration-300 transform hover:-translate-y-1"
