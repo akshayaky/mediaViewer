@@ -28,7 +28,7 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
   onClose,
   onBackgroundUpdated
 }) => {
-  const [backdrops, setBackdrops] = useState<{ url: string; width: number; height: number }[]>([]);
+  const [backdrops, setBackdrops] = useState<{ url: string; thumbnailUrl: string; width: number; height: number }[]>([]);
   const [selectedBackdrop, setSelectedBackdrop] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -79,16 +79,11 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
         const tmdbExtId = media.external_ids?.find(ext => ext.provider === 'TMDB')?.external_id;
         const igdbExtId = media.external_ids?.find(ext => ext.provider === 'IGDB')?.external_id;
         
-        let results: { url: string; width: number; height: number }[] = [];
-        if (tmdbExtId) {
-          const tmdbResults = await tmdbProvider.getBackdrops(tmdbExtId);
-          results = [...results, ...tmdbResults];
-        }
-        if (igdbExtId) {
-          const igdbResults = await igdbProvider.getBackdrops(igdbExtId);
-          results = [...results, ...igdbResults];
-        }
-        console.log(results.length);
+        const [tmdbResults, igdbResults] = await Promise.all([
+          tmdbExtId ? tmdbProvider.getBackdrops(tmdbExtId) : Promise.resolve([]),
+          igdbExtId ? igdbProvider.getBackdrops(igdbExtId) : Promise.resolve([])
+        ]);
+        const results = [...tmdbResults, ...igdbResults];
         setBackdrops(results);
       } catch (err) {
         console.error('Failed to fetch backdrops for picker:', err);
@@ -195,7 +190,6 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
             .filter((backdrop) => 
               {
                 const height = Number(backdrop.height)
-                console.log("height : " + height);
                 if (quality === 'veryHigh') {
                   return height >= QUALITY_MAP.veryHigh;
                 }
@@ -223,7 +217,13 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
                   selectedBackdrop === backdrop.url ? 'border-sky-500 scale-95 shadow-lg' : 'border-transparent hover:border-gray-600'
                 }`}
               >
-                <img src={backdrop.url} alt="" className="w-full h-full object-cover" />
+                <img
+                  src={backdrop.thumbnailUrl}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full h-full object-cover"
+                />
                 {selectedBackdrop === backdrop.url && (
                   <div className="absolute top-2 right-2 bg-sky-500 text-white rounded-full p-1 shadow-md">
                     <CheckCircle2 className="w-3 h-3" />

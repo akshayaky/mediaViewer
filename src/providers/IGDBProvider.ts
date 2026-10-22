@@ -510,7 +510,7 @@ export class IGDBProvider implements MetadataProvider {
     };
   }
 
-  public async getBackdrops(externalId: string): Promise<{ url: string; width: number; height: number }[]> {
+  public async getBackdrops(externalId: string): Promise<{ url: string; thumbnailUrl: string; width: number; height: number }[]> {
     const { clientId, clientSecret } = await this.getTwitchCredentials();
     if (!clientId || !clientSecret) return [];
 
@@ -535,6 +535,7 @@ export class IGDBProvider implements MetadataProvider {
           const artworks = await res.json();
           const artworkUrls = (artworks || []).map((a: any) => ({
               url : `https://images.igdb.com/igdb/image/upload/t_1080p_2x/${a.image_id}.jpg`,
+              thumbnailUrl: `https://images.igdb.com/igdb/image/upload/t_screenshot_med/${a.image_id}.jpg`,
               height : a.height,
               width: a.width
             })
@@ -556,6 +557,7 @@ export class IGDBProvider implements MetadataProvider {
             const screenshots = await screenRes.json();
             const screenshotUrls = (screenshots || []).map((s: any) => ({
                 url : `https://images.igdb.com/igdb/image/upload/t_1080p_2x/${s.image_id}.jpg`,
+                thumbnailUrl: `https://images.igdb.com/igdb/image/upload/t_screenshot_med/${s.image_id}.jpg`,
                 height : s.height,
                 width: s.width
               })
