@@ -255,6 +255,11 @@
   padding: 2rem;
 }
 
+.mdv-related {
+  position: relative;
+  z-index: 10;
+}
+
 .mdv-col {
   display: flex;
   flex-direction: column;

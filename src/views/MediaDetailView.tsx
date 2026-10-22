@@ -146,10 +146,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const [previewRelatedItem, setPreviewRelatedItem] = useState<MetadataSearchResult | null>(null);
   const [previewDetails, setPreviewDetails] = useState<Partial<Media> | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-
-  if (!isRefreshingMetadata && artwork.backdrop === "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80") {
-    handleManualMetadataRefresh();
-  }
+  const metadataRefreshStartedFor = useRef<string | null>(null);
 
   const [failedBackdropSources, setFailedBackdropSources] = useState<string[]>([]);
   const [calculatedAccent, setCalculatedAccent] = useState<{ src: string; color: string } | null>(null);
@@ -173,11 +170,34 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const artworkSource = artworkCandidates.find(source => !failedBackdropSources.includes(source));
 
   useEffect(() => {
+    const needsMetadataRefresh = artwork.backdrop === 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80'
+      || (
+        currentMedia.metadata_source === 'Notion Import'
+        && !currentMedia.poster
+        && !currentMedia.backdrop
+      );
+    if (!needsMetadataRefresh || isRefreshingMetadata || metadataRefreshStartedFor.current === currentMedia.id) return;
+
+    metadataRefreshStartedFor.current = currentMedia.id;
+    void handleManualMetadataRefresh();
+  }, [
+    artwork.backdrop,
+    currentMedia.backdrop,
+    currentMedia.id,
+    currentMedia.metadata_source,
+    currentMedia.poster,
+    handleManualMetadataRefresh,
+    isRefreshingMetadata
+  ]);
+
+  useEffect(() => {
     setFailedBackdropSources([]);
   }, [currentMedia.id]);
 
  // Resolve the accent color based on the current artwork source
-  const accentColorForPage = (calculatedAccent?.src === artworkSource ? calculatedAccent!.color : undefined)
+  const accentColorForPage = (calculatedAccent && calculatedAccent.src === artworkSource
+    ? calculatedAccent.color
+    : undefined)
     || currentMedia.accent_color;
 
   const handleDominantColorCalculated = useCallback((color: string) => {
@@ -192,6 +212,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         ...currentMedia,
         accent_color: color,
         updated_at: new Date().toISOString()
+      }).then(() => {
+        window.dispatchEvent(new CustomEvent('library-scanned'));
       }).catch(error => console.error('Failed to save calculated accent color:', error));
     } catch (error) {
       console.error('Failed to save calculated accent color:', error);
@@ -950,7 +972,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       </div>
 
       {/* Related Media Rail Section */}
-      <div className="max-w-7xl mx-auto px-6 pb-12">
+      <div className="mdv-related max-w-7xl mx-auto px-6 pb-12">
         <section className="mdv-card mdv-card--roomy">
           <h2 className="mdv-card-title flex items-center space-x-2">
             <Sparkles className="mdv-icon-lg mdv-icon-accent" />

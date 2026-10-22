@@ -34,7 +34,7 @@ function getCardTransitionRadius(centerX: number, centerY: number): number {
   return Math.min(9060, Math.hypot(
     Math.max(centerX, window.innerWidth - centerX),
     Math.max(centerY, window.innerHeight - centerY)
-  ) * 0.99);
+  ) * 1);
 }
 
 function getDetailTransitionCenter(centerX: number, centerY: number, container: HTMLElement | null) {
@@ -160,11 +160,15 @@ export function App() {
   };
 
   const handleSelectMedia = (media: Media, clickedCardRect?: DOMRect) => {
-    const startsFromClickedCard = Boolean(clickedCardRect);
-    const transitionColor = media.accent_color || cardTransition?.color || '#e11d48';
+    const hasTransitionArtwork = Boolean(media.poster || media.backdrop || media.logo || media.accent_color);
+    const startsFromClickedCard = Boolean(clickedCardRect && hasTransitionArtwork);
+    const transitionColor = media.accent_color
+      || (cardTransition?.mediaId === media.id ? cardTransition.color : undefined);
     const continuesCardTransition = Boolean(
-      startsFromClickedCard
-      || (cardTransition?.mediaId === media.id && cardTransition.phase !== 'reverse')
+      hasTransitionArtwork && (
+        startsFromClickedCard
+        || (cardTransition?.mediaId === media.id && cardTransition.phase !== 'reverse')
+      )
     );
     clearTransitionTimer();
     if (returnTransitionTimer.current) {
@@ -176,7 +180,7 @@ export function App() {
     if (['movies', 'tv', 'games'].includes(activeTab) && !selectedMedia) {
       gridScrollTop.current = mainViewRef.current?.scrollTop || 0;
     }
-    if (clickedCardRect) {
+    if (startsFromClickedCard && clickedCardRect) {
       const centerX = clickedCardRect.left + clickedCardRect.width / 2;
       const centerY = clickedCardRect.top + clickedCardRect.height / 2;
       const radius = getCardTransitionRadius(centerX, centerY);
@@ -184,7 +188,7 @@ export function App() {
       detailOrigin.current = { centerX, centerY, radius };
       setCardTransition({
         mediaId: media.id,
-        color: transitionColor,
+        color: transitionColor || '#e11d48',
         centerX,
         centerY,
         ...detailCenter,
@@ -192,7 +196,7 @@ export function App() {
         phase: 'commit',
         entered: false
       });
-    } else if (cardTransition?.mediaId === media.id && cardTransition.phase !== 'reverse') {
+    } else if (continuesCardTransition && cardTransition?.mediaId === media.id) {
       detailOrigin.current = {
         centerX: cardTransition.centerX,
         centerY: cardTransition.centerY,
@@ -203,7 +207,7 @@ export function App() {
     }
 
     setSelectedMedia(media);
-    setSelectedAccentColor(continuesCardTransition ? transitionColor : media.accent_color);
+    setSelectedAccentColor(media.accent_color);
     mainViewRef.current?.scrollTo({ top: 0, behavior: 'instant' });
     if (!continuesCardTransition) {
       clearPreviewStartTimer();
@@ -256,6 +260,7 @@ export function App() {
 
       if (mainViewRef.current) mainViewRef.current.scrollTop = 0;
       const mainRect = mainViewRef.current?.getBoundingClientRect();
+      setCardTransition(null);
       setDetailReturnTransition({
         ...origin,
         centerX: origin.centerX - (mainRect?.left || 0),
@@ -270,6 +275,7 @@ export function App() {
         setCardTransition(null);
         setDetailReturnTransition(null);
         detailOrigin.current = null;
+        window.dispatchEvent(new CustomEvent('library-scanned'));
         requestAnimationFrame(() => {
           if (mainViewRef.current) mainViewRef.current.scrollTop = gridScrollTop.current;
         });
@@ -296,6 +302,19 @@ export function App() {
   }
 
   const renderGridView = (enableHoverPreview = true) => {
+    const handleSelectGridMedia = async (media: Media, rect?: DOMRect) => {
+      try {
+        const latestMedia = await dbService.getMediaById(media.id);
+        if (!latestMedia) {
+          console.error(`Cannot open media ${media.id}: it no longer exists in the library.`);
+          return;
+        }
+        handleSelectMedia(latestMedia, rect);
+      } catch (error) {
+        console.error(`Failed to load the latest data for media ${media.id}:`, error);
+      }
+    };
+
     switch (activeTab) {
       case 'movies':
         return (
@@ -303,7 +322,7 @@ export function App() {
             typeFilter="Film"
             title="Movies & Films"
             subtitle="Explore your personal feature film library"
-            onSelectMedia={handleSelectMedia}
+            onSelectMedia={handleSelectGridMedia}
             onPreviewStart={enableHoverPreview ? handlePreviewStart : undefined}
             onPreviewEnd={enableHoverPreview ? handlePreviewEnd : undefined}
             isCollapsed={isCollapsed}
@@ -315,7 +334,7 @@ export function App() {
             typeFilter="TV Series"
             title="TV Shows & Series"
             subtitle="Track your watched seasons, episodes, and series history"
-            onSelectMedia={handleSelectMedia}
+            onSelectMedia={handleSelectGridMedia}
             onPreviewStart={enableHoverPreview ? handlePreviewStart : undefined}
             onPreviewEnd={enableHoverPreview ? handlePreviewEnd : undefined}
             isCollapsed={isCollapsed}
@@ -327,7 +346,7 @@ export function App() {
             typeFilter="VideoGame"
             title="Video Games"
             subtitle="Catalog and history of PC, console, and handheld games"
-            onSelectMedia={handleSelectMedia}
+            onSelectMedia={handleSelectGridMedia}
             onPreviewStart={enableHoverPreview ? handlePreviewStart : undefined}
             onPreviewEnd={enableHoverPreview ? handlePreviewEnd : undefined}
             isCollapsed={isCollapsed}
@@ -413,7 +432,9 @@ export function App() {
       {/* Main View Area */}
       <main
         ref={mainViewRef}
-        className="relative isolate flex-1 overflow-y-auto transition-colors duration-350"
+        className={`relative isolate flex-1 transition-colors duration-350 ${
+          hasUnderlyingGrid ? 'overflow-hidden' : 'overflow-y-auto'
+        }`}
         style={{
           backgroundColor: !selectedMedia && activeTab === 'home'
             ? pageAccentColor || '#0c0d10'
