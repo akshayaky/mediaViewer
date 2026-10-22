@@ -13,20 +13,55 @@ interface BackdropPickerModalProps {
   onBackgroundUpdated: (updatedMedia: Media) => void;
 }
 
+type QualityLevel = 'veryHigh'| 'high' | 'med' | 'low';
+
+const QUALITY_MAP = {
+  "veryHigh": 2160,
+  "high": 1080,//['3840x2160', '2560x1440', '1920x1080'],
+  "med": 720,//['1280x720', '1024x768'],
+  "low": 0//['854x480', '640x360']
+};
+
 export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
   media,
   isOpen,
   onClose,
   onBackgroundUpdated
 }) => {
-  const [backdrops, setBackdrops] = useState<string[]>([]);
+  const [backdrops, setBackdrops] = useState<{ url: string; width: number; height: number }[]>([]);
   const [selectedBackdrop, setSelectedBackdrop] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
+  const [quality, setQuality] = useState<QualityLevel>('veryHigh'); // default to high
 
   const initialBackdropRef = useRef<string | null>(media.backdrop || null);
   
+
+  const qualityCounts = React.useMemo(() => {
+    const counts = { veryHigh: 0, high: 0, med: 0, low: 0 };
+
+    backdrops.forEach((backdrop) => {
+      const height = Number(backdrop.height);
+      if (height >= QUALITY_MAP.veryHigh) counts.veryHigh++;
+      else if (height >= QUALITY_MAP.high) counts.high++;
+      else if (height >= QUALITY_MAP.med) counts.med++;
+      else counts.low++;
+    });
+
+    return counts;
+  }, [backdrops]);
+
+  React.useEffect(() => {
+    // If the current quality has no items, or if it's the first load,
+    // automatically find the highest tier that actually has backdrops
+    if (qualityCounts[quality] === 0 || !quality) {
+      if (qualityCounts.veryHigh > 0) setQuality('veryHigh');
+      else if (qualityCounts.high > 0) setQuality('high');
+      else if (qualityCounts.med > 0) setQuality('med');
+      else if (qualityCounts.low > 0) setQuality('low');
+    }
+  }, [qualityCounts, quality]);
+
   useEffect(() => {
     if (media.backdrop) {
       setSelectedBackdrop(media.backdrop);
@@ -44,7 +79,7 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
         const tmdbExtId = media.external_ids?.find(ext => ext.provider === 'TMDB')?.external_id;
         const igdbExtId = media.external_ids?.find(ext => ext.provider === 'IGDB')?.external_id;
         
-        let results: string[] = [];
+        let results: { url: string; width: number; height: number }[] = [];
         if (tmdbExtId) {
           const tmdbResults = await tmdbProvider.getBackdrops(tmdbExtId);
           results = [...results, ...tmdbResults];
@@ -53,7 +88,7 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
           const igdbResults = await igdbProvider.getBackdrops(igdbExtId);
           results = [...results, ...igdbResults];
         }
-        
+        console.log(results.length);
         setBackdrops(results);
       } catch (err) {
         console.error('Failed to fetch backdrops for picker:', err);
@@ -120,40 +155,85 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
         </div>
 
         <div className="p-6 flex-1 overflow-y-auto">
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 space-y-4">
-              <Loader2 className="w-8 h-8 animate-spin text-sky-400" />
-              <p className="text-gray-400 text-sm">Fetching official backdrops...</p>
-            </div>
-          ) : backdrops.length === 0 ? (
-            <div className="text-center py-20">
-              <ImageIcon className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400">No additional backdrops found for this title.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {backdrops.map((url, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    //setSelectedBackdrop(url);
-                    handleApply(url, false);
-                  }}
-                  className={`group relative aspect-video rounded-xl overflow-hidden cursor-pointer transition-all border-4 ${
-                    selectedBackdrop === url ? 'border-sky-500 scale-95 shadow-lg' : 'border-transparent hover:border-gray-600'
-                  }`}
-                >
-                  <img src={url} alt="" className="w-full h-full object-cover" />
-                  {selectedBackdrop === url && (
-                    <div className="absolute top-2 right-2 bg-sky-500 text-white rounded-full p-1 shadow-md">
-                      <CheckCircle2 className="w-3 h-3" />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* 2. Add the Quality Dropdown UI */}
+        {!isLoading && backdrops.length > 0 && (
+          <div className="flex items-center justify-end mb-4 space-x-2">
+            <label htmlFor="quality-select" className="text-sm text-gray-400">
+              Quality:
+            </label>
+            <select
+              id="quality-select"
+              value={quality}
+              onChange={(e) => setQuality(e.target.value as QualityLevel)}
+              className="bg-gray-800 text-white border border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-sky-500 cursor-pointer"
+            >
+              { qualityCounts.veryHigh > 0 && (
+              <option value="veryHigh">Highest ({qualityCounts.veryHigh})</option>)}
+              { qualityCounts.high > 0 && (
+              <option value="high">High({qualityCounts.high})</option>)}
+              { qualityCounts.med> 0 && (
+              <option value="med">Medium({qualityCounts.med})</option>)}
+              { qualityCounts.low > 0 && (
+              <option value="low">Low({qualityCounts.low})</option>)}
+            </select>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 space-y-4">
+            <Loader2 className="w-8 h-8 animate-spin text-sky-400" />
+            <p className="text-gray-400 text-sm">Fetching official backdrops...</p>
+          </div>
+        ) : backdrops.length === 0 ? (
+          <div className="text-center py-20">
+            <ImageIcon className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400">No additional backdrops found for this title.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {backdrops
+            .filter((backdrop) => 
+              {
+                const height = Number(backdrop.height)
+                console.log("height : " + height);
+                if (quality === 'veryHigh') {
+                  return height >= QUALITY_MAP.veryHigh;
+                }
+                if (quality === 'high') {
+                  return height >= QUALITY_MAP.high && height < QUALITY_MAP.veryHigh;
+                }
+                if (quality === 'med') {
+                  return height >= QUALITY_MAP.med && height < QUALITY_MAP.high;
+                }
+                if (quality === 'low') {
+                  return height < QUALITY_MAP.med;
+                }
+                return false;
+
+            })
+
+            .map((backdrop, idx) => (
+              <div
+                key={idx}
+                onClick={() => {
+                  // 3. Pass the current quality state to your handler
+                  handleApply(backdrop.url, false);
+                }}
+                className={`group relative aspect-video rounded-xl overflow-hidden cursor-pointer transition-all border-4 ${
+                  selectedBackdrop === backdrop.url ? 'border-sky-500 scale-95 shadow-lg' : 'border-transparent hover:border-gray-600'
+                }`}
+              >
+                <img src={backdrop.url} alt="" className="w-full h-full object-cover" />
+                {selectedBackdrop === backdrop.url && (
+                  <div className="absolute top-2 right-2 bg-sky-500 text-white rounded-full p-1 shadow-md">
+                    <CheckCircle2 className="w-3 h-3" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
         <div className="p-4 border-t border-[#232736] flex items-center justify-end space-x-3 bg-[#11131c]">
           <button onClick={() => {

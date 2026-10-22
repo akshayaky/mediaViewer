@@ -510,7 +510,7 @@ export class IGDBProvider implements MetadataProvider {
     };
   }
 
-  public async getBackdrops(externalId: string): Promise<string[]> {
+  public async getBackdrops(externalId: string): Promise<{ url: string; width: number; height: number }[]> {
     const { clientId, clientSecret } = await this.getTwitchCredentials();
     if (!clientId || !clientSecret) return [];
 
@@ -520,7 +520,7 @@ export class IGDBProvider implements MetadataProvider {
       if (!token) return [];
 
       try {
-        const body = `where game = ${igdbId}; fields image_id;`;
+        const body = `where game = ${igdbId}; fields image_id, width, height;`;
         const res = await smartFetch(`${this.igdbBaseUrl}/artworks`, {
           method: 'POST',
           headers: {
@@ -533,12 +533,15 @@ export class IGDBProvider implements MetadataProvider {
 
         if (res.ok) {
           const artworks = await res.json();
-          const artworkUrls = (artworks || []).map((a: any) => 
-            `https://images.igdb.com/igdb/image/upload/t_1080p_2x/${a.image_id}.jpg`
+          const artworkUrls = (artworks || []).map((a: any) => ({
+              url : `https://images.igdb.com/igdb/image/upload/t_1080p_2x/${a.image_id}.jpg`,
+              height : a.height,
+              width: a.width
+            })
           );
 
           // Also try to get screenshots to supplement the backdrops
-          const screenBody = `where game = ${igdbId}; fields image_id;`;
+          const screenBody = `where game = ${igdbId}; fields image_id, width, height;`;
           const screenRes = await smartFetch(`${this.igdbBaseUrl}/screenshots`, {
             method: 'POST',
             headers: {
@@ -551,12 +554,16 @@ export class IGDBProvider implements MetadataProvider {
 
           if (screenRes.ok) {
             const screenshots = await screenRes.json();
-            const screenshotUrls = (screenshots || []).map((s: any) => 
-              `https://images.igdb.com/igdb/image/upload/t_1080p_2x/${s.image_id}.jpg`
+            const screenshotUrls = (screenshots || []).map((s: any) => ({
+                url : `https://images.igdb.com/igdb/image/upload/t_1080p_2x/${s.image_id}.jpg`,
+                height : s.height,
+                width: s.width
+              })
             );
+            console.log(artworkUrls.length + screenshotUrls.length);
             return [...artworkUrls, ...screenshotUrls];
           }
-
+          console.log("Artworks only : " + artworkUrls.length);
           return artworkUrls;
         }
       } catch (err) {

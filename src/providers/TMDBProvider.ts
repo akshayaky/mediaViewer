@@ -260,7 +260,7 @@ export class TMDBProvider implements MetadataProvider {
     return [];
   }
 
-  public async getBackdrops(externalId: string): Promise<string[]> {
+  public async getBackdrops(externalId: string): Promise<{ url: string; width: number; height: number }[]> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return [];
 
@@ -283,7 +283,11 @@ export class TMDBProvider implements MetadataProvider {
       if (!res.ok) return [];
 
       const data = await res.json();
-      return (data.backdrops || []).map((b: any) => `${this.imageBaseUrl}/w1280${b.file_path}`);
+      return (data.backdrops || []).map((b: any) => ({
+        url: `${this.imageBaseUrl}/original${b.file_path}`,
+        width: b.width,
+        height: b.height
+      }));
     } catch (err) {
       console.error('TMDB getBackdrops failed:', err);
       return [];
