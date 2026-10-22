@@ -228,16 +228,22 @@ export function useMediaDetail(initialMedia: Media) {
     setRefreshMessage('');
 
     try {
-      let extId = currentMedia.external_ids && currentMedia.external_ids.length > 0
-        ? currentMedia.external_ids[0].external_id
-        : undefined;
+      let extId = currentMedia.external_ids?.find(ext =>
+        currentMedia.type === 'VideoGame'
+          ? ext.provider === 'IGDB' || ext.provider === 'RAWG'
+          : ext.provider === 'TMDB'
+      )?.external_id;
+      let matchedProviderResult: MetadataSearchResult | undefined;
 
       let freshDetails: Partial<Media> = {};
 
       if (currentMedia.type === 'VideoGame') {
         if (!extId || (!extId.startsWith('igdb:') && !extId.startsWith('rawg:'))) {
           const searchRes = await igdbProvider.searchMedia(currentMedia.title, 'VideoGame');
-          if (searchRes.length > 0) extId = searchRes[0].external_id;
+          if (searchRes.length > 0) {
+            matchedProviderResult = searchRes[0];
+            extId = matchedProviderResult.external_id;
+          }
         }
         if (extId) {
           freshDetails = await igdbProvider.getMediaDetails(extId);
@@ -247,7 +253,10 @@ export function useMediaDetail(initialMedia: Media) {
       } else {
         if (!extId || (!extId.startsWith('movie:') && !extId.startsWith('tv:'))) {
           const searchRes = await tmdbProvider.searchMedia(currentMedia.title, currentMedia.type);
-          if (searchRes.length > 0) extId = searchRes[0].external_id;
+          if (searchRes.length > 0) {
+            matchedProviderResult = searchRes[0];
+            extId = matchedProviderResult.external_id;
+          }
         }
         if (extId) {
           freshDetails = await tmdbProvider.getMediaDetails(extId);
@@ -261,10 +270,33 @@ export function useMediaDetail(initialMedia: Media) {
       }
 
       const now = new Date().toISOString();
+      const externalIds = [...(currentMedia.external_ids || [])];
+      if (
+        matchedProviderResult
+        && !externalIds.some(ext =>
+          ext.provider === matchedProviderResult?.provider
+          && ext.external_id === matchedProviderResult.external_id
+        )
+      ) {
+        const alreadyLinkedMedia = await dbService.getMediaByExternalId(
+          matchedProviderResult.provider,
+          matchedProviderResult.external_id
+        );
+        if (!alreadyLinkedMedia || alreadyLinkedMedia.id === currentMedia.id) {
+          externalIds.push({
+            id: `ext_${matchedProviderResult.provider.toLowerCase()}_${currentMedia.id}`,
+            media_id: currentMedia.id,
+            provider: matchedProviderResult.provider,
+            external_id: matchedProviderResult.external_id
+          });
+        }
+      }
+
       const updatedMedia: Media = {
         ...currentMedia,
         ...freshDetails,
         id: currentMedia.id,
+        external_ids: externalIds,
         metadata_refreshed_at: now,
         updated_at: now
       };
@@ -286,15 +318,6 @@ export function useMediaDetail(initialMedia: Media) {
           poster: updatedMedia.poster,
           backdrop: updatedMedia.backdrop,
           logo: updatedMedia.logo
-        });
-      }
-
-      if (extId && (!currentMedia.external_ids || currentMedia.external_ids.length === 0)) {
-        await dbService.saveExternalId({
-          id: `ext_${Date.now()}`,
-          media_id: currentMedia.id,
-          provider: currentMedia.type === 'VideoGame' ? 'IGDB' : 'TMDB',
-          external_id: extId
         });
       }
 

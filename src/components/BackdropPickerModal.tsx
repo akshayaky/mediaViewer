@@ -29,6 +29,7 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
   onBackgroundUpdated
 }) => {
   const [backdrops, setBackdrops] = useState<{ url: string; thumbnailUrl: string; width: number; height: number }[]>([]);
+  const [resolvedExternalIds, setResolvedExternalIds] = useState(media.external_ids || []);
   const [selectedBackdrop, setSelectedBackdrop] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -69,16 +70,67 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
   }, [media.backdrop]);
 
   useEffect(() => {
+    setResolvedExternalIds(media.external_ids || []);
+  }, [media.external_ids, media.id]);
+
+  useEffect(() => {
     if (!isOpen) return;
+
+    const findAndLinkProviderMatch = async (
+      provider: typeof tmdbProvider | typeof igdbProvider,
+      providerName: 'TMDB' | 'IGDB'
+    ): Promise<string | undefined> => {
+      try {
+        const candidates = await provider.searchMedia(media.title, media.type);
+        const normalizedTitle = media.title.trim().toLocaleLowerCase();
+        const providerMatches = Array.from(new Map(
+          candidates
+            .filter(candidate => candidate.provider === providerName)
+            .map(candidate => [candidate.external_id, candidate])
+        ).values());
+        const match = providerMatches.find(candidate =>
+          [candidate.title, candidate.original_title]
+            .some(title => title?.trim().toLocaleLowerCase() === normalizedTitle)
+        ) || providerMatches[0];
+        if (!match) return undefined;
+
+        const existingMedia = await dbService.getMediaByExternalId(providerName, match.external_id);
+        if (!existingMedia || existingMedia.id === media.id) {
+          const externalId = {
+            id: `ext_${providerName.toLowerCase()}_${media.id}`,
+            media_id: media.id,
+            provider: providerName,
+            external_id: match.external_id
+          };
+          await dbService.saveExternalId(externalId);
+          setResolvedExternalIds(current => (
+            current.some(ext => ext.provider === providerName && ext.external_id === match.external_id)
+              ? current
+              : [...current, externalId]
+          ));
+        }
+        return match.external_id;
+      } catch (err) {
+        console.error(`Failed to find ${providerName} match for backdrop picker:`, err);
+        return undefined;
+      }
+    };
 
     const fetchBackdrops = async () => {
       setIsLoading(true);
       try {
-        // We assume TMDB is the provider for backdrops as it has the best images API
-        // Find the TMDB external ID
-        const tmdbExtId = media.external_ids?.find(ext => ext.provider === 'TMDB')?.external_id;
-        const igdbExtId = media.external_ids?.find(ext => ext.provider === 'IGDB')?.external_id;
-        
+        const storedExternalIds = await dbService.getExternalIdsForMedia(media.id);
+        const externalIds = [...storedExternalIds, ...(media.external_ids || [])];
+        let tmdbExtId = externalIds.find(ext => ext.provider === 'TMDB')?.external_id;
+        let igdbExtId = externalIds.find(ext => ext.provider === 'IGDB')?.external_id;
+
+        if (!tmdbExtId && media.type !== 'VideoGame') {
+          tmdbExtId = await findAndLinkProviderMatch(tmdbProvider, 'TMDB');
+        }
+        if (!igdbExtId && media.type === 'VideoGame') {
+          igdbExtId = await findAndLinkProviderMatch(igdbProvider, 'IGDB');
+        }
+
         const [tmdbResults, igdbResults] = await Promise.all([
           tmdbExtId ? tmdbProvider.getBackdrops(tmdbExtId) : Promise.resolve([]),
           igdbExtId ? igdbProvider.getBackdrops(igdbExtId) : Promise.resolve([])
@@ -93,7 +145,7 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
     };
 
     fetchBackdrops();
-  }, [isOpen]);
+  }, [isOpen, media.external_ids, media.id, media.title, media.type]);
 
   const handleApply = async (overrideUrl?: string, shouldClose: boolean = false) => {
     const finalUrl = overrideUrl || selectedBackdrop;
@@ -104,6 +156,7 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
       const now = new Date().toISOString();
       const updatedMedia: Media = {
         ...media,
+        external_ids: resolvedExternalIds,
         backdrop: finalUrl,
         updated_at: now,
       };
