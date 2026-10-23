@@ -56,6 +56,37 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
     await refreshFiles();
   };
 
+  const handleConfirmAllProposedMatches = async () => {
+    const matchesToConfirm = unmatchedFiles
+      .map(file => {
+        const mediaType: MediaType =
+          file.file_type === 'game_executable' ? 'VideoGame' : file.file_type === 'tv_episode' ? 'TV Series' : 'Film';
+        const parsed = localScannerService.parseFilePath(file.path, mediaType);
+        const proposedMatch = localScannerService.findHighConfidenceMatch(
+          parsed,
+          mediaType,
+          allMedia
+        );
+        return proposedMatch ? { fileId: file.id, mediaId: proposedMatch.id } : null;
+      })
+      .filter((m): m is { fileId: string, mediaId: string } => m !== null);
+
+    if (matchesToConfirm.length === 0) return;
+
+    if (!window.confirm(`Confirm matches for ${matchesToConfirm.length} items?`)) {
+      return;
+    }
+
+    try {
+      await Promise.all(matchesToConfirm.map(m => dbService.linkLocalFileToMedia(m.fileId, m.mediaId)));
+      setSavedMessage(`Successfully matched ${matchesToConfirm.length} items!`);
+      setTimeout(() => setSavedMessage(''), 3000);
+      await refreshFiles();
+    } catch (err) {
+      console.error('Failed to confirm multiple matches:', err);
+      setClearError('Some matches could not be confirmed.');
+    }
+  };
   const handleClearUnmatchedFiles = async () => {
     if (!window.confirm(`Clear all ${unmatchedFiles.length} unmatched item records from the inbox? Local files on disk will not be deleted.`)) {
       return;
@@ -222,14 +253,24 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
 
         <div className="flex items-center space-x-3">
           {unmatchedFiles.length > 0 && (
-            <button
-              type="button"
-              onClick={() => void handleClearUnmatchedFiles()}
-              className="bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Clear Unmatched Items</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={handleConfirmAllProposedMatches}
+                className="bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Confirm All Suggestions</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleClearUnmatchedFiles()}
+                className="bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Clear Unmatched Items</span>
+              </button>
+            </>
           )}
           {successMessage && (
             <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-2 animate-fadeIn">
