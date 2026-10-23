@@ -153,6 +153,133 @@ describe('Canonical Entities, Duplicates & Relationships', () => {
     expect(combinedFiles[0].path).toBe('C:\\Movies\\Premalu.mkv');
   });
 
+  it('deletes a media item and all rows related to it', async () => {
+    const now = new Date().toISOString();
+    const mediaId = `delete_test_${Date.now()}`;
+    const historyId = `delete_history_${Date.now()}`;
+    const media: Media = {
+      id: mediaId,
+      type: 'Film',
+      title: 'Delete test movie',
+      genres: [],
+      created_at: now,
+      updated_at: now,
+      external_ids: [{ id: `delete_ext_${Date.now()}`, media_id: mediaId, provider: 'TMDB', external_id: 'movie:delete-test' }]
+    };
+    await dbService.saveMedia(media);
+    await dbService.saveHistory({
+      id: historyId,
+      media_id: mediaId,
+      status: 'Finished',
+      source: 'Manual',
+      created_at: now
+    });
+    await dbService.saveLocalFile({
+      id: `delete_file_${Date.now()}`,
+      media_id: mediaId,
+      path: 'C:\\Movies\\Delete test.mkv',
+      filename: 'Delete test.mkv',
+      extension: 'mkv',
+      size: 100,
+      discovered_at: now,
+      last_seen_at: now,
+      exists: true,
+      file_type: 'movie'
+    });
+    await dbService.saveAvailability({
+      id: `delete_availability_${Date.now()}`,
+      media_id: mediaId,
+      provider: 'Test',
+      availability_type: 'Stream',
+      last_checked: now
+    });
+    await dbService.saveWishlist({
+      id: `delete_wishlist_${Date.now()}`,
+      media_id: mediaId,
+      title: media.title,
+      type: media.type,
+      source: 'Manual',
+      added_at: now
+    });
+    await dbService.saveNotionRawRecord({
+      id: `delete_notion_${Date.now()}`,
+      name_raw: media.title,
+      type_raw: 'Film',
+      imported_at: now,
+      parsed_media_id: mediaId,
+      parsed_history_id: historyId
+    });
+
+    await dbService.deleteMedia(mediaId);
+
+    expect(await dbService.getMediaById(mediaId)).toBeNull();
+    expect(await dbService.getHistoryForMedia(mediaId)).toHaveLength(0);
+    expect(await dbService.getLocalFilesForMedia(mediaId)).toHaveLength(0);
+    expect(await dbService.getAvailabilityForMedia(mediaId)).toHaveLength(0);
+    expect(await dbService.getExternalIdsForMedia(mediaId)).toHaveLength(0);
+    expect((await dbService.getAllWishlist()).some(item => item.media_id === mediaId)).toBe(false);
+    expect((await dbService.getAllNotionRawRecords()).some(record =>
+      record.parsed_media_id === mediaId || record.parsed_history_id === historyId
+    )).toBe(false);
+  });
+
+  it('clears only media matching the selected type and their related rows', async () => {
+    const now = new Date().toISOString();
+    const filmId = `clear_film_${Date.now()}`;
+    const gameId = `keep_game_${Date.now()}`;
+    await dbService.saveMedia({
+      id: filmId,
+      type: 'Film',
+      title: 'Clear test movie',
+      genres: [],
+      created_at: now,
+      updated_at: now
+    });
+    await dbService.saveMedia({
+      id: gameId,
+      type: 'VideoGame',
+      title: 'Keep test game',
+      genres: [],
+      created_at: now,
+      updated_at: now
+    });
+
+    expect(await dbService.clearMediaByType('Film')).toBe(1);
+    expect(await dbService.getMediaById(filmId)).toBeNull();
+    expect(await dbService.getMediaById(gameId)).not.toBeNull();
+  });
+
+  it('clears unmatched local file records without deleting matched files', async () => {
+    const now = new Date().toISOString();
+    const mediaId = `unmatched_keep_${Date.now()}`;
+    await dbService.saveMedia({
+      id: mediaId,
+      type: 'Film',
+      title: 'Keep matched movie',
+      genres: [],
+      created_at: now,
+      updated_at: now
+    });
+    const localFile = (id: string, linkedMediaId?: string) => ({
+      id,
+      media_id: linkedMediaId,
+      path: `C:\\Movies\\${id}.mkv`,
+      filename: `${id}.mkv`,
+      extension: 'mkv',
+      size: 100,
+      discovered_at: now,
+      last_seen_at: now,
+      exists: true,
+      file_type: 'movie' as const
+    });
+    await dbService.saveLocalFile(localFile(`unmatched_${Date.now()}`));
+    await dbService.saveLocalFile(localFile(`matched_${Date.now()}`, mediaId));
+
+    expect(await dbService.clearUnmatchedLocalFiles()).toBe(1);
+    expect(await dbService.getUnmatchedLocalFiles()).toHaveLength(0);
+    expect(await dbService.getLocalFilesForMedia(mediaId)).toHaveLength(1);
+  });
+
   it('fetches related media relationships for TMDB and IGDB providers', async () => {
     const tmdbRelated = await tmdbProvider.getRelatedMedia('movie:123456');
     expect(Array.isArray(tmdbRelated)).toBe(true);

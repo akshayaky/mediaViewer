@@ -17,7 +17,8 @@ import {
   Loader2,
   Film,
   Tv,
-  Gamepad2
+  Gamepad2,
+  Trash2
 } from 'lucide-react';
 
 interface UnmatchedInboxViewProps {
@@ -31,6 +32,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
   const [externalCandidates, setExternalCandidates] = useState<Record<string, MetadataSearchResult[]>>({});
   const [isSearchingExternal, setIsSearchingExternal] = useState<Record<string, boolean>>({});
   const [successMessage, setSavedMessage] = useState('');
+  const [clearError, setClearError] = useState('');
 
   useEffect(() => {
     void refreshFiles();
@@ -52,6 +54,23 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
     setSavedMessage('Local file successfully linked to media entry.');
     setTimeout(() => setSavedMessage(''), 3000);
     await refreshFiles();
+  };
+
+  const handleClearUnmatchedFiles = async () => {
+    if (!window.confirm(`Clear all ${unmatchedFiles.length} unmatched item records from the inbox? Local files on disk will not be deleted.`)) {
+      return;
+    }
+
+    setClearError('');
+    try {
+      const deletedCount = await dbService.clearUnmatchedLocalFiles();
+      setSavedMessage(`Cleared ${deletedCount} unmatched item records.`);
+      setTimeout(() => setSavedMessage(''), 3000);
+      await refreshFiles();
+    } catch (err) {
+      console.error('Failed to clear unmatched file records:', err);
+      setClearError('Could not clear unmatched items. Please try again.');
+    }
   };
 
   const handleSearchExternalProviders = async (file: LocalFile) => {
@@ -201,13 +220,26 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
           </p>
         </div>
 
-        {successMessage && (
-          <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-2 animate-fadeIn">
-            <CheckCircle2 className="w-4 h-4" />
-            <span>{successMessage}</span>
-          </span>
-        )}
+        <div className="flex items-center space-x-3">
+          {unmatchedFiles.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleClearUnmatchedFiles()}
+              className="bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Clear Unmatched Items</span>
+            </button>
+          )}
+          {successMessage && (
+            <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-2 animate-fadeIn">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{successMessage}</span>
+            </span>
+          )}
+        </div>
       </div>
+      {clearError && <p role="alert" className="text-xs text-rose-300">{clearError}</p>}
 
       {/* List of Unmatched Local Files */}
       {unmatchedFiles.length === 0 ? (

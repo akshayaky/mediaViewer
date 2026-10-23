@@ -26,7 +26,8 @@ import {
   Layers,
   ArrowRightLeft,
   Check,
-  Plus
+  Plus,
+  Trash2
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -44,6 +45,7 @@ export const SettingsView: React.FC = () => {
   const [steamApiKey, setSteamApiKey] = useState(settings.steam_api_key || '');
 
   const [savedMessage, setSavedMessage] = useState('');
+  const [deleteError, setDeleteError] = useState('');
 
   // Folder Directory Input Refs
   const moviesFolderInputRef = useRef<HTMLInputElement>(null);
@@ -141,6 +143,23 @@ export const SettingsView: React.FC = () => {
     ]);
     setSavedMessage('API credentials and preferences saved locally in SQLite.');
     setTimeout(() => setSavedMessage(''), 3000);
+  };
+
+  const handleClearMediaType = async (type: MediaType, label: string) => {
+    if (!window.confirm(`Delete all ${label.toLowerCase()} and their related library records? Local files on disk will not be deleted.`)) {
+      return;
+    }
+
+    setDeleteError('');
+    try {
+      const deletedCount = await dbService.clearMediaByType(type);
+      window.dispatchEvent(new CustomEvent('library-scanned'));
+      setSavedMessage(`Deleted ${deletedCount} ${label.toLowerCase()} from your library.`);
+      setTimeout(() => setSavedMessage(''), 4000);
+    } catch (err) {
+      console.error(`Failed to clear ${label.toLowerCase()}:`, err);
+      setDeleteError(`Could not delete ${label.toLowerCase()}. Please try again.`);
+    }
   };
 
   const handleFolderBrowseClick = async (e: React.MouseEvent, key: 'movies' | 'tv' | 'games') => {
@@ -903,6 +922,35 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
         )}
+      </section>
+
+      <section className="bg-[#14161f] p-6 rounded-2xl border border-rose-500/20 space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+            <Trash2 className="w-5 h-5 text-rose-400" />
+            <span>Clear Library Sections</span>
+          </h2>
+          <p className="text-xs text-gray-400 mt-1">
+            Permanently remove a media section and its associated history, file records, availability, wishlist links, and metadata links. Files on disk are not deleted.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {([
+            { type: 'Film', label: 'Movies' },
+            { type: 'TV Series', label: 'TV Shows' },
+            { type: 'VideoGame', label: 'Games' }
+          ] as const).map(section => (
+            <button
+              key={section.type}
+              type="button"
+              onClick={() => void handleClearMediaType(section.type, section.label)}
+              className="bg-[#1a1d29] hover:bg-rose-950/40 text-gray-200 hover:text-rose-300 border border-[#2d3145] hover:border-rose-500/40 rounded-xl px-4 py-3 text-sm font-semibold transition-colors cursor-pointer"
+            >
+              Clear {section.label}
+            </button>
+          ))}
+        </div>
+        {deleteError && <p role="alert" className="text-xs text-rose-300">{deleteError}</p>}
       </section>
 
       {/* External Metadata API Credentials Section */}

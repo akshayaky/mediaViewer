@@ -150,6 +150,24 @@ export class DatabaseService {
       await this.db.execute(statement);
     }
 
+    // A trigger keeps related cleanup in the same atomic statement as the media deletion.
+    await this.db.execute(`
+      CREATE TRIGGER IF NOT EXISTS delete_media_related_records
+      BEFORE DELETE ON media
+      BEGIN
+        DELETE FROM notion_raw_records
+        WHERE parsed_media_id = OLD.id
+          OR parsed_history_id IN (
+            SELECT id FROM media_history WHERE media_id = OLD.id
+          );
+        DELETE FROM media_history WHERE media_id = OLD.id;
+        DELETE FROM local_file WHERE media_id = OLD.id;
+        DELETE FROM availability WHERE media_id = OLD.id;
+        DELETE FROM wishlist WHERE media_id = OLD.id;
+        DELETE FROM external_ids WHERE media_id = OLD.id;
+      END;
+    `);
+
     // Migrations for pre-existing SQLite databases
     await this.addColumnIfNotExists('media', 'metadata_refreshed_at', 'TEXT');
     await this.addColumnIfNotExists('media', 'developer', 'TEXT');
@@ -341,7 +359,6 @@ export class DatabaseService {
   public async mergeMediaEntities(survivingId: string, duplicateId: string, overrides?: Partial<Media>): Promise<void> {
     if (!this.db || survivingId === duplicateId) return;
 
-    await this.db.execute('BEGIN TRANSACTION;');
     try {
       // 1. Relink local files
       await this.db.execute('UPDATE local_file SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
@@ -371,10 +388,7 @@ export class DatabaseService {
 
       // 7. Delete duplicate media row
       await this.db.execute('DELETE FROM media WHERE id = ?', [duplicateId]);
-
-      await this.db.execute('COMMIT;');
     } catch (err) {
-      await this.db.execute('ROLLBACK;');
       console.error('Failed to merge media entities:', err);
       throw err;
     }
@@ -393,11 +407,35 @@ export class DatabaseService {
   }
 
   public async deleteMedia(id: string): Promise<void> {
-    if (!this.db) return;
-    await this.db.execute('DELETE FROM media WHERE id = ?', [id]);
-    await this.db.execute('DELETE FROM external_ids WHERE media_id = ?', [id]);
-    await this.db.execute('DELETE FROM media_history WHERE media_id = ?', [id]);
-    await this.db.execute('UPDATE local_file SET media_id = NULL WHERE media_id = ?', [id]);
+    await this.deleteMediaRecords('id = ?', [id]);
+  }
+
+  public async clearMediaByType(type: Media['type']): Promise<number> {
+    return this.deleteMediaRecords('type = ?', [type]);
+  }
+
+  private async deleteMediaRecords(mediaFilter: string, params: string[]): Promise<number> {
+    if (!this.db) {
+      throw new Error('Database is not initialized.');
+    }
+
+    try {
+      const result = await this.db.execute(`DELETE FROM media WHERE ${mediaFilter}`, params);
+      return result.rowsAffected;
+    } catch (err) {
+      console.error('Failed to delete media and related records:', err);
+      throw err;
+    }
+  }
+
+  public async clearUnmatchedLocalFiles(): Promise<number> {
+    if (!this.db) {
+      throw new Error('Database is not initialized.');
+    }
+    const result = await this.db.execute(
+      'DELETE FROM local_file WHERE media_id IS NULL OR media_id = ""'
+    );
+    return result.rowsAffected;
   }
 
   public async updateMediaArtwork(media_id: string, artwork: {poster?: string; backdrop?:

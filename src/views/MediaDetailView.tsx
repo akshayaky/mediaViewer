@@ -39,6 +39,7 @@ import {
   Layers,
   Code,
   MoreVertical,
+  Trash2,
   Link as LinkIcon,
   Sparkles,
   X,
@@ -136,6 +137,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   // Three dot menu state
   const [showMenu, setShowMenu] = useState(false);
   const [showFixMatchModal, setShowFixMatchModal] = useState(false);
+  const [isDeletingMedia, setIsDeletingMedia] = useState(false);
 
   // Duplicates & Merge modal state
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -154,6 +156,24 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const playButtonRowRef = useRef<HTMLDivElement>(null);
 
   const lastWatchedEpisodeArtwork = getLastWatchedEpisodeArtwork(currentMedia, historyList);
+
+  const handleDeleteMedia = async () => {
+    const shouldDelete = window.confirm(
+      `Delete "${currentMedia.title}" and all related library records? Local files on disk will not be deleted.`
+    );
+    if (!shouldDelete) return;
+
+    setIsDeletingMedia(true);
+    try {
+      await dbService.deleteMedia(currentMedia.id);
+      window.dispatchEvent(new CustomEvent('library-scanned'));
+      onBack();
+    } catch (err) {
+      console.error('Failed to delete media:', err);
+      window.alert('Could not delete this item. Please try again.');
+      setIsDeletingMedia(false);
+    }
+  };
 
   // Episode UI State
   const [selectedEpFiles, setSelectedEpFiles] = useState<Record<string, string>>({});
@@ -396,6 +416,17 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 >
                   <Wallpaper className="w-4 h-4 text-sky-400 shrink-0" />
                   <span>Change Background Image</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    void handleDeleteMedia();
+                  }}
+                  disabled={isDeletingMedia}
+                  className="w-full text-left px-4 py-2.5 text-xs text-rose-300 hover:bg-rose-950/50 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736] disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4 shrink-0" />
+                  <span>{isDeletingMedia ? 'Deleting...' : 'Delete from Library'}</span>
                 </button>
               </div>
             )}
