@@ -26,8 +26,8 @@
   --mdv-pill-bg: #1b1e2b;
   --mdv-pill-text: #d1d5db;
   --mdv-pill-border: #2d3248;
-  --mdv-glass-bg: rgba(0, 0, 0, 0.6);
-  --mdv-glass-bg-hover: rgba(0, 0, 0, 0.8);
+  --mdv-glass-bg: rgba(0, 0, 0, 0.5);
+  --mdv-glass-bg-hover: rgba(0, 0, 0, 0.35);
 
   /* Accent-derived */
   --mdv-accent-bg-soft: rgba(var(--accent-rgb), 0.15);

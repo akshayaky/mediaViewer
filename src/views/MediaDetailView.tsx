@@ -363,10 +363,15 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       {/* Pinned Header Bar Actions */}
       <div className={`mdv-header ${isPlayButtonStuck ? 'mdv-header--stuck' : ''}`}>
         <div className="mdv-header-actions" style={{ left: isSidebarCollapsed ? '6.5rem' : '17.5rem' }}>
-          <button onClick={onBack} className="mdv-btn mdv-btn-glass cursor-pointer">
-            <ArrowLeft className="mdv-icon-md" />
-            <span>Back to Library</span>
-          </button>
+        <button
+          onClick={onBack}
+          className="mdv-btn mdv-btn-glass cursor-pointer group flex items-center gap-2 w-10 hover:w-36 transition-[width] duration-300 ease-in-out overflow-hidden whitespace-nowrap px-0 hover:px-2 hover:backdrop-blur-md"
+        >
+          <ArrowLeft className="mdv-icon-md shrink-0 transition-[margin] duration-300 ease-in-out" />
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100">
+            Back to Library
+          </span>
+        </button>
 
           <div className="relative">
             <button
@@ -378,14 +383,17 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-[#1b1d2a] border border-[#2d3145] rounded-xl shadow-2xl py-1 z-50 animate-fadeIn">
+              <div 
+                onMouseLeave={() => setShowMenu(false)}
+                className="absolute right-0 mt-2 w-56 bg-[#1b1d2a]/65 backdrop-blur-md border border-white/15 rounded-xl shadow-2xl py-1 z-50 animate-fadeIn before:absolute before:-top-2 before:h-2 before:inset-x-0 after:absolute after:-bottom-4 after:h-4 after:inset-x-0"
+              >
                 <button
                   onClick={() => {
                     setShowMenu(false);
                     handleManualMetadataRefresh();
                   }}
                   disabled={isRefreshingMetadata}
-                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-rose-950/50 hover:text-rose-300 flex items-center space-x-2 transition-colors cursor-pointer disabled:opacity-50"
+                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.06] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
                 >
                   <RefreshCw className="w-4 h-4 text-rose-400 shrink-0" />
                   <span>{isRefreshingMetadata ? 'Re-syncing Provider...' : 'Refresh Metadata'}</span>
@@ -396,21 +404,24 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                     setShowMenu(false);
                     setShowFixMatchModal(true);
                   }}
-                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-rose-950/50 hover:text-rose-300 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736]"
+                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.06] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2 transition-all cursor-pointer border-t border-white/10"
                 >
                   <LinkIcon className="w-4 h-4 text-sky-400 shrink-0" />
                   <span>Fix Match / Change Metadata</span>
                 </button>
+
+                
                 <button
                   onClick={() => {
                     setShowMenu(false);
                     setShowBackdropPicker(true);
                   }}
-                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-rose-950/50 hover:text-rose-300 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736]"
+                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.06] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2 transition-all cursor-pointer border-t border-white/10"
                 >
                   <Wallpaper className="w-4 h-4 text-sky-400 shrink-0" />
                   <span>Change Background Image</span>
                 </button>
+                
                 <button
                   onClick={() => {
                     setShowMenu(false);
@@ -424,6 +435,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 </button>
               </div>
             )}
+
           </div>
         </div>
       </div>
