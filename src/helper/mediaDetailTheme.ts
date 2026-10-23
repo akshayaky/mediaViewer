@@ -111,7 +111,7 @@ export function getSidebarAccentColors(accentColor: string): SidebarAccentColors
   return {
     background: `rgba(${accent.join(', ')}, 0.28)`,
     activeBackground: toCss(activeBackground),
-    inactiveForeground: tone === 'light' ? '#1f2430' : '#e5e7eb79'
+    inactiveForeground: tone === 'light' ? '#1f2430' : '#f8f8fa'
   };
 }
 

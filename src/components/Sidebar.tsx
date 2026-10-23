@@ -58,16 +58,26 @@
 
      return (
        <aside
-         className={`fixed inset-y-0 left-0 flex flex-col justify-between select-none z-40 transition-all duration-500
- ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-white/10 shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.05)] ${
-           isCollapsed ? 'w-20' : 'w-64'
-         } ${accentColors ? 'backdrop-blur-xl' : 'bg-[#111319]/80 backdrop-blur-xl'}`}
-         style={accentColors ? {
-           backgroundColor: `${accentColors.background}cc`,
-           backdropFilter: 'blur(24px) saturate(160%)',
-           WebkitBackdropFilter: 'blur(24px) saturate(160%)'
-         } : undefined}
-       >
+          className={`fixed inset-y-0 left-0 flex flex-col justify-between select-none z-40 transition-all duration-500
+            ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-white/10 shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.05)] ${
+            isCollapsed ? 'w-20' : 'w-64'
+          } ${accentColors ? '' : 'bg-[#111319]/80 backdrop-blur-xl'}`}
+          style={
+            accentColors
+              ? {
+                  // If accentColors.background is already rgba/hsla, use it directly. 
+                  // Otherwise, we ensure a safe fallback color layer with solid contrast.
+                  backgroundColor: accentColors.background.startsWith('#')
+                    ? `${accentColors.background.slice(0, 7)}cc` // Strips existing alpha if present, appends 80%
+                    : accentColors.background,
+                  
+                  // Unified heavy blur to squash background text-checkerboarding completely
+                  backdropFilter: 'blur(40px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+                }
+              : undefined
+          }
+        >
          {/* Collapse Toggle Button */}
          <button
            onClick={() => setIsCollapsed(!isCollapsed)}
