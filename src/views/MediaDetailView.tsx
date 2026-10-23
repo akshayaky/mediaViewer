@@ -190,22 +190,16 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const artworkSource = artworkCandidates.find(source => !failedBackdropSources.includes(source));
 
   useEffect(() => {
-    const needsMetadataRefresh = artwork.backdrop === 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80'
-      || (
-        currentMedia.metadata_source === 'Notion Import'
-        && !currentMedia.poster
-        && !currentMedia.backdrop
-      );
+    const needsMetadataRefresh = currentMedia.metadata_source === 'Notion Import'
+      && !currentMedia.metadata_refreshed_at;
     if (!needsMetadataRefresh || isRefreshingMetadata || metadataRefreshStartedFor.current === currentMedia.id) return;
 
     metadataRefreshStartedFor.current = currentMedia.id;
     void handleManualMetadataRefresh();
   }, [
-    artwork.backdrop,
-    currentMedia.backdrop,
     currentMedia.id,
     currentMedia.metadata_source,
-    currentMedia.poster,
+    currentMedia.metadata_refreshed_at,
     handleManualMetadataRefresh,
     isRefreshingMetadata
   ]);

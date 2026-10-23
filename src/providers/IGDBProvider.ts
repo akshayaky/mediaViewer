@@ -184,8 +184,7 @@ export class IGDBProvider implements MetadataProvider {
       }
     }
 
-    // 3. Fallback mock search results if no keys configured or failed
-    return this.getMockSearchResults(cleanQuery || query);
+    return [];
   }
 
   public async getRelatedMedia(externalId: string): Promise<MetadataSearchResult[]> {
@@ -259,10 +258,6 @@ export class IGDBProvider implements MetadataProvider {
       }
     }
 
-    return this.getMockRelatedMedia(externalId);
-  }
-
-  private getMockRelatedMedia(_externalId: string): MetadataSearchResult[] {
     return [];
   }
 
@@ -398,116 +393,7 @@ export class IGDBProvider implements MetadataProvider {
       }
     }
 
-    return this.getMockDetails(externalId);
-  }
-
-  private getMockSearchResults(query: string): MetadataSearchResult[] {
-    const qLower = query.toLowerCase();
-    const mocks: MetadataSearchResult[] = [
-      {
-        title: "Assassin's Creed IV Black Flag",
-        type: 'VideoGame',
-        release_year: 2013,
-        description: 'The year is 1715. Pirates rule the Caribbean and have established their own lawless Republic.',
-        poster: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1280&q=80',
-        external_id: 'igdb:1020',
-        provider: 'IGDB'
-      },
-      {
-        title: 'Overcooked',
-        type: 'VideoGame',
-        release_year: 2016,
-        description: 'A chaotic couch co-op cooking game for one to four players.',
-        poster: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1280&q=80',
-        external_id: 'igdb:2030',
-        provider: 'IGDB'
-      },
-      {
-        title: 'The Last of Us Part II',
-        type: 'VideoGame',
-        release_year: 2020,
-        description: 'Five years after their dangerous journey across the post-pandemic United States, Ellie and Joel have settled down in Jackson, Wyoming.',
-        poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=1280&q=80',
-        external_id: 'igdb:3040',
-        provider: 'IGDB'
-      },
-      {
-        title: 'Cyberpunk 2077',
-        type: 'VideoGame',
-        release_year: 2020,
-        description: 'An open-world, action-adventure story set in Night City, a megalopolis obsessed with power, glamour and body modification.',
-        poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1280&q=80',
-        external_id: 'igdb:1877',
-        provider: 'IGDB'
-      },
-      {
-        title: 'Elden Ring',
-        type: 'VideoGame',
-        release_year: 2022,
-        description: 'THE NEW FANTASY ACTION RPG. Rise, Tarnished, and be guided by grace to brandish the power of the Elden Ring and become an Elden Lord in the Lands Between.',
-        poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=1280&q=80',
-        external_id: 'igdb:119133',
-        provider: 'IGDB'
-      }
-    ];
-
-    return mocks.filter(m => m.title.toLowerCase().includes(qLower) || query.length < 2);
-  }
-
-  private getMockDetails(externalId: string): Partial<Media> {
-    if (externalId.includes('1020') || externalId.toLowerCase().includes('assassin')) {
-      return {
-        title: "Assassin's Creed IV Black Flag",
-        type: 'VideoGame',
-        release_year: 2013,
-        description: 'The year is 1715. Pirates rule the Caribbean and have established their own lawless Republic where corruption, greedlessness and cruelty are commonplace.',
-        genres: ['Action', 'Adventure', 'Open World'],
-        poster: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1280&q=80',
-        logo: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/242050/logo.png',
-        developer: 'Ubisoft Montreal, Ubisoft Singapore',
-        publisher: 'Ubisoft',
-        metadata_source: 'IGDB',
-        metadata_refreshed_at: new Date().toISOString()
-      };
-    }
-
-    if (externalId.includes('1877') || externalId.toLowerCase().includes('cyberpunk')) {
-      return {
-        title: 'Cyberpunk 2077',
-        type: 'VideoGame',
-        release_year: 2020,
-        description: 'An open-world, action-adventure story set in Night City, a megalopolis obsessed with power, glamour and body modification.',
-        genres: ['Action', 'RPG', 'Open World', 'Sci-Fi'],
-        poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1280&q=80',
-        logo: 'https://images.igdb.com/igdb/image/upload/t_logo_med/co2dky.png',
-        developer: 'CD Projekt Red',
-        publisher: 'CD Projekt',
-        metadata_source: 'IGDB',
-        metadata_refreshed_at: new Date().toISOString()
-      };
-    }
-
-    return {
-      title: 'Overcooked',
-      type: 'VideoGame',
-      release_year: 2016,
-      description: 'Overcooked is a chaotic couch co-op cooking game for one to four players. Working as a team, you and your fellow chefs must prepare, cook and serve up a variety of tasty orders.',
-      genres: ['Co-op', 'Simulation', 'Casual', 'Strategy'],
-      poster: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&q=80',
-      backdrop: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1280&q=80',
-      logo: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/448510/logo.png',
-      developer: 'Ghost Town Games',
-      publisher: 'Team17',
-      metadata_source: 'IGDB',
-      metadata_refreshed_at: new Date().toISOString()
-    };
+    return {};
   }
 
   public async getBackdrops(externalId: string): Promise<{ url: string; thumbnailUrl: string; width: number; height: number }[]> {

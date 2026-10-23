@@ -9,6 +9,7 @@ vi.mock('@tauri-apps/plugin-sql', async () => {
 import { dbService } from '../services/DatabaseService';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
+import { LocalScannerService } from '../services/LocalScannerService';
 import { Media } from '../types/media';
 
 describe('Canonical Entities, Duplicates & Relationships', () => {
@@ -280,11 +281,67 @@ describe('Canonical Entities, Duplicates & Relationships', () => {
     expect(await dbService.getLocalFilesForMedia(mediaId)).toHaveLength(1);
   });
 
+  it('removes legacy seeded demo media without deleting user media', async () => {
+    const now = new Date().toISOString();
+    await dbService.saveMedia({
+      id: 'media_aanandam',
+      type: 'Film',
+      title: 'Aanandam',
+      genres: [],
+      metadata_source: 'Initial Seed',
+      created_at: now,
+      updated_at: now
+    });
+    await dbService.saveMedia({
+      id: 'user_media',
+      type: 'Film',
+      title: 'User media',
+      genres: [],
+      created_at: now,
+      updated_at: now
+    });
+    await dbService.saveHistory({
+      id: 'seed_history',
+      media_id: 'media_aanandam',
+      status: 'Finished',
+      source: 'Notion',
+      created_at: now
+    });
+
+    await dbService.removeLegacySeedData();
+
+    expect(await dbService.getMediaById('media_aanandam')).toBeNull();
+    expect(await dbService.getHistoryForMedia('media_aanandam')).toHaveLength(0);
+    expect(await dbService.getMediaById('user_media')).not.toBeNull();
+  });
+
+  it('does not invent sample files when a web scan has no selected files', async () => {
+    const scanner = new LocalScannerService();
+
+    const result = await scanner.scanFolder('C:\\Media\\Movies', 'Film');
+
+    expect(result.totalScanned).toBe(0);
+    expect(result.discoveredFiles).toHaveLength(0);
+  });
+
   it('fetches related media relationships for TMDB and IGDB providers', async () => {
     const tmdbRelated = await tmdbProvider.getRelatedMedia('movie:123456');
     expect(Array.isArray(tmdbRelated)).toBe(true);
 
     const igdbRelated = await igdbProvider.getRelatedMedia('igdb:1020');
     expect(Array.isArray(igdbRelated)).toBe(true);
+  });
+
+  it('does not replace unmatched media with provider demo titles', async () => {
+    const unknownShow = await tmdbProvider.getMediaDetails('Unmatched Imported Show');
+    const unknownFilm = await tmdbProvider.getMediaDetails('Unmatched Imported Film');
+    const unknownGame = await igdbProvider.getMediaDetails('Unmatched Imported Game');
+
+    expect(unknownShow.title).toBeUndefined();
+    expect(unknownFilm.title).toBeUndefined();
+    expect(unknownGame.title).toBeUndefined();
+
+    expect((await tmdbProvider.getMediaDetails('tv:97630')).title).toBeUndefined();
+    expect((await igdbProvider.getMediaDetails('igdb:119133')).title).toBeUndefined();
   });
 });

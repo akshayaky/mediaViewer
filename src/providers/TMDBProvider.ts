@@ -118,9 +118,7 @@ export class TMDBProvider implements MetadataProvider {
 
   public async searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]> {
     const apiKey = await this.getApiKey();
-    if (!apiKey) {
-      return this.getMockSearchResults(query, type);
-    }
+    if (!apiKey) return [];
 
     const results: MetadataSearchResult[] = [];
 
@@ -136,11 +134,7 @@ export class TMDBProvider implements MetadataProvider {
       }
     } catch (err) {
       console.error('TMDB searchMedia failed:', err);
-      return this.getMockSearchResults(query, type);
-    }
-
-    if (results.length === 0) {
-      return this.getMockSearchResults(query, type);
+      return [];
     }
 
     return results;
@@ -161,7 +155,7 @@ export class TMDBProvider implements MetadataProvider {
     }
 
     if (!apiKey || !/^\d+$/.test(tmdbId)) {
-      return this.getMockRelatedMedia(externalId, mediaType);
+      return [];
     }
 
     try {
@@ -253,10 +247,6 @@ export class TMDBProvider implements MetadataProvider {
       console.warn('TMDB getRelatedMedia failed:', err);
     }
 
-    return this.getMockRelatedMedia(externalId, mediaType);
-  }
-  
-  private getMockRelatedMedia(_externalId: string, _mediaType: string): MetadataSearchResult[] {
     return [];
   }
 
@@ -310,19 +300,12 @@ export class TMDBProvider implements MetadataProvider {
     }
 
     if (!apiKey) {
-      return this.getMockDetails(externalId, mediaType);
+      return {};
     }
 
     await this.initLanguages();
 
-    // If tmdbId is not a raw numeric ID, search TMDB by query
-    if (!/^\d+$/.test(tmdbId)) {
-      const candidates = await this.searchMedia(externalId, mediaType === 'movie' ? 'Film' : 'TV Series');
-      if (candidates.length > 0 && candidates[0].external_id !== externalId) {
-        return this.getMediaDetails(candidates[0].external_id);
-      }
-      return this.getMockDetails(externalId, mediaType);
-    }
+    if (!/^\d+$/.test(tmdbId)) return {};
 
     try {
       const { url, headers } = await this.getFetchConfig(`/${mediaType}/${tmdbId}`, {
@@ -332,9 +315,8 @@ export class TMDBProvider implements MetadataProvider {
 
       const res = await fetch(url, { headers });
       if (!res.ok) {
-        // ID may be invalid/legacy seed ID -> Fall back to searching by title or returning candidate
         console.warn(`TMDB API returned ${res.status} for ${mediaType}/${tmdbId}`);
-        return this.getMockDetails(externalId, mediaType);
+        return {};
       }
 
       const data = await res.json();
@@ -433,127 +415,7 @@ export class TMDBProvider implements MetadataProvider {
       };
     } catch (err) {
       console.error('TMDB getMediaDetails failed:', err);
-      return this.getMockDetails(externalId, mediaType);
-    }
-  }
-
-  private getMockSearchResults(query: string, type?: MediaType): MetadataSearchResult[] {
-    const qLower = query.toLowerCase();
-    const mocks: MetadataSearchResult[] = [
-      {
-        title: 'Aanandam',
-        original_title: 'Aanandam',
-        release_year: 2016,
-        type: 'Film',
-        description: 'Seven engineering students go on a college trip across South India.',
-        poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80',
-        external_id: 'movie:390123',
-        provider: 'TMDB'
-      },
-      {
-        title: 'Premalu',
-        original_title: 'Premalu',
-        release_year: 2024,
-        type: 'Film',
-        description: 'A romantic comedy set in Hyderabad following Sachin and Reenu.',
-        poster: 'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1518676599625-583ad8c26727?w=1280&q=80',
-        external_id: 'movie:123456',
-        provider: 'TMDB'
-      },
-      {
-        title: 'The Paper',
-        original_title: 'Novine',
-        release_year: 2016,
-        type: 'TV Series',
-        description: 'A investigative drama following the staff of a Croatian newspaper.',
-        poster: 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1280&q=80',
-        external_id: 'tv:789012',
-        provider: 'TMDB'
-      },
-      {
-        title: 'Ted Lasso',
-        original_title: 'Ted Lasso',
-        release_year: 2020,
-        type: 'TV Series',
-        description: 'An American college football coach is hired to manage a British soccer team.',
-        poster: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=1280&q=80',
-        external_id: 'tv:97630',
-        provider: 'TMDB'
-      }
-    ];
-
-    return mocks.filter(m => {
-      if (type && m.type !== type) return false;
-      return m.title.toLowerCase().includes(qLower) || query.length < 2;
-    });
-  }
-
-  private getMockDetails(_externalId: string, mediaType: 'movie' | 'tv'): Partial<Media> {
-    if (mediaType === 'tv') {
-      return {
-        title: 'The Paper',
-        original_title: 'Novine',
-        type: 'TV Series',
-        release_year: 2016,
-        description: 'An investigative journalism television series that delves into corruption, media power, and politics.',
-        genres: ['Drama', 'Crime', 'Thriller'],
-        runtime: 45,
-        poster: 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1280&q=80',
-        publisher: 'HRT / Netflix',
-        metadata_source: 'TMDB',
-        metadata_refreshed_at: new Date().toISOString(),
-        cast: [
-          { id: 'cast_1', name: 'Branka Katić', character: 'Dijana Mitrović' },
-          { id: 'cast_2', name: 'Trpimir Jurkić', character: 'Nikola Martić' },
-          { id: 'cast_3', name: 'Aleksandar Cvetković', character: 'Mario Kardum' }
-        ],
-        seasons: [
-          {
-            season_number: 1,
-            name: 'Season 1',
-            overview: 'The takeover of Croatia\'s last independent daily newspaper.',
-            episode_count: 12,
-            episodes: [
-              { episode_number: 1, name: 'Episode 1', overview: 'A tragic accident sets off a chain of events.' },
-              { episode_number: 2, name: 'Episode 2', overview: 'New ownership introduces harsh strictures.' }
-            ]
-          },
-          {
-            season_number: 2,
-            name: 'Season 2',
-            overview: 'Political turmoil during the Croatian presidential election.',
-            episode_count: 11,
-            episodes: [
-              { episode_number: 1, name: 'Episode 1', overview: 'Election campaign heats up.' }
-            ]
-          }
-        ]
-      };
-    } else {
-      return {
-        title: 'Aanandam',
-        original_title: 'Aanandam',
-        type: 'Film',
-        release_year: 2016,
-        description: 'Seven engineering students embarking on a college trip across South India experience friendship, love, and life lessons.',
-        genres: ['Comedy', 'Drama', 'Romance'],
-        runtime: 130,
-        poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&q=80',
-        backdrop: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80',
-        publisher: 'Habit of Life / LJ Films',
-        metadata_source: 'TMDB',
-        metadata_refreshed_at: new Date().toISOString(),
-        cast: [
-          { id: 'cast_10', name: 'Arun Kurian', character: 'Varun Manjooran' },
-          { id: 'cast_11', name: 'Thomas Mathew', character: 'Akshay' },
-          { id: 'cast_12', name: 'Siddhi Mahajankatti', character: 'Dia' }
-        ]
-      };
+      return {};
     }
   }
 }

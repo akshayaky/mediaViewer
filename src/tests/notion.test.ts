@@ -223,6 +223,32 @@ describe('NotionIntegrationService', () => {
   });
 
   describe('Importing Example Notion Database Records', () => {
+    it('keeps unmatched imports separate from legacy mock media', async () => {
+      const now = new Date().toISOString();
+      await dbService.saveMedia({
+        id: 'media_aanandam',
+        type: 'Film',
+        title: 'Aanandam',
+        genres: [],
+        metadata_source: 'Initial Seed',
+        created_at: now,
+        updated_at: now
+      });
+
+      const result = await service.importFromRows([{
+        Type: 'Film',
+        Name: 'Unmatched imported film',
+        _page_id: 'notion_unmatched_film'
+      }]);
+
+      expect(result.importedMediaCount).toBe(1);
+      const importedMedia = (await dbService.getAllMedia()).find(
+        media => media.title === 'Unmatched imported film'
+      );
+      expect(importedMedia).toBeDefined();
+      expect(importedMedia?.id).not.toBe('media_aanandam');
+    });
+
     it('correctly normalizes example records into canonical media and history entries', async () => {
       const exampleRows = [
         {

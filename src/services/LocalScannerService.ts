@@ -223,14 +223,6 @@ export class LocalScannerService {
             size: f.size
           };
         });
-      } else {
-        // Web mode default sample paths if no real files selected yet
-        const samplePaths = this.getDiscoveredPathsForFolder(folderPath, mediaType);
-        discoveredItems = samplePaths.map(p => ({
-          path: p,
-          filename: p.split(/\\|\//).pop() || p,
-          size: 1500000000
-        }));
       }
     }
 
@@ -366,30 +358,6 @@ export class LocalScannerService {
     return null;
   }
 
-  private getDiscoveredPathsForFolder(folderPath: string, mediaType: MediaType): string[] {
-    const root = folderPath.endsWith('\\') || folderPath.endsWith('/') ? folderPath : `${folderPath}\\`;
-
-    if (mediaType === 'Film') {
-      return [
-        `${root}Aanandam (2016)\\Aanandam.2016.1080p.mkv`,
-        `${root}Premalu (2024)\\Premalu.2024.1080p.mp4`,
-        `${root}Dune Part Two (2024)\\Dune.Part.Two.2024.2160p.mkv`
-      ];
-    } else if (mediaType === 'TV Series') {
-      return [
-        `${root}The Paper\\Season 02\\S02E01.mkv`,
-        `${root}Ted Lasso\\Season 03\\Ted.Lasso.S03E01.mp4`,
-        `${root}Unknown Show\\Season 01\\S01E01.mkv`
-      ];
-    } else {
-      return [
-        `${root}Assassin's Creed IV Black Flag.lnk`,
-        `${root}Overcooked.lnk`,
-        `${root}The Last of Us Part II.exe`,
-        `${root}Indie Game Prototype.exe`
-      ];
-    }
-  }
 }
 
 export const localScannerService = new LocalScannerService();

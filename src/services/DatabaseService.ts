@@ -410,6 +410,21 @@ export class DatabaseService {
     await this.deleteMediaRecords('id = ?', [id]);
   }
 
+  public async removeLegacySeedData(): Promise<void> {
+    if (!this.db) {
+      throw new Error('Database is not initialized.');
+    }
+
+    const seededMedia = await this.db.select<{ id: string }[]>(
+      "SELECT id FROM media WHERE metadata_source = 'Initial Seed'"
+    );
+    for (const media of seededMedia) {
+      await this.deleteMedia(media.id);
+    }
+
+    await this.db.execute('DELETE FROM wishlist WHERE id IN (?, ?)', ['wish_1', 'wish_2']);
+  }
+
   public async clearMediaByType(type: Media['type']): Promise<number> {
     return this.deleteMediaRecords('type = ?', [type]);
   }
