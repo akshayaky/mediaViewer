@@ -64,9 +64,9 @@ export class LocalScannerService {
     let extractedEndEpisode: number | undefined = undefined;
 
     // Pattern 1: S01E03, S01E03-E04, S01E03E04, S01E03-04
-    const sxxexxRegex = /\b[Ss](\d{1,2})[Ee](\d{1,2})(?:[-_~]?[Ee]?(\d{1,2}))?\b/;
+    const sxxexxRegex = /(?:\b|_)[Ss](\d{1,2})[._ -]?[Ee](\d{1,2})(?:[-_~][Ee]?(\d{1,2}))?/;
     const seMatch = sxxexxRegex.exec(clean);
-
+    console.log(seMatch + "   " + clean);
     if (seMatch) {
       extractedSeason = parseInt(seMatch[1], 10);
       extractedEpisode = parseInt(seMatch[2], 10);
