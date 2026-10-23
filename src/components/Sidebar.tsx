@@ -96,8 +96,18 @@
 
              {!isCollapsed && (
                <div className="animate-in fade-in slide-in-from-left-2 duration-500 fill-mode-forwards">
-                 <h1 className="font-semibold text-lg text-white tracking-tight leading-tight whitespace-nowrap">My Media</h1>
-                 <p className="text-[10px] text-white/40 font-bold tracking-[0.15em] uppercase">Library</p>
+                 <h1
+                   className="font-semibold text-lg text-white tracking-tight leading-tight whitespace-nowrap"
+                   style={accentColors ? { color: accentColors.inactiveForeground } : undefined}
+                 >
+                   My Media
+                 </h1>
+                 <p
+                   className="text-[10px] text-white/40 font-bold tracking-[0.15em] uppercase"
+                   style={accentColors ? { color: accentColors.inactiveForeground, opacity: 0.65 } : undefined}
+                 >
+                   Library
+                 </p>
                </div>
              )}
            </div>
@@ -124,6 +134,7 @@
                      backgroundColor: accentColors ? accentColors.activeBackground : 'rgba(255, 255, 255, 0.08)',
                    } : {
                      backgroundColor: 'transparent',
+                     color: accentColors?.inactiveForeground,
                    }}
                  >
                    <div className="flex items-center space-x-3.5">
@@ -133,7 +144,9 @@
                            ? (accentColors ? 'text-white' : 'text-rose-400')
                            : 'text-white/40 group-hover:text-white'
                        }`}
-                       style={accentColors && isActive ? { color: '#FFFFFF' } : undefined}
+                       style={accentColors
+                         ? { color: isActive ? '#FFFFFF' : accentColors.inactiveForeground }
+                         : undefined}
                      />
                      {!isCollapsed && <span className="whitespace-nowrap transition-colors duration-300">{item.label}</span>}
                    </div>
@@ -154,7 +167,10 @@
          {/* Footer System Status */}
          <div className={`p-4 border-t border-white/5 text-xs flex items-center transition-all duration-300 ${isCollapsed ? 'justify-center' :
  'justify-between'}`}>
-           <div className="flex items-center space-x-2 text-white/40">
+           <div
+             className="flex items-center space-x-2 text-white/40"
+             style={accentColors ? { color: accentColors.inactiveForeground, opacity: 0.65 } : undefined}
+           >
              <span className="relative flex h-2 w-2">
                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -163,7 +179,12 @@
  Ready</span>}
            </div>
            {!isCollapsed && (
-             <span className="font-mono text-[10px] text-white/30 tracking-tighter">v1.0.0</span>
+             <span
+               className="font-mono text-[10px] text-white/30 tracking-tighter"
+               style={accentColors ? { color: accentColors.inactiveForeground, opacity: 0.5 } : undefined}
+             >
+               v1.0.0
+             </span>
            )}
          </div>
        </aside>

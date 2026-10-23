@@ -52,6 +52,10 @@ function luminance([r, g, b]: RGB): number {
   return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
 }
 
+function getPageTone(rgb: RGB): PageTone {
+  return luminance(rgb) > LIGHT_BACKGROUND_THRESHOLD ? 'light' : 'dark';
+}
+
 function mix(a: RGB, b: RGB, amount: number): RGB {
   return [
     clamp(a[0] + (b[0] - a[0]) * amount),
@@ -95,6 +99,7 @@ export interface SidebarAccentColors {
 
 export function getSidebarAccentColors(accentColor: string): SidebarAccentColors {
   const accent = parseColor(accentColor) ?? parseColor(DEFAULT_ACCENT)!;
+  const tone = getPageTone(accent);
   const background = luminance(accent) <= 0.035
     ? accent
     : mixToLuminanceLimit(accent, BLACK, 0.035);
@@ -106,7 +111,7 @@ export function getSidebarAccentColors(accentColor: string): SidebarAccentColors
   return {
     background: `rgba(${accent.join(', ')}, 0.28)`,
     activeBackground: toCss(activeBackground),
-    inactiveForeground: luminance(accent) > 0.42 ? '#111827' : 'rgba(255, 255, 255, 0.92)'
+    inactiveForeground: tone === 'light' ? '#1f2430' : '#e5e7eb79'
   };
 }
 
@@ -132,7 +137,7 @@ export interface MediaTheme {
 export function getMediaTheme(accentColor?: string): MediaTheme {
   const accent = accentColor || DEFAULT_ACCENT;
   const rgb = parseColor(accent) ?? parseColor(DEFAULT_ACCENT)!;
-  const tone: PageTone = luminance(rgb) > LIGHT_BACKGROUND_THRESHOLD ? 'light' : 'dark';
+  const tone = getPageTone(rgb);
 
   return {
     tone,
