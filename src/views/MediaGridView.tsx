@@ -47,6 +47,19 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
     setScoreByMediaId(Object.fromEntries(media.map((item, index) => [item.id, histories[index][0]?.score])));
   };
 
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
+  
+    useEffect(() => {
+      const handleResize = () => setWindowWidth(window.innerWidth);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }, []);
+  
+    const pagePadding = windowWidth >= 900 
+      ? (isCollapsed ? '6rem' : '18rem') 
+      : '1rem';
+  
+
   useEffect(() => {
     const handleScanned = () => { void refreshList(); };
     void refreshList();
@@ -139,9 +152,7 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
     <div
       className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 mx-auto max-w-none transition-all duration-300"
       style={{
-        paddingLeft: typeof window !== 'undefined' && window.innerWidth >= 768
-          ? (isCollapsed ? '6rem' : '18rem')
-          : undefined
+        paddingLeft: pagePadding
       }}
     >
       {/* Header Bar */}
@@ -254,7 +265,7 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
           <p className="text-sm sm:text-base font-medium">No media found matching your filter criteria.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-4 md:gap-5">
+        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5">
           {items.map(media => {
             return (
               <MediaCard

@@ -113,7 +113,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onCli
           onPreviewEnd?.();
         }
       }}
-      className="group relative cursor-pointer flex flex-col bg-[#151720] rounded-xl overflow-hidden border border-[#232736] hover:border-rose-500/50 hover:shadow-xl hover:shadow-rose-950/20 transition-all duration-300 transform hover:-translate-y-1 touch-target"
+      className="group relative cursor-pointer flex flex-col bg-[#151720] rounded-sm overflow-hidden border border-[#232736] hover:border-rose-500/50 hover:shadow-xl hover:shadow-rose-950/20 transition-all duration-300 transform hover:-translate-y-1 touch-target"
     >
       {/* Poster Image Container */}
       <div className="relative aspect-[2/3] w-full bg-[#1b1e2b] overflow-hidden">
@@ -140,15 +140,15 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onCli
         {renderBadge()}
 
         {/* Score Badge */}
-        {score && (
+        {/* {score && (
           <span className="absolute top-2 right-2 bg-black/75 backdrop-blur-md text-amber-400 text-xs font-bold px-2 py-0.5 rounded-md flex items-center space-x-1 border border-amber-500/20">
             <Star className="w-3 h-3 fill-amber-400" />
             <span>{score}</span>
           </span>
-        )}
+        )} */}
 
         {/* Release Year & Type overlay on hover */}
-        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-xs text-gray-300 opacity-90">
+        {/* <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-xs text-gray-300 opacity-90">
           <span className="flex items-center space-x-1 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-[11px]">
             {getTypeIcon()}
             <span className="ml-1">{media.type}</span>
@@ -159,7 +159,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onCli
               <span>{media.release_year}</span>
             </span>
           )}
-        </div>
+        </div> */}
       </div>
 
       {/* Card Info */}

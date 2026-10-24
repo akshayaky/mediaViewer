@@ -26,6 +26,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
     localLibraryList: Media[];
   }>({ allMedia: [], continueWatching: [], recentlyWatched: [], rewatchCandidates: [], abandonedList: [], localLibraryList: [] });
 
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const pagePadding = windowWidth >= 900 
+    ? (isCollapsed ? '6rem' : '18rem') 
+    : '1rem';
+
   useEffect(() => {
     let isMounted = true;
     const loadHomeData = async () => {
@@ -100,16 +112,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
         media={heroMedia}
         onSelectMedia={onSelectMedia}
         accentColor={heroAccentColor}
-        contentPaddingLeft={isCollapsed ? '6rem' : '18rem'}
+        contentPaddingLeft={pagePadding}
       />
 
       {/* Media Rails */}
       <div
         className="space-y-6 px-4 sm:px-8 pb-24 md:pb-8 transition-all duration-300"
         style={{
-          paddingLeft: typeof window !== 'undefined' && window.innerWidth >= 768
-            ? (isCollapsed ? '6rem' : '18rem')
-            : undefined
+          paddingLeft: pagePadding
         }}
       >
         <MediaRail

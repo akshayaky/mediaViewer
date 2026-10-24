@@ -175,7 +175,17 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     }
   };
 
-  // Episode UI State
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+const pagePadding = windowWidth >= 900
+  ? `max(clamp(6.5rem, 10vw, 17.5rem), calc(${isSidebarCollapsed ? '6.5rem' : '17.5rem'} + 1.5rem))`
+  : '1rem';
   const [selectedEpFiles, setSelectedEpFiles] = useState<Record<string, string>>({});
   const [activeEpMenu, setActiveEpMenu] = useState<string | null>(null);
   const [linkEpTarget, setLinkEpTarget] = useState<{ season: number; episode: number } | null>(null);
@@ -362,7 +372,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
       {/* Pinned Header Bar Actions */}
       <div className={`mdv-header ${isPlayButtonStuck ? 'mdv-header--stuck' : ''}`}>
-        <div className="mdv-header-actions" style={{ left: typeof window !== 'undefined' && window.innerWidth >= 768 ? (isSidebarCollapsed ? '6.5rem' : '17.5rem') : undefined }}>
+        <div className="mdv-header-actions" style={{ left: typeof window !== 'undefined' && window.innerWidth >= 900 ? (isSidebarCollapsed ? '6.5rem' : '17.5rem') : undefined }}>
         <button
           onClick={onBack}
           className="mdv-btn mdv-btn-glass cursor-pointer group flex items-center gap-2 w-10 hover:w-36 transition-[width] duration-300 ease-in-out overflow-hidden whitespace-nowrap px-0 hover:px-2 hover:backdrop-blur-md"
@@ -442,7 +452,12 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
       {/* Scrollable Hero Content */}
       <div className="mdv-hero">
-        <div className="mdv-hero-inner">
+        <div
+          className="mdv-hero-inner"
+          style={{
+            paddingLeft: pagePadding
+          }}
+        >
           <div className="mdv-title-block">
             <div className="mdv-badges">
               <span className="mdv-type-badge">
@@ -542,7 +557,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       </div>
 
       {activeLocalFile && isAvailableLocally && (
-        <div ref={playButtonRowRef} className="mdv-play-row">
+        <div ref={playButtonRowRef} className="mdv-play-row" style={{ paddingLeft: pagePadding }}>
           <button
             onClick={() => handlePlayFile(activeLocalFile)}
             className="mdv-btn mdv-btn-play"
@@ -552,9 +567,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           </button>
         </div>
       )}
-
       {/* Main Content Layout */}
-      <div className="mdv-main">
+      <div className="mdv-main" style={{ paddingLeft: pagePadding }}>
         {/* Left Column: Overview, Multi-watch Breakdown, Seasons, Cast, Journal */}
         <div className="mdv-col mdv-col--main">
           {/* Overview */}
@@ -1007,9 +1021,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           </section>
         </div>
       </div>
-
       {/* Related Media Rail Section */}
-      <div className="mdv-related max-w-7xl mx-auto px-6 pb-12">
+      <div className="mdv-related max-w-7xl mx-auto px-6 pb-12" style={{ paddingLeft: pagePadding }}>
         <section className="mdv-card mdv-card--roomy">
           <h2 className="mdv-card-title flex items-center space-x-2">
             <Sparkles className="mdv-icon-lg mdv-icon-accent" />
