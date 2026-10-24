@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Media, MediaType } from '../types/media';
 import { MetadataSearchResult } from '../providers/interfaces';
 import { igdbProvider } from '../providers/IGDBProvider';
@@ -24,6 +24,24 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (isOpen) {
+      window.history.pushState({ isModalOpen: true }, '');
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleCloseSheets = (e: CustomEvent) => {
+      onClose();
+      e.preventDefault();
+    };
+    window.addEventListener('close-mobile-sheets' as any, handleCloseSheets);
+    return () => {
+      window.removeEventListener('close-mobile-sheets' as any, handleCloseSheets);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

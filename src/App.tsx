@@ -253,9 +253,6 @@ export function App() {
         clearTimeout(returnTransitionTimer.current);
         returnTransitionTimer.current = null;
       }
-      
-      // Clear accent color immediately so sidebar/grid resets while animating back
-      //setSelectedAccentColor(undefined);
 
       if (mainViewRef.current) mainViewRef.current.scrollTop = 0;
       const mainRect = mainViewRef.current?.getBoundingClientRect();
@@ -286,6 +283,37 @@ export function App() {
     setSelectedMedia(null);
     setSelectedAccentColor(undefined);
   };
+
+  // Android / Browser Back Button & Popstate Handling
+  useEffect(() => {
+    // Push dummy history entry when opening detail or sheet/modal view
+    if (selectedMedia) {
+      window.history.pushState({ isMediaDetail: true }, '');
+    }
+  }, [selectedMedia]);
+
+  useEffect(() => {
+    const handlePopState = (_event: PopStateEvent) => {
+      // First, check if any mobile sheet or modal is open
+      const closeSheetEvent = new CustomEvent('close-mobile-sheets', { cancelable: true });
+      const wasSheetClosed = !window.dispatchEvent(closeSheetEvent);
+
+      if (wasSheetClosed) {
+        // A sheet was open and closed by its event handler
+        return;
+      }
+
+      // If selectedMedia is open, close detail page
+      if (selectedMedia) {
+        handleBackToTab();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [selectedMedia, activeTab]);
 
   if (isLoading) {
     return (

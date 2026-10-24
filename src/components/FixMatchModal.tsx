@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Media } from '../types/media';
 import { MetadataSearchResult } from '../providers/interfaces';
 import { tmdbProvider } from '../providers/TMDBProvider';
@@ -29,6 +29,24 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewDetails, setPreviewDetails] = useState<Partial<Media> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      window.history.pushState({ isModalOpen: true }, '');
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleCloseSheets = (e: CustomEvent) => {
+      onClose();
+      e.preventDefault();
+    };
+    window.addEventListener('close-mobile-sheets' as any, handleCloseSheets);
+    return () => {
+      window.removeEventListener('close-mobile-sheets' as any, handleCloseSheets);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

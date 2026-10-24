@@ -19,7 +19,7 @@
 
 .mdv-page {
   /* Sizes */
-  --mdv-hero-height: 1200px;
+  --mdv-hero-height: 520px;
   --mdv-max-width: 80rem;
 
   /* Always-dark UI (pills, genre tags, glass buttons) - same in both tones */
@@ -37,6 +37,12 @@
   --mdv-play-bg: #059669;
   --mdv-play-bg-hover: #10b981;
   --mdv-play-text: #ffffff;
+}
+
+@media (min-width: 768px) {
+  .mdv-page {
+    --mdv-hero-height: 720px;
+  }
 }
 
 /* ---- Dark page background -> light text ---- */
@@ -182,9 +188,9 @@
 
 .mdv-header-actions {
   position: absolute;
-  top: 1.5rem;
-  left: 1.5rem;
-  right: 1.5rem;
+  top: calc(1rem + var(--sat, 0px));
+  left: 1rem;
+  right: 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -207,16 +213,18 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1.5rem;
+  gap: 1rem;
   max-width: var(--mdv-max-width);
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1.25rem;
 }
 
 @media (min-width: 768px) {
   .mdv-hero-inner {
     flex-direction: row;
     align-items: flex-end;
+    gap: 1.5rem;
+    padding: 2rem;
   }
 }
 
@@ -230,16 +238,22 @@
 /* ---- Sticky play button row ---- */
 .mdv-play-row {
   position: sticky;
-  top: 1.5rem;
+  top: calc(1rem + var(--sat, 0px));
   z-index: 30;
   display: flex;
   align-items: center;
   height: 3.5rem;
   max-width: var(--mdv-max-width);
   margin: -3.5rem auto 0;
-  padding-left: 11rem;
-  padding-right: 2rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
   pointer-events: none;
+}
+@media (min-width: 768px) {
+  .mdv-play-row {
+    padding-left: 11rem;
+    padding-right: 2rem;
+  }
 }
 
 /* ---- Main content grid ---- */

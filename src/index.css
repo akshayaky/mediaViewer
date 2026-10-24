@@ -1,9 +1,44 @@
 @import "tailwindcss";
 
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
 @layer base {
   body {
     @apply bg-[#0c0d10] text-gray-100 antialiased font-sans selection:bg-rose-600 selection:text-white overflow-hidden;
+    padding-top: var(--sat);
+    padding-right: var(--sar);
+    padding-bottom: var(--sab);
+    padding-left: var(--sal);
   }
+
+  /* Prevent automatic iOS/Android auto-zoom on form inputs by ensuring at least 16px font size on touch devices */
+  input, select, textarea {
+    font-size: 16px;
+  }
+  @media (min-width: 768px) {
+    input, select, textarea {
+      font-size: 0.875rem; /* 14px */
+    }
+  }
+}
+
+/* Touch-friendly utility helpers */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Custom scrollbars */

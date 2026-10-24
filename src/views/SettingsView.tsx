@@ -292,7 +292,7 @@ export const SettingsView: React.FC = () => {
   const schemaKeys = Object.keys(schema);
 
   return (
-    <div className="p-8 space-y-8 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-8 max-w-5xl mx-auto">
       {/* Hidden Folder Directory Inputs */}
       <input
         type="file"

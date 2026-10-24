@@ -1,67 +1,104 @@
-   import React, { useState, useEffect } from 'react';
-   import {
-     Home,
-     Film,
-     Tv,
-     Gamepad2,
-     Heart,
-     History,
-     Settings,
-     Tv2,
-     Inbox,
-     ChevronLeft,
-     ChevronRight
-   } from 'lucide-react';
-   import { dbService } from '../services/DatabaseService';
-   import { getSidebarAccentColors } from '../helper/mediaDetailTheme';
+import React, { useState, useEffect } from 'react';
+import {
+  Home,
+  Film,
+  Tv,
+  Gamepad2,
+  Heart,
+  History,
+  Settings,
+  Tv2,
+  Inbox,
+  MoreHorizontal,
+  X,
+  ChevronLeft,
+  ChevronRight
+} from 'lucide-react';
+import { dbService } from '../services/DatabaseService';
+import { getSidebarAccentColors } from '../helper/mediaDetailTheme';
 
-   export type NavTab = 'home' | 'movies' | 'tv' | 'games' | 'wishlist' | 'history' | 'inbox' | 'settings';
+export type NavTab = 'home' | 'movies' | 'tv' | 'games' | 'wishlist' | 'history' | 'inbox' | 'settings';
 
-   interface SidebarProps {
-     activeTab: NavTab;
-     onSelectTab: (tab: NavTab) => void;
-     isCollapsed: boolean;
-     setIsCollapsed: (collapsed: boolean) => void;
-     accentColor?: string;
-   }
+interface SidebarProps {
+  activeTab: NavTab;
+  onSelectTab: (tab: NavTab) => void;
+  isCollapsed: boolean;
+  setIsCollapsed: (collapsed: boolean) => void;
+  accentColor?: string;
+}
 
-   export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isCollapsed, setIsCollapsed, accentColor }) => {
-     const [unmatchedCount, setUnmatchedCount] = useState(0);
-     const accentColors = accentColor ? getSidebarAccentColors(accentColor) : null;
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isCollapsed, setIsCollapsed, accentColor }) => {
+  const [unmatchedCount, setUnmatchedCount] = useState(0);
+  const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false);
+  const accentColors = accentColor ? getSidebarAccentColors(accentColor) : null;
 
-     useEffect(() => {
-       let isMounted = true;
-       const refreshUnmatchedCount = async () => {
-         const files = await dbService.getUnmatchedLocalFiles();
-         if (isMounted) setUnmatchedCount(files.length);
-       };
-       const handleLibraryUpdate = () => { void refreshUnmatchedCount(); };
+  useEffect(() => {
+    let isMounted = true;
+    const refreshUnmatchedCount = async () => {
+      const files = await dbService.getUnmatchedLocalFiles();
+      if (isMounted) setUnmatchedCount(files.length);
+    };
+    const handleLibraryUpdate = () => { void refreshUnmatchedCount(); };
 
-       void refreshUnmatchedCount();
-       window.addEventListener('library-scanned', handleLibraryUpdate);
-       return () => {
-         isMounted = false;
-         window.removeEventListener('library-scanned', handleLibraryUpdate);
-       };
-     }, []);
+    void refreshUnmatchedCount();
+    window.addEventListener('library-scanned', handleLibraryUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('library-scanned', handleLibraryUpdate);
+    };
+  }, []);
 
-     const navItems = [
-       { id: 'home' as NavTab, label: 'Home', icon: Home },
-       { id: 'movies' as NavTab, label: 'Movies', icon: Film },
-       { id: 'tv' as NavTab, label: 'TV Shows', icon: Tv },
-       { id: 'games' as NavTab, label: 'Games', icon: Gamepad2 },
-       { id: 'wishlist' as NavTab, label: 'Wishlist', icon: Heart },
-       { id: 'history' as NavTab, label: 'History', icon: History },
-       { id: 'inbox' as NavTab, label: 'Unmatched Inbox', icon: Inbox, badge: unmatchedCount },
-       { id: 'settings' as NavTab, label: 'Settings', icon: Settings }
-     ];
+  // Listen to custom back event to close More sheet if open
+  useEffect(() => {
+    if (isMoreSheetOpen) {
+      window.history.pushState({ isSheetOpen: true }, '');
+    }
+  }, [isMoreSheetOpen]);
 
-     return (
-       <aside
-          className={`fixed inset-y-0 left-0 flex flex-col justify-between select-none z-40 transition-all duration-500
-            ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-white/10 shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.05)] ${
-            isCollapsed ? 'w-20' : 'w-64'
-          } ${accentColors ? '' : 'bg-[#111319]/80 backdrop-blur-xl'}`}
+  useEffect(() => {
+    const handleCloseSheets = (e: CustomEvent) => {
+      if (isMoreSheetOpen) {
+        setIsMoreSheetOpen(false);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('close-mobile-sheets' as any, handleCloseSheets);
+    return () => {
+      window.removeEventListener('close-mobile-sheets' as any, handleCloseSheets);
+    };
+  }, [isMoreSheetOpen]);
+
+  const primaryNavItems: Array<{ id: NavTab; label: string; icon: React.ElementType; badge?: number }> = [
+    { id: 'home' as NavTab, label: 'Home', icon: Home },
+    { id: 'movies' as NavTab, label: 'Movies', icon: Film },
+    { id: 'tv' as NavTab, label: 'TV Shows', icon: Tv },
+    { id: 'games' as NavTab, label: 'Games', icon: Gamepad2 },
+    { id: 'wishlist' as NavTab, label: 'Wishlist', icon: Heart }
+  ];
+
+  const secondaryNavItems: Array<{ id: NavTab; label: string; icon: React.ElementType; badge?: number }> = [
+    { id: 'history' as NavTab, label: 'History', icon: History },
+    { id: 'inbox' as NavTab, label: 'Unmatched Inbox', icon: Inbox, badge: unmatchedCount },
+    { id: 'settings' as NavTab, label: 'Settings', icon: Settings }
+  ];
+
+  const allNavItems = [...primaryNavItems, ...secondaryNavItems];
+
+  const handleMobileTabSelect = (tab: NavTab) => {
+    onSelectTab(tab);
+    setIsMoreSheetOpen(false);
+  };
+
+  const isSecondaryActive = secondaryNavItems.some(item => item.id === activeTab);
+
+  return (
+    <>
+      {/* Desktop Sidebar (>= 768px) */}
+      <aside
+        className={`hidden md:flex fixed inset-y-0 left-0 flex-col justify-between select-none z-40 transition-all duration-500
+          ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-white/10 shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.05)] ${
+          isCollapsed ? 'w-20' : 'w-64'
+        } ${accentColors ? '' : 'bg-[#111319]/80 backdrop-blur-xl'}`}
           style={
             accentColors
               ? {
@@ -124,7 +161,7 @@
 
            {/* Navigation Items */}
            <nav className="p-3 space-y-1.5 flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
-             {navItems.map(item => {
+             {allNavItems.map(item => {
                const Icon = item.icon;
                const isActive = activeTab === item.id;
                return (
@@ -132,8 +169,7 @@
                    key={item.id}
                    onClick={() => onSelectTab(item.id)}
                    title={isCollapsed ? item.label : undefined}
-                   className={`group relative w-full flex items-center rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer
- ${
+                   className={`group relative w-full flex items-center rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer ${
                      isCollapsed ? 'justify-center p-3' : 'justify-between px-4 py-2.5'
                    } ${
                      isActive
@@ -162,8 +198,7 @@
                    </div>
 
                    {!isCollapsed && item.badge !== undefined && item.badge > 0 && (
-                     <span className={`text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ring-1 ring-white/20 ${accentColors ?
- '' : 'bg-rose-500'}`}
+                     <span className={`text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ring-1 ring-white/20 ${accentColors ? '' : 'bg-rose-500'}`}
                            style={accentColors ? { backgroundColor: accentColors.activeBackground } : undefined}>
                        {item.badge}
                      </span>
@@ -175,8 +210,7 @@
          </div>
 
          {/* Footer System Status */}
-         <div className={`p-4 border-t border-white/5 text-xs flex items-center transition-all duration-300 ${isCollapsed ? 'justify-center' :
- 'justify-between'}`}>
+         <div className={`p-4 border-t border-white/5 text-xs flex items-center transition-all duration-300 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
            <div
              className="flex items-center space-x-2 text-white/40"
              style={accentColors ? { color: accentColors.inactiveForeground, opacity: 0.65 } : undefined}
@@ -185,8 +219,7 @@
                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
              </span>
-             {!isCollapsed && <span className="whitespace-nowrap font-medium transition-colors group-hover:text-white/60">SQLite Engine
- Ready</span>}
+             {!isCollapsed && <span className="whitespace-nowrap font-medium transition-colors group-hover:text-white/60">SQLite Engine Ready</span>}
            </div>
            {!isCollapsed && (
              <span
@@ -198,5 +231,105 @@
            )}
          </div>
        </aside>
-     );
-   };
+
+      {/* Mobile Bottom Navigation (< 768px) */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#111319]/95 backdrop-blur-2xl border-t border-white/10 shadow-2xl flex items-center justify-around px-2 py-2"
+        style={{ paddingBottom: 'calc(0.5rem + var(--sab, 0px))' }}
+      >
+        {primaryNavItems.map(item => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleMobileTabSelect(item.id)}
+              className={`flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all touch-target cursor-pointer ${
+                isActive ? 'text-rose-400 font-semibold' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <Icon className={`w-5 h-5 mb-1 ${isActive ? 'text-rose-500 scale-110' : 'text-gray-400'}`} />
+              <span className="text-[10px] tracking-tight truncate max-w-[60px] text-center">{item.label}</span>
+            </button>
+          );
+        })}
+
+        {/* 6th Tab: More */}
+        <button
+          onClick={() => setIsMoreSheetOpen(true)}
+          className={`relative flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all touch-target cursor-pointer ${
+            isSecondaryActive || isMoreSheetOpen ? 'text-rose-400 font-semibold' : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <div className="relative">
+            <MoreHorizontal className={`w-5 h-5 mb-1 ${isSecondaryActive || isMoreSheetOpen ? 'text-rose-500 scale-110' : 'text-gray-400'}`} />
+            {unmatchedCount > 0 && (
+              <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ring-2 ring-[#111319]">
+                {unmatchedCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] tracking-tight truncate text-center">More</span>
+        </button>
+      </nav>
+
+      {/* Mobile "More" Bottom Sheet Overlay */}
+      {isMoreSheetOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsMoreSheetOpen(false)}
+          />
+
+          {/* Sheet Drawer */}
+          <div className="relative z-50 bg-[#161822] border-t border-white/10 rounded-t-2xl p-5 shadow-2xl space-y-4 animate-in slide-in-from-bottom duration-250"
+            style={{ paddingBottom: 'calc(4.5rem + var(--sab, 0px))' }}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center space-x-2">
+                <Tv2 className="w-5 h-5 text-rose-500" />
+                <h3 className="text-base font-bold text-white tracking-tight">More Destinations</h3>
+              </div>
+              <button
+                onClick={() => setIsMoreSheetOpen(false)}
+                className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 py-1">
+              {secondaryNavItems.map(item => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleMobileTabSelect(item.id)}
+                    className={`w-full flex items-center justify-between p-3.5 rounded-xl font-medium text-sm transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-rose-600/20 border border-rose-500/40 text-rose-300'
+                        : 'bg-[#1f2230] hover:bg-[#282c3f] text-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3.5">
+                      <Icon className={`w-5 h-5 ${isActive ? 'text-rose-400' : 'text-gray-400'}`} />
+                      <span>{item.label}</span>
+                    </div>
+
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full ring-1 ring-white/20">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};

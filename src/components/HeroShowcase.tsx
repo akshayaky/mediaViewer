@@ -36,7 +36,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
 
   return (
     <div
-      className="relative w-full h-[min(76vh,780px)] min-h-[1080px] overflow-hidden group"
+      className="relative w-full h-[min(65vh,640px)] min-h-[420px] sm:min-h-[500px] overflow-hidden group"
       style={{
         '--hero-accent': accentColor,
         '--hero-accent-rgb': getAccentRgb(accentColor),
@@ -63,8 +63,12 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
 
       {/* Content Container */}
       <div
-        className="relative z-30 h-full flex flex-col justify-end py-8 pr-8 max-w-4xl space-y-4"
-        style={{ paddingLeft: contentPaddingLeft }}
+        className="relative z-30 h-full flex flex-col justify-end p-4 sm:p-6 md:py-8 md:pr-8 max-w-4xl space-y-3 sm:space-y-4"
+        style={{
+          paddingLeft: typeof window !== 'undefined' && window.innerWidth >= 768
+            ? contentPaddingLeft
+            : undefined
+        }}
       >
         {/* Featured Tag */}
         <div className="flex items-center space-x-2">

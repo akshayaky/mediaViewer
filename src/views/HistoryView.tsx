@@ -40,7 +40,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia }) => {
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto">
       {/* Header Bar */}
       <div className="border-b border-[#1f222e] pb-6">
         <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center space-x-3">

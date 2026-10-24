@@ -28,6 +28,24 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
   const [historyB, setHistoryB] = useState<Awaited<ReturnType<typeof dbService.getHistoryForMedia>>>([]);
 
   useEffect(() => {
+    if (isOpen) {
+      window.history.pushState({ isModalOpen: true }, '');
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleCloseSheets = (e: CustomEvent) => {
+      onClose();
+      e.preventDefault();
+    };
+    window.addEventListener('close-mobile-sheets' as any, handleCloseSheets);
+    return () => {
+      window.removeEventListener('close-mobile-sheets' as any, handleCloseSheets);
+    };
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
     if (!isOpen) return;
     let isMounted = true;
     Promise.all([

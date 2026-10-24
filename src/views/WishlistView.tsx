@@ -40,7 +40,7 @@ export const WishlistView: React.FC = () => {
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto">
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1f222e] pb-6">
         <div>

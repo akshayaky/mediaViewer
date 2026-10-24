@@ -104,7 +104,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
       />
 
       {/* Media Rails */}
-      <div className="space-y-6 px-8 pb-8" style={{ paddingLeft: isCollapsed ? '6rem' : '18rem' }}>
+      <div
+        className="space-y-6 px-4 sm:px-8 pb-24 md:pb-8 transition-all duration-300"
+        style={{
+          paddingLeft: typeof window !== 'undefined' && window.innerWidth >= 768
+            ? (isCollapsed ? '6rem' : '18rem')
+            : undefined
+        }}
+      >
         <MediaRail
           title="Continue Watching / Playing"
           subtitle="Pick up where you left off"

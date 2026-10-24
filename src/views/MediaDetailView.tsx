@@ -362,7 +362,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
       {/* Pinned Header Bar Actions */}
       <div className={`mdv-header ${isPlayButtonStuck ? 'mdv-header--stuck' : ''}`}>
-        <div className="mdv-header-actions" style={{ left: isSidebarCollapsed ? '6.5rem' : '17.5rem' }}>
+        <div className="mdv-header-actions" style={{ left: typeof window !== 'undefined' && window.innerWidth >= 768 ? (isSidebarCollapsed ? '6.5rem' : '17.5rem') : undefined }}>
         <button
           onClick={onBack}
           className="mdv-btn mdv-btn-glass cursor-pointer group flex items-center gap-2 w-10 hover:w-36 transition-[width] duration-300 ease-in-out overflow-hidden whitespace-nowrap px-0 hover:px-2 hover:backdrop-blur-md"
