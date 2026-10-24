@@ -39,9 +39,9 @@
   --mdv-play-text: #ffffff;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1000px) {
   .mdv-page {
-    --mdv-hero-height: 720px;
+    --mdv-hero-height: 90vh;/*720px;*/
   }
 }
 
