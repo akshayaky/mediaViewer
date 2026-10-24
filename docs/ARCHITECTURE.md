@@ -59,7 +59,7 @@
   6. Wishlist
   7. Notion Raw Records
   8. App Settings
-* **`LocalScannerService.ts`**: Scans disk folders (via Tauri Rust command or Web API), parses file titles/years/seasons, and performs high-confidence candidate matching.
+* **`LocalScannerService.ts`**: Scans disk folders (via Tauri Rust command or Web API), and supports selecting individual media files on Android where the native dialog plugin cannot pick folders. It parses file titles/years/seasons and performs high-confidence candidate matching.
 * **`NotionIntegrationService.ts`**: Parses contextual titles (e.g. `Aanandam(2+ Rewatch)` -> clean title: `Aanandam`, context note: `2+ Rewatch`) and maps Notion CSV export rows to Media and MediaHistory records.
 * **`LocalLauncherService.ts`**: Launches local video or game executable files via Tauri's OS opener plugin (`@tauri-apps/plugin-opener`).
 

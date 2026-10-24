@@ -1,4 +1,8 @@
 use std::path::Path;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use tauri::AppHandle;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use tauri_plugin_dialog::DialogExt;
 use walkdir::WalkDir;
 
 #[tauri::command]
@@ -6,10 +10,20 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
-fn select_folder() -> Option<String> {
-    let folder = rfd::FileDialog::new().pick_folder();
-    folder.map(|p| p.to_string_lossy().into_owned())
+fn select_folder(app: AppHandle) -> Option<String> {
+    app.dialog()
+        .file()
+        .blocking_pick_folder()
+        .and_then(|file_path| file_path.into_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn select_folder() -> Result<Option<String>, String> {
+    Err("Folder selection is unavailable on mobile. Select media files instead.".to_string())
 }
 
 #[tauri::command]
@@ -55,6 +69,7 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             select_folder,

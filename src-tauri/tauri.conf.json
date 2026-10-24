@@ -31,7 +31,9 @@
               "allow": [
                 { "url": "https://image.tmdb.org/**" },
                 { "url": "https://images.igdb.com/**" },
-                { "url": "https://api.notion.com/*" }
+                { "url": "https://api.notion.com/*" },
+                { "url": "https://api.igdb.com/v4/**"},
+                { "url": "https://id.twitch.tv/oauth2/token"}
               ]
             },
             {

@@ -178,13 +178,19 @@ export class LocalScannerService {
 
     let discoveredItems: Array<{ path: string; filename: string; size: number }> = [];
 
+    const selectedFiles = this.webFilesMap.get(mediaType);
+
     if (samplePathsOverride) {
       discoveredItems = samplePathsOverride.map(p => ({
         path: p,
         filename: p.split(/\\|\//).pop() || p,
         size: 1500000000
       }));
-    } else if (isTauri()) {
+    } else if (isTauri() && !selectedFiles?.length) {
+      if (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
+        throw new Error('Select media files with Browse before scanning on Android.');
+      }
+
       let targetExtensions = ['mkv', 'mp4', 'avi', 'mov', 'm4v', 'webm', 'ts', 'm2ts', 'flv'];
       if (mediaType === 'VideoGame') {
         targetExtensions = ['exe', 'lnk', 'iso', 'bin'];
@@ -201,7 +207,6 @@ export class LocalScannerService {
       }));
     } else {
       // Web Mode scanning
-      const selectedFiles = this.webFilesMap.get(mediaType);
       if (selectedFiles && selectedFiles.length > 0) {
         let targetExtensions = ['mkv', 'mp4', 'avi', 'mov', 'm4v', 'webm', 'ts', 'flv'];
         if (mediaType === 'VideoGame') {

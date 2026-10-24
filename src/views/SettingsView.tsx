@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const [settings, setSettings] = useState<AppSettings>({});
 
   // Input states
@@ -113,6 +114,12 @@ export const SettingsView: React.FC = () => {
 
   const handleSaveFolders = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAndroid) {
+      setSavedMessage('Android file selections are temporary and do not save folder paths.');
+      setTimeout(() => setSavedMessage(''), 3000);
+      return;
+    }
+
     await Promise.all([
       dbService.saveSetting('movies_folder', moviesFolder),
       dbService.saveSetting('tv_folder', tvFolder),
@@ -167,6 +174,13 @@ export const SettingsView: React.FC = () => {
     e.stopPropagation();
 
     const mediaType: MediaType = key === 'movies' ? 'Film' : key === 'tv' ? 'TV Series' : 'VideoGame';
+
+    if (isAndroid) {
+      if (key === 'movies') moviesFolderInputRef.current?.click();
+      if (key === 'tv') tvFolderInputRef.current?.click();
+      if (key === 'games') gamesFolderInputRef.current?.click();
+      return;
+    }
 
     if (isTauri()) {
       try {
@@ -246,18 +260,26 @@ export const SettingsView: React.FC = () => {
       let folderName = 'Selected Folder';
       if (firstFile.webkitRelativePath) {
         folderName = firstFile.webkitRelativePath.split('/')[0];
+      } else if (isAndroid) {
+        folderName = `${fileArray.length} Android files selected`;
       }
 
-      const folderPath = `C:\\Media\\${folderName}`;
+      const folderPath = isAndroid ? folderName : `C:\\Media\\${folderName}`;
 
       if (key === 'movies') setMoviesFolder(folderPath);
       if (key === 'tv') setTvFolder(folderPath);
       if (key === 'games') setGamesFolder(folderPath);
 
-      await dbService.saveSetting(`${key}_folder`, folderPath);
-      setSavedMessage(`Loaded ${fileArray.length} files from folder "${folderName}".`);
+      if (!isAndroid) {
+        await dbService.saveSetting(`${key}_folder`, folderPath);
+      }
+      setSavedMessage(isAndroid
+        ? `Selected ${fileArray.length} files. Scan now to add them to your library.`
+        : `Loaded ${fileArray.length} files from folder "${folderName}".`);
       setTimeout(() => setSavedMessage(''), 4000);
     }
+
+    e.target.value = '';
   };
 
   const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -277,21 +299,27 @@ export const SettingsView: React.FC = () => {
         ref={moviesFolderInputRef}
         onChange={(e) => handleHTMLFolderSelect(e, 'movies')}
         style={{ display: 'none' }}
-        {...({ webkitdirectory: '', directory: '' } as any)}
+        multiple={isAndroid}
+        accept={isAndroid ? 'video/*' : undefined}
+        {...(!isAndroid ? ({ webkitdirectory: '', directory: '' } as any) : {})}
       />
       <input
         type="file"
         ref={tvFolderInputRef}
         onChange={(e) => handleHTMLFolderSelect(e, 'tv')}
         style={{ display: 'none' }}
-        {...({ webkitdirectory: '', directory: '' } as any)}
+        multiple={isAndroid}
+        accept={isAndroid ? 'video/*' : undefined}
+        {...(!isAndroid ? ({ webkitdirectory: '', directory: '' } as any) : {})}
       />
       <input
         type="file"
         ref={gamesFolderInputRef}
         onChange={(e) => handleHTMLFolderSelect(e, 'games')}
         style={{ display: 'none' }}
-        {...({ webkitdirectory: '', directory: '' } as any)}
+        multiple={isAndroid}
+        accept={isAndroid ? '*/*' : undefined}
+        {...(!isAndroid ? ({ webkitdirectory: '', directory: '' } as any) : {})}
       />
 
       {/* Header */}
@@ -746,7 +774,8 @@ export const SettingsView: React.FC = () => {
           <span>Local Library Folders & Directory Scanner</span>
         </h2>
         <p className="text-xs text-gray-400">
-          Configure root directories for media files on your Windows machine using native file selection dialogs and run read-only local scans.
+          Configure root directories for media files on your Windows machine and run read-only local scans.
+          {isAndroid && ' Android does not support folder selection here; use Browse to select media files instead. Selections are temporary.'}
         </p>
 
         <form onSubmit={handleSaveFolders} className="space-y-4">

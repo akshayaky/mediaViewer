@@ -20,6 +20,24 @@
     "sql:allow-load",
     "sql:allow-execute",
     "sql:allow-select",
-    "sql:allow-close"
+    "sql:allow-close",
+    "http:default",
+    {
+      "identifier": "http:allow-request",
+      "allow": [
+        {
+          "url": "https://api.igdb.com/v4/**"
+        },
+        {
+          "url": "https://id.twitch.tv/oauth2/token"
+        },
+        {
+          "url": "https://api.rawg.io/api/**"
+        },
+        {
+          "url": "https://images.igdb.com/**"
+        }
+      ]
+    }
   ]
 }

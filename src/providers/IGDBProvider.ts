@@ -17,12 +17,15 @@ export async function fetchIGDBLogo(gameTitle: string): Promise<string | undefin
 }
 
 async function smartFetch(url: string, options?: RequestInit): Promise<Response> {
-  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+  const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
 
   if (isTauri) {
     try {
+      // Use dynamic import for tauri-plugin-http
       const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
-      return await tauriFetch(url, options);
+      if (tauriFetch) {
+        return await tauriFetch(url, options);
+      }
     } catch (err) {
       console.warn('Tauri native fetch failed, falling back to browser proxy fetch:', err);
     }
