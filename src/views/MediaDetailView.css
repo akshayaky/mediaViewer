@@ -266,6 +266,7 @@
   max-width: var(--mdv-max-width);
   margin: 0 auto;
   padding: 2rem;
+  box-sizing: border-box;
 }
 
 .mdv-related {
@@ -276,6 +277,7 @@
 .mdv-col {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .mdv-col--main { gap: 2rem; }
@@ -590,6 +592,8 @@
   font-size: 0.875rem;
   line-height: 1.625;
   color: var(--mdv-text-muted);
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .mdv-meta-note {

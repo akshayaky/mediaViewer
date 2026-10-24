@@ -234,8 +234,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
 
       {/* Mobile Bottom Navigation (< 768px) */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#111319]/95 backdrop-blur-2xl border-t border-white/10 shadow-2xl flex items-center justify-around px-2 py-2"
-        style={{ paddingBottom: 'calc(0.5rem + var(--sab, 0px))' }}
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 shadow-2xl flex items-center justify-around px-2 py-2"
+        style={{
+          backgroundColor: 'rgba(17, 19, 25, 0.58)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          paddingBottom: 'calc(0.5rem + var(--sab, 0px))'
+        }}
       >
         {primaryNavItems.map(item => {
           const Icon = item.icon;

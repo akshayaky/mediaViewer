@@ -196,13 +196,20 @@ export class DatabaseService {
 
   /** Retrieves all media items sorted alphabetically by title. */
   public async getAllMedia(): Promise<Media[]> {
-    if (!this.db) return [];
+    if (!this.db) {
+      const stored = localStorage.getItem('web_media_library');
+      return stored ? JSON.parse(stored) : [];
+    }
     const res = await this.db.select<Media[]>('SELECT * FROM media ORDER BY title ASC');
     return Promise.all(res.map(row => this.mapMediaObject(row)));
   }
 
   public async getMediaById(id: string): Promise<Media | null> {
-    if (!this.db) return null;
+    if (!this.db) {
+      const stored = localStorage.getItem('web_media_library');
+      const mediaList: Media[] = stored ? JSON.parse(stored) : [];
+      return mediaList.find(m => m.id === id) || null;
+    }
     const res = await this.db.select<Record<string, unknown>[]>('SELECT * FROM media WHERE id = ?', [id]);
     
     if (res.length > 0) {
@@ -265,7 +272,18 @@ export class DatabaseService {
   }
 
   public async saveMedia(media: Media): Promise<void> {
-    if (!this.db) return;
+    if (!this.db) {
+      const stored = localStorage.getItem('web_media_library');
+      const mediaList: Media[] = stored ? JSON.parse(stored) : [];
+      const index = mediaList.findIndex(m => m.id === media.id);
+      if (index > -1) {
+        mediaList[index] = media;
+      } else {
+        mediaList.push(media);
+      }
+      localStorage.setItem('web_media_library', JSON.stringify(mediaList));
+      return;
+    }
     await this.db.execute(
       `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at, accent_color, manually_matched)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -904,7 +922,10 @@ export class DatabaseService {
 
   /** Retrieves application settings key-value object. */
   public async getSettings(): Promise<AppSettings> {
-    if (!this.db) return {};
+    if (!this.db) {
+      const stored = localStorage.getItem('app_settings');
+      return stored ? JSON.parse(stored) : {};
+    }
     const rows = await this.db.select<{ key: string; value: string }[]>('SELECT key, value FROM settings');
     const settings: Record<string, any> = {};
     for (const row of rows) {
@@ -920,7 +941,13 @@ export class DatabaseService {
   }
 
   public async saveSetting(key: keyof AppSettings, value: any): Promise<void> {
-    if (!this.db) return;
+    if (!this.db) {
+      const stored = localStorage.getItem('app_settings');
+      const settings = stored ? JSON.parse(stored) : {};
+      settings[key] = value;
+      localStorage.setItem('app_settings', JSON.stringify(settings));
+      return;
+    }
     const strVal = typeof value === 'string' ? value : JSON.stringify(value);
     await this.db.execute(
       `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
