@@ -144,6 +144,17 @@ export interface NotionRawRecord {
   parsed_history_id?: string;
 }
 
+export interface PlaybackProgress {
+  id: string;
+  media_id: string;
+  season?: number;
+  episode?: number;
+  position_seconds: number;
+  duration_seconds: number;
+  updated_at: string;
+  is_completed: boolean;
+}
+
 export interface AppSettings {
   movies_folder?: string;
   tv_folder?: string;
@@ -162,4 +173,6 @@ export interface AppSettings {
   notion_last_sync_time?: string;
   notion_sync_errors?: string[];
   streaming_preferences?: string[];
+  player_mode?: 'builtin' | 'os_default';
+  autoplay_next_episode?: boolean;
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Media, MediaState } from '../types/media';
-import { Film, Tv, Gamepad2, Play, RefreshCw, PauseCircle, Calendar, Star } from 'lucide-react';
+import { Film, Tv, Gamepad2, Play, RefreshCw, PauseCircle } from 'lucide-react';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { dbService } from '../services/DatabaseService';
 
@@ -13,14 +13,25 @@ interface MediaCardProps {
   onPreviewEnd?: () => void;
 }
 
-export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onClick, onPreviewStart, onPreviewEnd }) => {
+export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onPreviewStart, onPreviewEnd }) => {
   const [posterUrl, setPosterUrl] = useState<string | undefined>(media.poster);
   const [imgFailed, setImgFailed] = useState<boolean>(false);
+  const [progressPct, setProgressPct] = useState<number>(0);
 
   useEffect(() => {
     let isMounted = true;
     setPosterUrl(media.poster);
     setImgFailed(false);
+
+    dbService.getAllPlaybackProgressForMedia(media.id).then(progs => {
+      if (!isMounted || progs.length === 0) return;
+      // Find latest or in-progress
+      const active = progs.find(p => !p.is_completed && p.position_seconds > 10) || progs[0];
+      if (active && !active.is_completed && active.duration_seconds > 0) {
+        const pct = Math.min(100, Math.round((active.position_seconds / active.duration_seconds) * 100));
+        if (pct > 1 && pct < 90) setProgressPct(pct);
+      }
+    }).catch(() => {});
 
     // If media.poster is missing, resolve artwork asynchronously via ArtworkCacheProvider
     if (!media.poster) {
@@ -138,6 +149,16 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, score, onCli
 
         {/* Status Badge */}
         {renderBadge()}
+
+        {/* Subtle Bottom Progress Bar */}
+        {progressPct > 0 && (
+          <div className="absolute bottom-0 inset-x-0 bg-black/60 h-1.5 z-10">
+            <div
+              className="bg-rose-500 h-full transition-all duration-300 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        )}
 
         {/* Score Badge */}
         {/* {score && (

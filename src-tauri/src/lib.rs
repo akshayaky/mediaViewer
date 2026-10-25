@@ -1,3 +1,5 @@
+mod stream_server;
+
 use std::path::Path;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri::AppHandle;
@@ -63,6 +65,37 @@ async fn scan_directory(
     Ok(results)
 }
 
+#[tauri::command]
+fn get_video_stream_url(file_path: String) -> Result<String, String> {
+    let port = stream_server::ensure_stream_server_running();
+    let encoded = urlencoding::encode(&file_path);
+    Ok(format!("http://127.0.0.1:{}/stream?path={}", port, encoded))
+}
+
+#[tauri::command]
+fn get_subtitle_url(file_path: String) -> Result<String, String> {
+    let port = stream_server::ensure_stream_server_running();
+    let encoded = urlencoding::encode(&file_path);
+    Ok(format!("http://127.0.0.1:{}/subtitle?path={}", port, encoded))
+}
+
+mod urlencoding {
+    pub fn encode(s: &str) -> String {
+        let mut result = String::new();
+        for b in s.bytes() {
+            match b {
+                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                    result.push(b as char);
+                }
+                _ => {
+                    result.push_str(&format!("%{:02X}", b));
+                }
+            }
+        }
+        result
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -73,7 +106,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             select_folder,
-            scan_directory
+            scan_directory,
+            get_video_stream_url,
+            get_subtitle_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

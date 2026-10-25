@@ -44,6 +44,8 @@ export const SettingsView: React.FC = () => {
   const [twitchClientSecret, setTwitchClientSecret] = useState(settings.twitch_client_secret || '');
   const [rawgApiKey, setRawgApiKey] = useState(settings.rawg_api_key || '');
   const [steamApiKey, setSteamApiKey] = useState(settings.steam_api_key || '');
+  const [playerMode, setPlayerMode] = useState<'builtin' | 'os_default'>(settings.player_mode || 'builtin');
+  const [autoplayNext, setAutoplayNext] = useState<boolean>(settings.autoplay_next_episode !== false);
 
   const [savedMessage, setSavedMessage] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -104,6 +106,8 @@ export const SettingsView: React.FC = () => {
       setTwitchClientSecret(nextSettings.twitch_client_secret || '');
       setRawgApiKey(nextSettings.rawg_api_key || '');
       setSteamApiKey(nextSettings.steam_api_key || '');
+      setPlayerMode(nextSettings.player_mode || 'builtin');
+      setAutoplayNext(nextSettings.autoplay_next_episode !== false);
     }).catch(err => console.error('Failed to load settings:', err));
   }, []);
 
@@ -146,6 +150,8 @@ export const SettingsView: React.FC = () => {
       dbService.saveSetting('rawg_api_key', rawgApiKey.trim()),
       dbService.saveSetting('steam_api_key', steamApiKey.trim()),
       dbService.saveSetting('country_region', region.trim()),
+      dbService.saveSetting('player_mode', playerMode),
+      dbService.saveSetting('autoplay_next_episode', autoplayNext),
       saveNotionConfig(tokenInput, selectedDbId, notionApiMapping)
     ]);
     setSavedMessage('API credentials and preferences saved locally in SQLite.');
@@ -980,6 +986,71 @@ export const SettingsView: React.FC = () => {
           ))}
         </div>
         {deleteError && <p role="alert" className="text-xs text-rose-300">{deleteError}</p>}
+      </section>
+
+      {/* Playback Preferences Section */}
+      <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
+        <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+          <Sparkles className="w-5 h-5 text-rose-500" />
+          <span>Playback Preferences</span>
+        </h2>
+        <p className="text-xs text-gray-400">
+          Choose whether to launch videos using the built-in HTML5 player or your operating system's default media player, and configure automatic episode progression.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-3">
+            <label className="text-xs text-gray-200 font-bold block">Video Player Mode</label>
+            <div className="space-y-2">
+              <label className="flex items-center space-x-2 cursor-pointer text-gray-300 hover:text-white">
+                <input
+                  type="radio"
+                  name="playerMode"
+                  value="builtin"
+                  checked={playerMode === 'builtin'}
+                  onChange={() => {
+                    setPlayerMode('builtin');
+                    dbService.saveSetting('player_mode', 'builtin');
+                  }}
+                  className="text-rose-500 focus:ring-rose-500"
+                />
+                <span>Built-in HTML5 Video Player (with resume, progress bars & subtitles)</span>
+              </label>
+
+              <label className="flex items-center space-x-2 cursor-pointer text-gray-300 hover:text-white">
+                <input
+                  type="radio"
+                  name="playerMode"
+                  value="os_default"
+                  checked={playerMode === 'os_default'}
+                  onChange={() => {
+                    setPlayerMode('os_default');
+                    dbService.saveSetting('player_mode', 'os_default');
+                  }}
+                  className="text-rose-500 focus:ring-rose-500"
+                />
+                <span>OS System Default Application (VLC, MPC-HC, etc.)</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-3">
+            <label className="text-xs text-gray-200 font-bold block">TV Series Autoplay</label>
+            <label className="flex items-center space-x-2 cursor-pointer text-gray-300 hover:text-white pt-1">
+              <input
+                type="checkbox"
+                checked={autoplayNext}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setAutoplayNext(val);
+                  dbService.saveSetting('autoplay_next_episode', val);
+                }}
+                className="rounded text-rose-500 focus:ring-rose-500"
+              />
+              <span>Automatically play next episode on completion with countdown</span>
+            </label>
+          </div>
+        </div>
       </section>
 
       {/* External Metadata API Credentials Section */}

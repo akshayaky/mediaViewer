@@ -8,12 +8,37 @@ import {
   Wishlist,
   NotionRawRecord,
   AppSettings,
-  ExternalID
+  ExternalID,
+  PlaybackProgress
 } from '../types/media';
 
 export class DatabaseService {
   private db: DatabaseTauri | null = null;
   private initialized = false;
+  private inMemoryStore = new Map<string, string>();
+
+  private getItem(key: string): string | null {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem(key);
+    }
+    return this.inMemoryStore.get(key) || null;
+  }
+
+  private setItem(key: string, value: string): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, value);
+    } else {
+      this.inMemoryStore.set(key, value);
+    }
+  }
+
+  private removeItem(key: string): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(key);
+    } else {
+      this.inMemoryStore.delete(key);
+    }
+  }
 
   async init(): Promise<DatabaseTauri> {
     if (this.db && this.initialized) {
@@ -143,6 +168,17 @@ export class DatabaseService {
       `CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS playback_progress (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL,
+        season INTEGER DEFAULT 0,
+        episode INTEGER DEFAULT 0,
+        position_seconds REAL NOT NULL,
+        duration_seconds REAL NOT NULL,
+        updated_at TEXT NOT NULL,
+        is_completed INTEGER DEFAULT 0,
+        FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
       )`
     ];
 
@@ -165,6 +201,7 @@ export class DatabaseService {
         DELETE FROM availability WHERE media_id = OLD.id;
         DELETE FROM wishlist WHERE media_id = OLD.id;
         DELETE FROM external_ids WHERE media_id = OLD.id;
+        DELETE FROM playback_progress WHERE media_id = OLD.id;
       END;
     `);
 
@@ -188,6 +225,12 @@ export class DatabaseService {
       // Index already exists
     }
 
+    try {
+      await this.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_playback_progress_media_ep ON playback_progress(media_id, season, episode);');
+    } catch {
+      // Index already exists
+    }
+
   }
 
   // ==========================================
@@ -197,6 +240,7 @@ export class DatabaseService {
   /** Retrieves all media items sorted alphabetically by title. */
   public async getAllMedia(): Promise<Media[]> {
     if (!this.db) {
+      if (typeof localStorage === 'undefined') return [];
       const stored = localStorage.getItem('web_media_library');
       return stored ? JSON.parse(stored) : [];
     }
@@ -206,6 +250,7 @@ export class DatabaseService {
 
   public async getMediaById(id: string): Promise<Media | null> {
     if (!this.db) {
+      if (typeof localStorage === 'undefined') return null;
       const stored = localStorage.getItem('web_media_library');
       const mediaList: Media[] = stored ? JSON.parse(stored) : [];
       return mediaList.find(m => m.id === id) || null;
@@ -273,6 +318,7 @@ export class DatabaseService {
 
   public async saveMedia(media: Media): Promise<void> {
     if (!this.db) {
+      if (typeof localStorage === 'undefined') return;
       const stored = localStorage.getItem('web_media_library');
       const mediaList: Media[] = stored ? JSON.parse(stored) : [];
       const index = mediaList.findIndex(m => m.id === media.id);
@@ -923,6 +969,7 @@ export class DatabaseService {
   /** Retrieves application settings key-value object. */
   public async getSettings(): Promise<AppSettings> {
     if (!this.db) {
+      if (typeof localStorage === 'undefined') return {};
       const stored = localStorage.getItem('app_settings');
       return stored ? JSON.parse(stored) : {};
     }
@@ -942,6 +989,7 @@ export class DatabaseService {
 
   public async saveSetting(key: keyof AppSettings, value: any): Promise<void> {
     if (!this.db) {
+      if (typeof localStorage === 'undefined') return;
       const stored = localStorage.getItem('app_settings');
       const settings = stored ? JSON.parse(stored) : {};
       settings[key] = value;
@@ -953,6 +1001,201 @@ export class DatabaseService {
       `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
       [key, strVal]
     );
+  }
+
+  // ==========================================
+  // 9. PLAYBACK PROGRESS REPOSITORY
+  // ==========================================
+
+  public async getPlaybackProgress(
+    media_id: string,
+    season: number = 0,
+    episode: number = 0
+  ): Promise<PlaybackProgress | null> {
+    if (!this.db) {
+      const stored = this.getItem(`playback_progress_${media_id}_${season}_${episode}`);
+      return stored ? JSON.parse(stored) : null;
+    }
+    const res = await this.db.select<Record<string, any>[]>(
+      'SELECT * FROM playback_progress WHERE media_id = ? AND season = ? AND episode = ?',
+      [media_id, season, episode]
+    );
+    if (res.length > 0) {
+      const row = res[0];
+      return {
+        id: row.id as string,
+        media_id: row.media_id as string,
+        season: Number(row.season || 0),
+        episode: Number(row.episode || 0),
+        position_seconds: Number(row.position_seconds || 0),
+        duration_seconds: Number(row.duration_seconds || 0),
+        updated_at: row.updated_at as string,
+        is_completed: Boolean(row.is_completed)
+      };
+    }
+    return null;
+  }
+
+  public async getAllPlaybackProgressForMedia(media_id: string): Promise<PlaybackProgress[]> {
+    if (!this.db) {
+      const results: PlaybackProgress[] = [];
+      const prefix = `playback_progress_${media_id}_`;
+      if (typeof localStorage !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(prefix)) {
+            const item = localStorage.getItem(key);
+            if (item) results.push(JSON.parse(item));
+          }
+        }
+      } else {
+        for (const [key, value] of this.inMemoryStore.entries()) {
+          if (key.startsWith(prefix)) {
+            results.push(JSON.parse(value));
+          }
+        }
+      }
+      return results;
+    }
+    const res = await this.db.select<Record<string, any>[]>(
+      'SELECT * FROM playback_progress WHERE media_id = ? ORDER BY updated_at DESC',
+      [media_id]
+    );
+    return res.map(row => ({
+      id: row.id as string,
+      media_id: row.media_id as string,
+      season: Number(row.season || 0),
+      episode: Number(row.episode || 0),
+      position_seconds: Number(row.position_seconds || 0),
+      duration_seconds: Number(row.duration_seconds || 0),
+      updated_at: row.updated_at as string,
+      is_completed: Boolean(row.is_completed)
+    }));
+  }
+
+  public async getAllPlaybackProgress(): Promise<PlaybackProgress[]> {
+    if (!this.db) {
+      if (typeof localStorage === 'undefined') return [];
+      const results: PlaybackProgress[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('playback_progress_')) {
+          const item = localStorage.getItem(key);
+          if (item) results.push(JSON.parse(item));
+        }
+      }
+      return results;
+    }
+    const res = await this.db.select<Record<string, any>[]>(
+      'SELECT * FROM playback_progress ORDER BY updated_at DESC'
+    );
+    return res.map(row => ({
+      id: row.id as string,
+      media_id: row.media_id as string,
+      season: Number(row.season || 0),
+      episode: Number(row.episode || 0),
+      position_seconds: Number(row.position_seconds || 0),
+      duration_seconds: Number(row.duration_seconds || 0),
+      updated_at: row.updated_at as string,
+      is_completed: Boolean(row.is_completed)
+    }));
+  }
+
+  public async savePlaybackProgress(progress: PlaybackProgress): Promise<void> {
+    const s = progress.season || 0;
+    const e = progress.episode || 0;
+    const isCompleted = progress.is_completed || (
+      progress.duration_seconds > 0 && (progress.position_seconds / progress.duration_seconds >= 0.9)
+    );
+
+    const payload = {
+      ...progress,
+      season: s,
+      episode: e,
+      is_completed: isCompleted
+    };
+
+    if (!this.db) {
+      this.setItem(`playback_progress_${progress.media_id}_${s}_${e}`, JSON.stringify(payload));
+    } else {
+      await this.db.execute(
+        `INSERT INTO playback_progress (id, media_id, season, episode, position_seconds, duration_seconds, updated_at, is_completed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(media_id, season, episode) DO UPDATE SET
+           position_seconds=excluded.position_seconds,
+           duration_seconds=excluded.duration_seconds,
+           updated_at=excluded.updated_at,
+           is_completed=excluded.is_completed`,
+        [
+          progress.id,
+          progress.media_id,
+          s,
+          e,
+          progress.position_seconds,
+          progress.duration_seconds,
+          progress.updated_at,
+          isCompleted ? 1 : 0
+        ]
+      );
+    }
+
+    // When completed, log Finished status in media_history if not already logged
+    if (isCompleted) {
+      await this.syncCompletionToHistory(progress.media_id, s, e);
+    }
+  }
+
+  public async deletePlaybackProgress(media_id: string, season: number = 0, episode: number = 0): Promise<void> {
+    if (!this.db) {
+      this.removeItem(`playback_progress_${media_id}_${season}_${episode}`);
+      return;
+    }
+    await this.db.execute(
+      'DELETE FROM playback_progress WHERE media_id = ? AND season = ? AND episode = ?',
+      [media_id, season, episode]
+    );
+  }
+
+  private async syncCompletionToHistory(media_id: string, season: number, episode: number): Promise<void> {
+    const history = await this.getHistoryForMedia(media_id);
+
+    if (season > 0 || episode > 0) {
+      const padS = String(season).padStart(2, '0');
+      const padE = String(episode).padStart(2, '0');
+      const contextTag1 = `S${padS}E${padE}`;
+      const contextTag2 = `S${season}E${episode}`;
+
+      const alreadyFinished = history.some(h =>
+        h.status === 'Finished' && h.context && (h.context.includes(contextTag1) || h.context.includes(contextTag2))
+      );
+
+      if (!alreadyFinished) {
+        const now = new Date().toISOString();
+        await this.saveHistory({
+          id: `hist_auto_ep_${Date.now()}`,
+          media_id,
+          completed_at: now.split('T')[0],
+          status: 'Finished',
+          context: contextTag1,
+          source: 'Player',
+          created_at: now
+        });
+      }
+    } else {
+      // Movie / single media item
+      const alreadyFinished = history.some(h => h.status === 'Finished');
+      if (!alreadyFinished) {
+        const now = new Date().toISOString();
+        await this.saveHistory({
+          id: `hist_auto_media_${Date.now()}`,
+          media_id,
+          completed_at: now.split('T')[0],
+          status: 'Finished',
+          source: 'Player',
+          created_at: now
+        });
+      }
+    }
   }
 }
 
