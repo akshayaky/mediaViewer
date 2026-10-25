@@ -144,6 +144,42 @@
   object-position: top center;
 }
 
+@media (min-width: 1600px) and (min-aspect-ratio: 21 / 9) {
+  .mdv-backdrop-img {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(100%, calc(var(--mdv-hero-height) * 16 / 9));
+    object-fit: cover;
+  }
+
+  .mdv-backdrop-img:not(.mdv-hidden-img) {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      #000 10%,
+      #000 90%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      #000 10%,
+      #000 90%,
+      transparent 100%
+    );
+  }
+
+  .mdv-backdrop::after {
+    position: absolute;
+    inset: 0;
+    z-index: 9;
+    content: "";
+    background: linear-gradient(to right, var(--accent-color), transparent 20%, transparent 80%, var(--accent-color));
+  }
+}
+
 .mdv-backdrop-fallback {
   width: 100%;
   height: 100%;

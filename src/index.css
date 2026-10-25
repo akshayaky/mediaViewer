@@ -40,6 +40,51 @@
   scrollbar-width: none;
 }
 
+.hero-backdrop-fill {
+  display: none;
+}
+
+@media (min-width: 1600px) and (min-aspect-ratio: 21 / 9) {
+  .hero-showcase::before {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    content: "";
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      var(--hero-accent) 0%,
+      rgba(var(--hero-accent-rgb), 0.88) 6%,
+      rgba(var(--hero-accent-rgb), 0.48) 13%,
+      transparent 24%,
+      transparent 76%,
+      rgba(var(--hero-accent-rgb), 0.48) 87%,
+      rgba(var(--hero-accent-rgb), 0.88) 94%,
+      var(--hero-accent) 100%
+    );
+  }
+
+  .hero-backdrop-fill {
+    display: block;
+    position: absolute;
+    inset: -32px;
+    z-index: 0;
+    width: calc(100% + 64px);
+    height: calc(100% + 64px);
+    object-fit: cover;
+    filter: blur(24px);
+    transform: scale(1.08);
+    opacity: 0.8;
+  }
+
+  .hero-backdrop-img {
+    left: 50%;
+    right: auto;
+    width: min(100%, calc(80vh * 16 / 9));
+    transform: translateX(-50%);
+  }
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

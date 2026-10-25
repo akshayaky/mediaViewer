@@ -36,7 +36,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
 
   return (
     <div
-      className="relative w-full h-[min(65vh,640px)] min-h-[420px] sm:min-h-[500px] overflow-hidden group"
+      className="hero-showcase relative w-full h-[80vh] min-h-[50vh] sm:min-h-[80px] overflow-hidden group"
       style={{
         '--hero-accent': accentColor,
         '--hero-accent-rgb': getAccentRgb(accentColor),
@@ -45,11 +45,19 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
     >
       {/* Background Backdrop Image */}
       {media.backdrop ? (
-        <img
-          src={media.backdrop}
-          alt={media.title}
-          className="absolute inset-0 z-0 w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 opacity-75"
-        />
+        <>
+          <img
+            src={media.backdrop}
+            alt=""
+            aria-hidden="true"
+            className="hero-backdrop-fill"
+          />
+          <img
+            src={media.backdrop}
+            alt={media.title}
+            className="hero-backdrop-img absolute inset-0 z-[1] w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 opacity-75"
+          />
+        </>
       ) : (
         <div className="absolute inset-0 z-0" style={{
           background: 'linear-gradient(135deg, rgba(var(--hero-accent-rgb), 0.18), rgba(var(--hero-accent-rgb), 0.05) 48%, var(--hero-accent) 100%)'
