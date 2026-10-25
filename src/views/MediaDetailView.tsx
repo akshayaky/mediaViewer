@@ -10,6 +10,7 @@ import { MetadataSearchResult } from '../providers/interfaces';
 import { FixMatchModal } from '../components/FixMatchModal';
 import { BackdropPickerModal } from '../components/BackdropPickerModal';
 import { MergeDuplicateModal } from '../components/MergeDuplicateModal';
+import { VideoPlayerModal } from '../components/VideoPlayerModal';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
 import {
@@ -128,10 +129,27 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     addedExternalIds,
     handleAddRelatedToLibrary,
     updateCurrentMedia,
+    allProgress,
+    getResumeTarget,
     toggleEpisodeWatchStatus,
     linkFileToEpisode,
     refreshLocalFiles
   } = useMediaDetail(initialMedia);
+
+  const [playerModeSetting, setPlayerModeSetting] = useState<'builtin' | 'os_default'>('builtin');
+  const [activePlayerSession, setActivePlayerSession] = useState<{
+    file: LocalFile;
+    season: number;
+    episode: number;
+    position: number;
+    title?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    dbService.getSettings().then(s => {
+      setPlayerModeSetting(s.player_mode || 'builtin');
+    });
+  }, []);
 
   // Three dot menu state
   const [showMenu, setShowMenu] = useState(false);
@@ -313,6 +331,35 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const activeLocalFile = localFiles.find(lf => lf.exists) || localFiles[0];
   const isAvailableLocally = localFiles.some(lf => lf.exists);
   const isLocalMissing = localFiles.length > 0 && !isAvailableLocally;
+  const resumeTarget = getResumeTarget();
+
+  const handleTriggerPlay = async (targetFile?: LocalFile, startFromBeginning: boolean = false) => {
+    const target = targetFile ? {
+      file: targetFile,
+      season: targetFile.season || 0,
+      episode: targetFile.episode || 0,
+      position: startFromBeginning ? 0 : 0,
+      label: 'Play',
+      hasSavedProgress: false
+    } : resumeTarget;
+
+    if (!target) {
+      if (activeLocalFile) handlePlayFile(activeLocalFile);
+      return;
+    }
+
+    if (currentMedia.type === 'VideoGame' || playerModeSetting === 'os_default') {
+      await handlePlayFile(target.file);
+    } else {
+      setActivePlayerSession({
+        file: target.file,
+        season: target.season,
+        episode: target.episode,
+        position: startFromBeginning ? 0 : target.position,
+        title: target.file.parsed_title || target.file.filename
+      });
+    }
+  };
 
   useEffect(() => {
     const playButtonRow = playButtonRowRef.current;
@@ -610,17 +657,27 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       {activeLocalFile && isAvailableLocally && (
         <div
           ref={playButtonRowRef}
-          className="mdv-play-row mdv-sidebar-aware"
+          className="mdv-play-row mdv-sidebar-aware flex flex-wrap items-center gap-3"
           data-sidebar-aware
           style={{ paddingLeft: isDesktopLayout ? undefined : '1rem' }}
         >
           <button
-            onClick={() => handlePlayFile(activeLocalFile)}
-            className="mdv-btn mdv-btn-play"
+            onClick={() => handleTriggerPlay(undefined, false)}
+            className="mdv-btn mdv-btn-play flex items-center space-x-2"
           >
             <Play className="mdv-icon-lg" fill="currentColor" />
-            <span>PLAY {currentMedia.type === 'VideoGame' ? 'GAME' : 'MEDIA'}</span>
+            <span>{resumeTarget ? resumeTarget.label.toUpperCase() : `PLAY ${currentMedia.type === 'VideoGame' ? 'GAME' : 'MEDIA'}`}</span>
           </button>
+
+          {resumeTarget?.hasSavedProgress && currentMedia.type !== 'VideoGame' && (
+            <button
+              onClick={() => handleTriggerPlay(undefined, true)}
+              className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 backdrop-blur-md transition-all cursor-pointer shadow-md"
+              title="Restart playback from 00:00"
+            >
+              Start from Beginning
+            </button>
+          )}
         </div>
       )}
       {/* Main Content Layout */}
@@ -768,6 +825,9 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                                 const selectedFileId = selectedEpFiles[epKey] || (sortedFiles[0] ? sortedFiles[0].id : undefined);
                                 const activeEpFile = sortedFiles.find(f => f.id === selectedFileId) || sortedFiles[0];
 
+                                const epProg = allProgress.find(p => p.season === season.season_number && p.episode === ep.episode_number);
+                                const epPct = epProg && epProg.duration_seconds > 0 ? Math.min(100, Math.round((epProg.position_seconds / epProg.duration_seconds) * 100)) : 0;
+
                                 return (
                                   <div key={ep.episode_number} className="mdv-tile mdv-tile--sm mdv-episode relative group">
                                     {ep.still_path ? (
@@ -804,17 +864,23 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                                         <p className="mdv-episode-overview text-xs text-gray-300 line-clamp-2 mt-1">{ep.overview}</p>
                                       )}
 
+                                      {epProg && !epProg.is_completed && epPct > 0 && (
+                                        <div className="w-full bg-[#232736] h-1.5 rounded-full overflow-hidden my-1.5">
+                                          <div className="bg-rose-500 h-full rounded-full" style={{ width: `${epPct}%` }} />
+                                        </div>
+                                      )}
+
                                       {/* Episode Playback & File Selector Row */}
                                       <div className="flex flex-wrap items-center justify-between gap-2 pt-2 mt-1 border-t border-[#232736]">
                                         <div className="flex items-center space-x-2">
                                           {sortedFiles.length > 0 ? (
                                             <>
                                               <button
-                                                onClick={() => handlePlayFile(activeEpFile)}
+                                                onClick={() => handleTriggerPlay(activeEpFile, false)}
                                                 className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3 py-1 rounded-lg flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer"
                                               >
                                                 <Play className="w-3.5 h-3.5" fill="currentColor" />
-                                                <span>Play Episode</span>
+                                                <span>{epProg && !epProg.is_completed && epPct > 0 ? `Resume (${epPct}%)` : 'Play Episode'}</span>
                                               </button>
 
                                               {sortedFiles.length > 1 ? (
@@ -1506,6 +1572,33 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             </div>
           </div>
         </div>
+      )}
+
+      {/* Video Player Modal Overlay */}
+      {activePlayerSession && (
+        <VideoPlayerModal
+          media={currentMedia}
+          activeFile={activePlayerSession.file}
+          seasonNumber={activePlayerSession.season}
+          episodeNumber={activePlayerSession.episode}
+          episodeTitle={activePlayerSession.title}
+          initialPosition={activePlayerSession.position}
+          allLocalFiles={localFiles}
+          onClose={() => {
+            setActivePlayerSession(null);
+            refreshLocalFiles();
+          }}
+          onEpisodeChange={(nextFile, s, ep) => {
+            setActivePlayerSession({
+              file: nextFile,
+              season: s || nextFile.season || 1,
+              episode: ep || nextFile.episode || 1,
+              position: 0,
+              title: nextFile.parsed_title || nextFile.filename
+            });
+            refreshLocalFiles();
+          }}
+        />
       )}
 
       {/* File / Executable Selector Modal */}

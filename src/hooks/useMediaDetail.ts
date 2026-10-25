@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Media, LocalFile, MediaHistory, MediaState, Availability } from '../types/media';
+import { Media, LocalFile, MediaHistory, MediaState, Availability, PlaybackProgress } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { localLauncherService } from '../services/LocalLauncherService';
 import { tmdbProvider } from '../providers/TMDBProvider';
@@ -20,6 +20,7 @@ export function useMediaDetail(initialMedia: Media) {
   });
   const [localFiles, setLocalFiles] = useState<LocalFile[]>([]);
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
+  const [allProgress, setAllProgress] = useState<PlaybackProgress[]>([]);
 
   // Related media state
   const [relatedMedia, setRelatedMedia] = useState<MetadataSearchResult[]>([]);
@@ -63,13 +64,15 @@ export function useMediaDetail(initialMedia: Media) {
       dbService.getHistoryForMedia(currentMedia.id),
       dbService.getMediaState(currentMedia.id),
       dbService.getLocalFilesForMedia(currentMedia.id),
-      dbService.getAvailabilityForMedia(currentMedia.id)
-    ]).then(([history, mediaState, files, availability]) => {
+      dbService.getAvailabilityForMedia(currentMedia.id),
+      dbService.getAllPlaybackProgressForMedia(currentMedia.id)
+    ]).then(([history, mediaState, files, availability, progress]) => {
       if (!isMounted) return;
       setHistoryList(history);
       setState(mediaState);
       setLocalFiles(files);
       setAvailabilities(availability);
+      setAllProgress(progress);
     }).catch(err => console.error('Failed to load media details:', err));
     return () => {
       isMounted = false;
@@ -212,6 +215,7 @@ export function useMediaDetail(initialMedia: Media) {
 
   const refreshLocalFiles = async () => {
     setLocalFiles(await dbService.getLocalFilesForMedia(currentMedia.id));
+    setAllProgress(await dbService.getAllPlaybackProgressForMedia(currentMedia.id));
   };
 
   const refreshHistoryAndState = async () => {
@@ -414,6 +418,102 @@ export function useMediaDetail(initialMedia: Media) {
     await refreshLocalFiles();
   };
 
+  const getResumeTarget = useCallback(() => {
+    const activeFiles = localFiles.filter(f => f.exists);
+    if (activeFiles.length === 0) return null;
+
+    if (currentMedia.type === 'TV Series') {
+      // 1. Check for unfinished in-progress episode
+      const inProgress = allProgress.find(p => !p.is_completed && p.position_seconds > 10 && (p.duration_seconds <= 0 || p.position_seconds / p.duration_seconds < 0.9));
+      if (inProgress) {
+        const file = activeFiles.find(f => f.season === inProgress.season && f.episode === inProgress.episode) || activeFiles[0];
+        const padS = String(inProgress.season || 1).padStart(2, '0');
+        const padE = String(inProgress.episode || 1).padStart(2, '0');
+        return {
+          file,
+          season: inProgress.season || 1,
+          episode: inProgress.episode || 1,
+          position: inProgress.position_seconds,
+          label: `Resume S${padS}E${padE}`,
+          hasSavedProgress: true
+        };
+      }
+
+      // 2. Check for highest completed episode to find next unwatched
+      const completed = allProgress.filter(p => p.is_completed).sort((a, b) => (b.season || 0) - (a.season || 0) || (b.episode || 0) - (a.episode || 0));
+      if (completed.length > 0) {
+        const lastComp = completed[0];
+        const nextEp = (lastComp.episode || 1) + 1;
+        const nextS = lastComp.season || 1;
+
+        let nextFile = activeFiles.find(f => f.season === nextS && f.episode === nextEp);
+        let targetS = nextS;
+        let targetEp = nextEp;
+
+        if (!nextFile) {
+          targetS = nextS + 1;
+          targetEp = 1;
+          nextFile = activeFiles.find(f => f.season === targetS && f.episode === targetEp);
+        }
+
+        if (nextFile) {
+          const padS = String(targetS).padStart(2, '0');
+          const padE = String(targetEp).padStart(2, '0');
+          return {
+            file: nextFile,
+            season: targetS,
+            episode: targetEp,
+            position: 0,
+            label: `Play Next S${padS}E${padE}`,
+            hasSavedProgress: false
+          };
+        }
+      }
+
+      // 3. First available episode
+      const sorted = [...activeFiles].sort((a, b) => (a.season || 0) - (b.season || 0) || (a.episode || 0) - (b.episode || 0));
+      const first = sorted[0];
+      const s = first.season || 1;
+      const ep = first.episode || 1;
+      const padS = String(s).padStart(2, '0');
+      const padE = String(ep).padStart(2, '0');
+
+      return {
+        file: first,
+        season: s,
+        episode: ep,
+        position: 0,
+        label: `Play S${padS}E${padE}`,
+        hasSavedProgress: false
+      };
+    } else {
+      // Movie / single file
+      const movieProg = allProgress.find(p => p.season === 0 && p.episode === 0) || allProgress[0];
+      const activeFile = activeFiles[0];
+
+      if (movieProg && !movieProg.is_completed && movieProg.position_seconds > 10) {
+        const mins = Math.floor(movieProg.position_seconds / 60);
+        return {
+          file: activeFile,
+          season: 0,
+          episode: 0,
+          position: movieProg.position_seconds,
+          label: `Resume Movie (${mins}m)`,
+          hasSavedProgress: true
+        };
+      }
+
+      return {
+        file: activeFile,
+        season: 0,
+        episode: 0,
+        position: 0,
+        label: 'Play Movie',
+        hasSavedProgress: false
+      };
+    }
+  }, [currentMedia.type, localFiles, allProgress]);
+
   return {
     currentMedia,
     historyList,
@@ -433,6 +533,8 @@ export function useMediaDetail(initialMedia: Media) {
     addedExternalIds,
     handleAddRelatedToLibrary,
     updateCurrentMedia,
+    allProgress,
+    getResumeTarget,
     toggleEpisodeWatchStatus,
     linkFileToEpisode,
     refreshLocalFiles
