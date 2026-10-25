@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LocalFile, Media } from '../types/media';
 import { useMediaDetail } from '../hooks/useMediaDetail';
 import { useDominantColor } from '../helper/useDominantColour';
@@ -51,7 +51,6 @@ import {
 interface MediaDetailViewProps {
   media: Media;
   onBack: () => void;
-  isSidebarCollapsed: boolean;
   onSelectMedia?: (media: Media) => void;
   onAccentColorChange?: (color: string) => void;
   accentColorOverride?: string;
@@ -109,7 +108,7 @@ function getFileQualityLabel(file: LocalFile): string {
   return 'SD / Default';
 }
 
-export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isSidebarCollapsed, onSelectMedia, onAccentColorChange, cardTransition, accentColorOverride }) => {
+export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, onSelectMedia, onAccentColorChange, cardTransition, accentColorOverride }) => {
   const {
     currentMedia,
     historyList,
@@ -154,6 +153,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const [calculatedAccent, setCalculatedAccent] = useState<{ src: string; color: string } | null>(null);
   const [isPlayButtonStuck, setIsPlayButtonStuck] = useState(false);
   const playButtonRowRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
 
   const lastWatchedEpisodeArtwork = getLastWatchedEpisodeArtwork(currentMedia, historyList);
 
@@ -175,17 +175,66 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     }
   };
 
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(typeof window !== 'undefined' && window.innerWidth >= 900);
 
   useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
+    const handleResize = () => {
+      const isDesktop = window.innerWidth >= 900;
+      setIsDesktopLayout(current => current === isDesktop ? current : isDesktop);
+    };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-const pagePadding = windowWidth >= 900
-  ? `max(clamp(6.5rem, 10vw, 17.5rem), calc(${isSidebarCollapsed ? '6.5rem' : '17.5rem'} + 1.5rem))`
-  : '1rem';
+  useLayoutEffect(() => {
+    const page = pageRef.current;
+    const sidebar = document.querySelector<HTMLElement>('[data-media-sidebar]');
+    if (!page || !sidebar) return;
+
+    let animationFrame = 0;
+    const updateContentPositions = () => {
+      animationFrame = 0;
+      const sidebarRight = window.innerWidth >= 900 ? sidebar.getBoundingClientRect().right : 0;
+      const content = page.querySelectorAll<HTMLElement>('[data-sidebar-aware]');
+
+      const shifts = Array.from(content, element => {
+        const previousShift = Number.parseFloat(element.style.getPropertyValue('--mdv-sidebar-overlap-shift')) || 0;
+        const naturalLeft = element.getBoundingClientRect().left
+          - previousShift
+          + (Number.parseFloat(window.getComputedStyle(element).paddingLeft) || 0);
+        return {
+          element,
+          previousShift,
+          nextShift: Math.max(0, sidebarRight + 24 - naturalLeft)
+        };
+      });
+
+      shifts.forEach(({ element, previousShift, nextShift }) => {
+        if (Math.abs(nextShift - previousShift) < 0.1) return;
+        if (nextShift === 0) {
+          element.style.removeProperty('--mdv-sidebar-overlap-shift');
+        } else {
+          element.style.setProperty('--mdv-sidebar-overlap-shift', `${nextShift}px`);
+        }
+      });
+    };
+    const scheduleUpdate = () => {
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(updateContentPositions);
+    };
+
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
+    resizeObserver.observe(page);
+    resizeObserver.observe(sidebar);
+    window.addEventListener('resize', scheduleUpdate);
+    updateContentPositions();
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', scheduleUpdate);
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+    };
+  }, []);
   const [selectedEpFiles, setSelectedEpFiles] = useState<Record<string, string>>({});
   const [activeEpMenu, setActiveEpMenu] = useState<string | null>(null);
   const [linkEpTarget, setLinkEpTarget] = useState<{ season: number; episode: number } | null>(null);
@@ -326,6 +375,7 @@ const pagePadding = windowWidth >= 900
 
   return (
     <div
+      ref={pageRef}
       className="mdv-page"
       data-tone={theme.tone}
       style={{
@@ -372,7 +422,7 @@ const pagePadding = windowWidth >= 900
 
       {/* Pinned Header Bar Actions */}
       <div className={`mdv-header ${isPlayButtonStuck ? 'mdv-header--stuck' : ''}`}>
-        <div className="mdv-header-actions" style={{ left: typeof window !== 'undefined' && window.innerWidth >= 900 ? (isSidebarCollapsed ? '6.5rem' : '17.5rem') : undefined }}>
+        <div className="mdv-header-actions mdv-sidebar-aware" data-sidebar-aware>
         <button
           onClick={onBack}
           className="mdv-btn mdv-btn-glass cursor-pointer group flex items-center gap-2 w-10 hover:w-36 transition-[width] duration-300 ease-in-out overflow-hidden whitespace-nowrap px-0 hover:px-2 hover:backdrop-blur-md"
@@ -453,9 +503,10 @@ const pagePadding = windowWidth >= 900
       {/* Scrollable Hero Content */}
       <div className="mdv-hero">
         <div
-          className="mdv-hero-inner"
+          className="mdv-hero-inner mdv-sidebar-aware"
+          data-sidebar-aware
           style={{
-            paddingLeft: pagePadding
+            paddingLeft: isDesktopLayout ? undefined : '1rem'
           }}
         >
           <div className="mdv-title-block">
@@ -557,7 +608,12 @@ const pagePadding = windowWidth >= 900
       </div>
 
       {activeLocalFile && isAvailableLocally && (
-        <div ref={playButtonRowRef} className="mdv-play-row" style={{ paddingLeft: pagePadding }}>
+        <div
+          ref={playButtonRowRef}
+          className="mdv-play-row mdv-sidebar-aware"
+          data-sidebar-aware
+          style={{ paddingLeft: isDesktopLayout ? undefined : '1rem' }}
+        >
           <button
             onClick={() => handlePlayFile(activeLocalFile)}
             className="mdv-btn mdv-btn-play"
@@ -568,7 +624,11 @@ const pagePadding = windowWidth >= 900
         </div>
       )}
       {/* Main Content Layout */}
-      <div className="mdv-main" style={{ paddingLeft: pagePadding }}>
+      <div
+        className="mdv-main mdv-sidebar-aware"
+        data-sidebar-aware
+        style={{ paddingLeft: isDesktopLayout ? undefined : '1rem' }}
+      >
         {/* Left Column: Overview, Multi-watch Breakdown, Seasons, Cast, Journal */}
         <div className="mdv-col mdv-col--main">
           {/* Overview */}
@@ -1022,7 +1082,11 @@ const pagePadding = windowWidth >= 900
         </div>
       </div>
       {/* Related Media Rail Section */}
-      <div className="mdv-related max-w-7xl mx-auto px-6 pb-12" style={{ paddingLeft: pagePadding }}>
+      <div
+        className="mdv-related mdv-sidebar-aware max-w-7xl mx-auto px-6 pb-12"
+        data-sidebar-aware
+        style={{ paddingLeft: isDesktopLayout ? undefined : '1rem' }}
+      >
         <section className="mdv-card mdv-card--roomy">
           <h2 className="mdv-card-title flex items-center space-x-2">
             <Sparkles className="mdv-icon-lg mdv-icon-accent" />

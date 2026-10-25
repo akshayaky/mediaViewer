@@ -189,12 +189,16 @@
 .mdv-header-actions {
   position: absolute;
   top: calc(1rem + var(--sat, 0px));
-  left: 1rem;
+  left: calc(1rem + var(--mdv-sidebar-overlap-shift, 0px));
   right: 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   pointer-events: auto;
+}
+
+.mdv-sidebar-aware:not(.mdv-header-actions) {
+  transform: translateX(var(--mdv-sidebar-overlap-shift, 0px));
 }
 
 /* ---- Hero ---- */
@@ -251,8 +255,13 @@
 }
 @media (min-width: 768px) {
   .mdv-play-row {
-    padding-left: 11rem;
     padding-right: 2rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .mdv-play-row {
+    padding-left: 2rem;
   }
 }
 
