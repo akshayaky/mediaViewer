@@ -333,14 +333,23 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const isLocalMissing = localFiles.length > 0 && !isAvailableLocally;
   const resumeTarget = getResumeTarget();
 
-  const handleTriggerPlay = async (targetFile?: LocalFile, startFromBeginning: boolean = false) => {
-    const target = targetFile ? {
+  const handleTriggerPlay = async (targetFile?: LocalFile, startFromBeginning: boolean = false, episodeTitle?: string) => {
+    const target: {
+      file: LocalFile;
+      season: number;
+      episode: number;
+      position: number;
+      label: string;
+      hasSavedProgress: boolean;
+      title?: string;
+    } | null = targetFile ? {
       file: targetFile,
       season: targetFile.season || 0,
       episode: targetFile.episode || 0,
       position: startFromBeginning ? 0 : 0,
       label: 'Play',
-      hasSavedProgress: false
+      hasSavedProgress: false,
+      title: episodeTitle
     } : resumeTarget;
 
     if (!target) {
@@ -356,7 +365,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         season: target.season,
         episode: target.episode,
         position: startFromBeginning ? 0 : target.position,
-        title: target.file.parsed_title || target.file.filename
+        title: target.title || target.file.parsed_title || target.file.filename
       });
     }
   };
@@ -876,7 +885,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                                           {sortedFiles.length > 0 ? (
                                             <>
                                               <button
-                                                onClick={() => handleTriggerPlay(activeEpFile, false)}
+                                                onClick={() => handleTriggerPlay(activeEpFile, false, ep.name)}
                                                 className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3 py-1 rounded-lg flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer"
                                               >
                                                 <Play className="w-3.5 h-3.5" fill="currentColor" />

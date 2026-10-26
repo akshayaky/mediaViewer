@@ -429,13 +429,19 @@ export function useMediaDetail(initialMedia: Media) {
         const file = activeFiles.find(f => f.season === inProgress.season && f.episode === inProgress.episode) || activeFiles[0];
         const padS = String(inProgress.season || 1).padStart(2, '0');
         const padE = String(inProgress.episode || 1).padStart(2, '0');
+        
+        // Try to find the episode name from media metadata
+        const season = currentMedia.seasons?.find(s => s.season_number === inProgress.season);
+        const episode = season?.episodes?.find(e => e.episode_number === inProgress.episode);
+
         return {
           file,
           season: inProgress.season || 1,
           episode: inProgress.episode || 1,
           position: inProgress.position_seconds,
           label: `Resume S${padS}E${padE}`,
-          hasSavedProgress: true
+          hasSavedProgress: true,
+          title: episode?.name
         };
       }
 
@@ -459,13 +465,18 @@ export function useMediaDetail(initialMedia: Media) {
         if (nextFile) {
           const padS = String(targetS).padStart(2, '0');
           const padE = String(targetEp).padStart(2, '0');
+          
+          const season = currentMedia.seasons?.find(s => s.season_number === targetS);
+          const episode = season?.episodes?.find(e => e.episode_number === targetEp);
+
           return {
             file: nextFile,
             season: targetS,
             episode: targetEp,
             position: 0,
             label: `Play Next S${padS}E${padE}`,
-            hasSavedProgress: false
+            hasSavedProgress: false,
+            title: episode?.name
           };
         }
       }
@@ -477,6 +488,9 @@ export function useMediaDetail(initialMedia: Media) {
       const ep = first.episode || 1;
       const padS = String(s).padStart(2, '0');
       const padE = String(ep).padStart(2, '0');
+      
+      const season = currentMedia.seasons?.find(season => season.season_number === s);
+      const episode = season?.episodes?.find(e => e.episode_number === ep);
 
       return {
         file: first,
@@ -484,7 +498,8 @@ export function useMediaDetail(initialMedia: Media) {
         episode: ep,
         position: 0,
         label: `Play S${padS}E${padE}`,
-        hasSavedProgress: false
+        hasSavedProgress: false,
+        title: episode?.name
       };
     } else {
       // Movie / single file
@@ -512,7 +527,7 @@ export function useMediaDetail(initialMedia: Media) {
         hasSavedProgress: false
       };
     }
-  }, [currentMedia.type, localFiles, allProgress]);
+  }, [currentMedia, localFiles, allProgress]);
 
   return {
     currentMedia,
