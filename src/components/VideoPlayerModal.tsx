@@ -9,15 +9,38 @@ import {
   VolumeX,
   Maximize,
   Minimize,
-  X,
+  ArrowLeft,
   RotateCcw,
   SkipForward,
   Subtitles,
   Sliders,
   AlertTriangle,
   Loader2,
-  ChevronRight
+  ChevronRight,
+  ChevronDown,
+  AudioLines
 } from 'lucide-react';
+
+interface NativeAudioTrack {
+  label?: string;
+  language?: string;
+  enabled: boolean;
+}
+
+interface NativeAudioTrackList {
+  length: number;
+  [index: number]: NativeAudioTrack;
+}
+
+interface VideoWithAudioTracks extends HTMLVideoElement {
+  audioTracks?: NativeAudioTrackList;
+}
+
+interface EmbeddedSubtitleTrack {
+  id: string;
+  label: string;
+  track: TextTrack;
+}
 
 export interface VideoPlayerModalProps {
   media: Media;
@@ -27,8 +50,9 @@ export interface VideoPlayerModalProps {
   episodeTitle?: string;
   initialPosition?: number;
   allLocalFiles?: LocalFile[];
+  sideBarIsCollapsed: boolean;
   onClose: () => void;
-  onEpisodeChange?: (nextFile: LocalFile, season?: number, episode?: number) => void;
+  onEpisodeChange?: (nextFile: LocalFile, season?: number, episode?: number, title?: string) => void;
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
@@ -39,6 +63,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   episodeTitle,
   initialPosition = 0,
   allLocalFiles = [],
+  sideBarIsCollapsed = false,
   onClose,
   onEpisodeChange
 }) => {
@@ -61,13 +86,20 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   // Subtitles & Audio Tracks
   const [subtitleTracks, setSubtitleTracks] = useState<SubtitleTrack[]>([]);
+  const [embeddedSubtitleTracks, setEmbeddedSubtitleTracks] = useState<EmbeddedSubtitleTrack[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string>('off');
+  const [subtitleError, setSubtitleError] = useState<string | null>(null);
+  const [activeSubtitleText, setActiveSubtitleText] = useState('');
   const [audioTracks, setAudioTracks] = useState<{ id: string; label: string }[]>([]);
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string>('');
+  const [audioTrackSupport, setAudioTrackSupport] = useState<boolean | null>(null);
+  const subtitleTrackElementsRef = useRef(new Map<string, HTMLTrackElement>());
 
   // UI Control visibility state
   const [showControls, setShowControls] = useState<boolean>(true);
   const hideControlsTimerRef = useRef<any>(null);
+  const [isEpisodePickerOpen, setIsEpisodePickerOpen] = useState(false);
+  const [selectedPickerSeason, setSelectedPickerSeason] = useState(seasonNumber);
 
   // Next Episode Countdown state
   const [showNextCountdown, setShowNextCountdown] = useState<boolean>(false);
@@ -108,6 +140,22 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   }, [media, seasonNumber, episodeNumber, allLocalFiles]);
 
   const nextEpInfo = getNextEpisodeFile();
+  const pickerSeasons = Array.from(new Set(
+    allLocalFiles
+      .filter(file => file.exists && file.season !== undefined && file.episode !== undefined)
+      .map(file => file.season!)
+  )).sort((a, b) => a - b);
+  const getEpisodeTitle = useCallback((file: LocalFile, season: number, episode: number) => (
+    media.seasons
+      ?.find(item => item.season_number === season)
+      ?.episodes?.find(item => item.episode_number === episode)?.name
+    || file.parsed_title
+    || file.filename
+  ), [media.seasons]);
+  const getEpisodeDetails = (season: number, episode: number) =>
+    media.seasons
+      ?.find(item => item.season_number === season)
+      ?.episodes?.find(item => item.episode_number === episode);
 
   // Load Settings
   useEffect(() => {
@@ -121,6 +169,14 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     let isMounted = true;
     setLoading(true);
     setError(null);
+    setSubtitleTracks([]);
+    setEmbeddedSubtitleTracks([]);
+    setSelectedSubtitleId('off');
+    setSubtitleError(null);
+    setActiveSubtitleText('');
+    setAudioTracks([]);
+    setSelectedAudioTrackId('');
+    setAudioTrackSupport(null);
 
     const resolveStream = async () => {
       try {
@@ -132,14 +188,22 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           // Browser environment fallback
           setStreamUrl(activeFile.path);
         }
-
-        // Discover sidecar subtitles
-        const subs = await subtitleService.discoverSubtitlesForVideo(activeFile.path);
-        if (isMounted) setSubtitleTracks(subs);
       } catch (err: any) {
         if (isMounted) {
           setError(`Failed to initialize stream for file: ${err?.message || activeFile.filename}`);
           setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const subs = await subtitleService.discoverSubtitlesForVideo(activeFile.path);
+        if (isMounted) setSubtitleTracks(subs);
+      } catch (err) {
+        if (isMounted) {
+          const message = err instanceof Error ? err.message : String(err);
+          setSubtitleError(message);
+          console.error('Failed to discover subtitle tracks:', err);
         }
       }
     };
@@ -151,6 +215,118 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     };
   }, [activeFile.path, activeFile.filename]);
 
+  const discoverEmbeddedSubtitleTracks = useCallback(() => {
+    const textTracks = videoRef.current?.textTracks;
+    if (!textTracks) {
+      setEmbeddedSubtitleTracks([]);
+      return;
+    }
+
+    const sidecarElements = new Set(subtitleTrackElementsRef.current.values());
+    const embedded = Array.from({ length: textTracks.length }, (_, index) => {
+      const track = textTracks[index];
+      if (
+        !['subtitles', 'captions'].includes(track.kind)
+        || Array.from(sidecarElements).some(element => element.track === track)
+      ) return null;
+
+      return {
+        id: `embedded:${index}`,
+        label: track.label || track.language || `Embedded subtitle ${index + 1}`,
+        track
+      };
+    }).filter((track): track is EmbeddedSubtitleTrack => track !== null);
+
+    setEmbeddedSubtitleTracks(embedded);
+  }, []);
+
+  useEffect(() => {
+    const textTracks = videoRef.current?.textTracks;
+    if (!textTracks) return;
+
+    const handleTrackListChange = () => discoverEmbeddedSubtitleTracks();
+    textTracks.addEventListener('addtrack', handleTrackListChange);
+    textTracks.addEventListener('removetrack', handleTrackListChange);
+    discoverEmbeddedSubtitleTracks();
+
+    return () => {
+      textTracks.removeEventListener('addtrack', handleTrackListChange);
+      textTracks.removeEventListener('removetrack', handleTrackListChange);
+    };
+  }, [streamUrl, subtitleTracks, discoverEmbeddedSubtitleTracks]);
+
+  const applySubtitleSelection = useCallback((selectedId: string) => {
+    setActiveSubtitleText('');
+    for (const [id, element] of subtitleTrackElementsRef.current) {
+      const track = element.track;
+      const trackId = `sidecar:${id}`;
+      track.oncuechange = trackId === selectedId
+        ? () => {
+            const cues = track.activeCues;
+            setActiveSubtitleText(cues
+              ? Array.from(cues)
+                .map(cue => cue instanceof VTTCue ? cue.text : '')
+                .filter(Boolean)
+                .join('\n')
+              : '');
+          }
+        : null;
+      track.mode = trackId === selectedId ? 'hidden' : 'disabled';
+    }
+    for (const { id, track } of embeddedSubtitleTracks) {
+      track.oncuechange = id === selectedId
+        ? () => {
+            const cues = track.activeCues;
+            setActiveSubtitleText(cues
+              ? Array.from(cues)
+                .map(cue => cue instanceof VTTCue ? cue.text : '')
+                .filter(Boolean)
+                .join('\n')
+              : '');
+          }
+        : null;
+      track.mode = id === selectedId ? 'hidden' : 'disabled';
+    }
+  }, [embeddedSubtitleTracks]);
+
+  useEffect(() => {
+    applySubtitleSelection(selectedSubtitleId);
+  }, [applySubtitleSelection, selectedSubtitleId]);
+
+  const applyAudioSelection = useCallback((selectedId: string) => {
+    const tracks = (videoRef.current as VideoWithAudioTracks | null)?.audioTracks;
+    if (!tracks) return;
+
+    for (let index = 0; index < tracks.length; index++) {
+      tracks[index].enabled = String(index) === selectedId;
+    }
+  }, []);
+
+  useEffect(() => {
+    applyAudioSelection(selectedAudioTrackId);
+  }, [applyAudioSelection, selectedAudioTrackId, audioTracks]);
+
+  const discoverAudioTracks = () => {
+    const video = videoRef.current as VideoWithAudioTracks | null;
+    const tracks = video?.audioTracks;
+    if (!tracks) {
+      setAudioTracks([]);
+      setSelectedAudioTrackId('');
+      setAudioTrackSupport(Boolean(video && 'audioTracks' in video));
+      return;
+    }
+
+    setAudioTrackSupport(true);
+    const parsedTracks = Array.from({ length: tracks.length }, (_, index) => ({
+      id: String(index),
+      label: tracks[index].label || tracks[index].language || `Audio Track ${index + 1}`
+    }));
+    setAudioTracks(parsedTracks);
+    const enabledTrackIndex = Array.from({ length: tracks.length })
+      .findIndex((_, index) => tracks[index].enabled);
+    setSelectedAudioTrackId(String(enabledTrackIndex >= 0 ? enabledTrackIndex : 0));
+  };
+
   // Handle Video Metadata Loaded & Initial Seek
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
@@ -158,6 +334,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
     setDuration(video.duration || 0);
     setLoading(false);
+    discoverEmbeddedSubtitleTracks();
 
     if (initialPosition > 0 && initialPosition < video.duration - 10) {
       video.currentTime = initialPosition;
@@ -166,16 +343,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     // Play video
     video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
 
-    // Detect browser Audio Tracks if supported
-    if ('audioTracks' in video) {
-      const tracks: any = (video as any).audioTracks;
-      const parsed = [];
-      for (let i = 0; i < tracks.length; i++) {
-        parsed.push({ id: String(i), label: tracks[i].label || `Audio Track ${i + 1}` });
-      }
-      setAudioTracks(parsed);
-      if (parsed.length > 0) setSelectedAudioTrackId(parsed[0].id);
-    }
+    discoverAudioTracks();
   };
 
   // Save Progress Function
@@ -218,6 +386,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     hideControlsTimerRef.current = setTimeout(() => {
       if (isPlaying) {
         setShowControls(false);
+        setIsEpisodePickerOpen(false);
       }
     }, 3000);
   };
@@ -249,19 +418,25 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     } else if (showNextCountdown && countdownSeconds === 0) {
       setShowNextCountdown(false);
       if (nextEpInfo && onEpisodeChange) {
-        onEpisodeChange(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode);
+        onEpisodeChange(
+          nextEpInfo.file,
+          nextEpInfo.season,
+          nextEpInfo.episode,
+          getEpisodeTitle(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode)
+        );
       }
     }
 
     return () => {
       if (countdownIntervalRef.current) clearTimeout(countdownIntervalRef.current);
     };
-  }, [showNextCountdown, countdownSeconds, nextEpInfo, onEpisodeChange]);
+  }, [showNextCountdown, countdownSeconds, nextEpInfo, onEpisodeChange, getEpisodeTitle]);
 
   // Play / Pause Toggle
   const togglePlay = () => {
     const video = videoRef.current;
     if (!video) return;
+    setIsEpisodePickerOpen(false);
 
     if (video.paused) {
       video.play();
@@ -409,19 +584,30 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   // Header Title Text
   const headerTitle = media.type === 'TV Series'
-    ? `${media.title} • S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}${episodeTitle ? ` - ${episodeTitle}` : ''}`
+    ? `${media.title} `//• S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}${episodeTitle ? ` - ${episodeTitle}` : ''}`
     : media.title;
-
+  const subHeader = media.type === 'TV Series'? 
+    `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}${episodeTitle ? ` - ${episodeTitle}` : ''}`
+    : ''
+  const controlsLeftOffset = isFullscreen ? 'left-0' : (!sideBarIsCollapsed ? 'left-64' : 'left-20');
+  const backButtonLeftOffset = isFullscreen
+    ? 'min-[900px]:left-4'
+    : sideBarIsCollapsed
+      ? 'min-[900px]:left-[6.5rem]'
+      : 'min-[900px]:left-[17.5rem]';
+  
   return (
     <div
       ref={containerRef}
       onMouseMove={handleMouseMove}
+      onClick={() => setIsEpisodePickerOpen(false)}
       className="fixed inset-0 z-50 bg-black flex items-center justify-center overflow-hidden select-none font-sans"
     >
       {/* Video Element */}
       {streamUrl && (
         <video
           ref={videoRef}
+          crossOrigin="anonymous"
           src={streamUrl}
           className="w-full h-full object-contain cursor-pointer"
           onClick={togglePlay}
@@ -442,14 +628,39 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           {subtitleTracks.map(sub => (
             <track
               key={sub.id}
+              ref={element => {
+                if (element) {
+                  subtitleTrackElementsRef.current.set(sub.id, element);
+                  element.track.mode = selectedSubtitleId === `sidecar:${sub.id}` ? 'hidden' : 'disabled';
+                  discoverEmbeddedSubtitleTracks();
+                } else {
+                  subtitleTrackElementsRef.current.delete(sub.id);
+                  discoverEmbeddedSubtitleTracks();
+                }
+              }}
               kind="subtitles"
               label={sub.label}
               srcLang={sub.language}
               src={sub.url}
-              default={selectedSubtitleId === sub.id}
+              onLoad={() => {
+                discoverEmbeddedSubtitleTracks();
+                applySubtitleSelection(selectedSubtitleId);
+              }}
+              onError={() => {
+                setSubtitleError(`Could not load subtitle track "${sub.label}".`);
+              }}
             />
           ))}
         </video>
+      )}
+
+      {activeSubtitleText && (
+        <div
+          aria-live="off"
+          className="pointer-events-none absolute bottom-[18%] left-1/2 z-20 max-w-[85vw] -translate-x-1/2 whitespace-pre-line rounded bg-black/70 px-3 py-1.5 text-center text-base font-semibold leading-relaxed text-white shadow-[0_2px_6px_rgba(0,0,0,0.9)] sm:text-xl"
+        >
+          {activeSubtitleText}
+        </div>
       )}
 
       {/* Loading Spinner */}
@@ -477,50 +688,139 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         </div>
       )}
 
-      {/* Top Header Overlay */}
-      <div
-        className={`absolute top-0 inset-x-0 bg-gradient-to-b from-black/90 via-black/50 to-transparent p-6 flex items-center justify-between transition-opacity duration-300 z-10 ${
-          showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-      >
-        <div className="flex items-center space-x-3 text-white truncate max-w-2xl">
-          <h2 className="text-lg md:text-xl font-bold truncate drop-shadow">{headerTitle}</h2>
-        </div>
+      {media.type === 'TV Series' && allLocalFiles.length > 1 && (
+        <div
+          onClick={event => event.stopPropagation()}
+          className={`absolute top-4 right-4 z-30 transition-opacity duration-300 ${
+            showControls || !isPlaying ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedPickerSeason(seasonNumber);
+              setIsEpisodePickerOpen(open => !open);
+            }}
+            aria-expanded={isEpisodePickerOpen}
+            className="flex items-center gap-2 rounded-xl border border-white/15 bg-[#111319]/90 px-4 py-2.5 text-sm font-semibold text-white shadow-xl backdrop-blur-xl transition-colors hover:bg-[#1a1d26]"
+          >
+            <span>S{String(seasonNumber).padStart(2, '0')}E{String(episodeNumber).padStart(2, '0')}</span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${isEpisodePickerOpen ? 'rotate-180' : ''}`} />
+          </button>
 
-        <div className="flex items-center space-x-3">
-          {/* TV Show Episode Selector Dropdown */}
-          {media.type === 'TV Series' && allLocalFiles.length > 1 && (
-            <div className="relative group">
-              <select
-                value={`${seasonNumber}_${episodeNumber}`}
-                onChange={(e) => {
-                  const [s, ep] = e.target.value.split('_').map(Number);
-                  const matched = allLocalFiles.find(f => f.exists && f.season === s && f.episode === ep);
-                  if (matched && onEpisodeChange) {
-                    onEpisodeChange(matched, s, ep);
-                  }
-                }}
-                className="bg-black/60 border border-white/20 text-white text-xs rounded-xl px-3 py-1.5 backdrop-blur-md cursor-pointer hover:bg-black/80"
-              >
+          {isEpisodePickerOpen && (
+            <div className="absolute right-0 top-14 flex max-h-[calc(100dvh-5.5rem)] w-[calc(100vw-2rem)] max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-[#111319]/95 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))]">
+              <nav aria-label="Select season" className="flex w-16 shrink-0 flex-col gap-1 overflow-y-auto border-r border-white/10 bg-[#111319]/80 p-2 sm:w-24">
+                {pickerSeasons.map(season => (
+                  <button
+                    key={season}
+                    type="button"
+                    onClick={() => setSelectedPickerSeason(season)}
+                    aria-pressed={selectedPickerSeason === season}
+                    className={`rounded-lg px-1 py-2 text-[11px] font-semibold transition-colors sm:px-2 sm:text-xs ${
+                      selectedPickerSeason === season
+                        ? 'bg-rose-500/20 text-rose-300'
+                        : 'text-gray-400 hover:bg-white/[0.06] hover:text-white'
+                    }`}
+                  >
+                    Season {season}
+                  </button>
+                ))}
+              </nav>
+
+              <div className="min-w-0 flex-1 space-y-1 overflow-y-auto p-2 sm:p-3">
                 {allLocalFiles
-                  .filter(f => f.exists && f.season !== undefined && f.episode !== undefined)
-                  .map(f => (
-                    <option key={f.id} value={`${f.season}_${f.episode}`} className="bg-[#14161f] text-white">
-                      S{String(f.season).padStart(2, '0')}E{String(f.episode).padStart(2, '0')} - {f.filename}
-                    </option>
-                  ))}
-              </select>
+                  .filter(file => file.exists && file.season === selectedPickerSeason && file.episode !== undefined)
+                  .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0))
+                  .map(file => {
+                  const season = file.season ?? 0;
+                  const episode = file.episode ?? 0;
+                  const details = getEpisodeDetails(season, episode);
+                  const isCurrentEpisode = season === seasonNumber && episode === episodeNumber;
+
+                  return (
+                    <button
+                      key={file.id}
+                      type="button"
+                      onClick={() => {
+                        onEpisodeChange?.(file, season, episode, getEpisodeTitle(file, season, episode));
+                        setIsEpisodePickerOpen(false);
+                      }}
+                      className={`flex w-full gap-3 rounded-xl p-2 text-left transition-colors ${
+                        isCurrentEpisode ? 'bg-white/10' : 'hover:bg-white/[0.07]'
+                      }`}
+                    >
+                      <span className="group/image relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-black/40 sm:h-20 sm:w-32">
+                        {(details?.still_path || media.backdrop || media.poster) && (
+                          <img
+                            src={details?.still_path || media.backdrop || media.poster}
+                            alt=""
+                            className="h-full w-full object-cover transition-transform duration-200 group-hover/image:scale-105"
+                          />
+                        )}
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover/image:bg-black/45 group-focus-visible/image:bg-black/45">
+                          <Play className="h-5 w-5 scale-75 fill-current text-white opacity-0 drop-shadow transition-all group-hover/image:scale-100 group-hover/image:opacity-100 group-focus-visible/image:scale-100 group-focus-visible/image:opacity-100" />
+                        </span>
+                      </span>
+                      <span className="min-w-0 flex-1 py-1">
+                        <span className="block truncate text-[10px] font-semibold text-rose-300 sm:text-xs">
+                          S{String(season).padStart(2, '0')}E{String(episode).padStart(2, '0')}
+                        </span>
+                        <span className="mt-1 block truncate text-xs font-bold text-white sm:text-sm">
+                          {getEpisodeTitle(file, season, episode)}
+                        </span>
+                        <span className="mt-1 hidden line-clamp-2 text-xs leading-relaxed text-gray-300 min-[380px]:block">
+                          {details?.overview || 'Episode description unavailable.'}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+                {allLocalFiles.filter(file => file.exists && file.season === selectedPickerSeason && file.episode !== undefined).length === 0 && (
+                  <p className="p-4 text-center text-xs text-gray-400">No available episodes in this season.</p>
+                )}
+              </div>
             </div>
           )}
-
-          <button
-            onClick={handleExitPlayer}
-            className="p-2 rounded-full bg-black/50 hover:bg-rose-600 text-white backdrop-blur-md transition-colors cursor-pointer"
-            title="Close Player (Esc)"
-          >
-            <X className="w-6 h-6" />
-          </button>
         </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handleExitPlayer}
+        title="Back to Library"
+        className={`mdv-btn mdv-btn-glass absolute left-4 top-[calc(1rem+var(--sat,0px))] z-30 h-10 cursor-pointer group flex items-center gap-2 w-10 hover:w-36 transition-[width,opacity] duration-300 ease-in-out overflow-hidden whitespace-nowrap px-0 hover:px-2 hover:backdrop-blur-md ${
+          showControls || !isPlaying ? 'opacity-100' : 'pointer-events-none opacity-0'
+        } ${backButtonLeftOffset}`}
+      >
+        <ArrowLeft className="mdv-icon-md shrink-0 transition-[margin] duration-300 ease-in-out" />
+        <span className="opacity-0 transition-opacity duration-200 delay-100 group-hover:opacity-100">
+          Back to Details
+        </span>
+      </button>
+
+      {/* Bottom Header Overlay */}
+      <div
+      // bg-gradient-to-b from-black/90 via-black/50 to-transparent
+        className={`absolute bottom-20 right-0 
+           
+          p-6 flex items-center justify-between transition-opacity duration-300 z-10 
+          
+          ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}
+        max-[898px]:left-0 max-[898px]:bottom-35 min-[899px]: ${controlsLeftOffset} min-[899px]:bottom-20
+        `}
+      >
+      <div className="relative isolate flex flex-col space-y-1 text-white truncate max-w-2xl px-4 py-3 -ml-3
+  before:content-[''] before:absolute before:inset-0 before:-z-10
+  before:rounded-2xl before:bg-white/[0.08] before:backdrop-blur-xl
+  before:[mask-image:linear-gradient(to_right,black_0%,black_55%,transparent_100%)]">
+  <h1 className="text-3xl lg:text-4xl xl:text-5xl font-bold truncate drop-shadow-md">
+    {headerTitle}
+  </h1>
+  <h5 className="text-sm lg:text-base font-bold opacity-90">
+    {subHeader}
+  </h5>
+</div>
       </div>
 
       {/* Next Episode Countdown Overlay */}
@@ -532,7 +832,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           </div>
 
           <p className="text-sm font-bold text-white truncate">
-            S{String(nextEpInfo.season).padStart(2, '0')}E{String(nextEpInfo.episode).padStart(2, '0')} - {nextEpInfo.file.filename}
+            S{String(nextEpInfo.season).padStart(2, '0')}E{String(nextEpInfo.episode).padStart(2, '0')} - {getEpisodeTitle(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode)}
           </p>
 
           <div className="flex items-center space-x-2 pt-1">
@@ -551,7 +851,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 if (countdownIntervalRef.current) clearTimeout(countdownIntervalRef.current);
                 setShowNextCountdown(false);
                 if (onEpisodeChange) {
-                  onEpisodeChange(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode);
+                  onEpisodeChange(
+                    nextEpInfo.file,
+                    nextEpInfo.season,
+                    nextEpInfo.episode,
+                    getEpisodeTitle(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode)
+                  );
                 }
               }}
               className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md cursor-pointer flex items-center space-x-1"
@@ -565,10 +870,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
       {/* Bottom Control Bar Overlay */}
       <div
-        className={`absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 space-y-3 transition-opacity duration-300 z-10 ${
-          showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-      >
+  className={`absolute bottom-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 space-y-3 transition-opacity duration-300 z-10 ${
+    showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
+  } max-[898px]:left-0 max-[898px]:bottom-15 min-[899px]: ${controlsLeftOffset} min-[899px]:bottom-0`}
+>
         {/* Seekbar Progress Slider */}
         <div className="relative group flex items-center">
           <input
@@ -577,6 +882,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             max={duration || 100}
             value={currentTime}
             onChange={handleSeek}
+            style={{
+                  background: `linear-gradient(to right, #f43f5e 0%, #f43f5e ${(currentTime/ duration) * 100 }%, 
+                  rgba(255, 255, 255, 0.3) ${((currentTime/ duration)* 100)}%, rgba(255, 255, 255, 0.3) 100%)`
+                }}
             className="w-full h-1.5 bg-white/20 hover:h-2.5 rounded-lg appearance-none cursor-pointer accent-rose-500 transition-all"
           />
         </div>
@@ -612,7 +921,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               <button
                 onClick={() => {
                   if (onEpisodeChange) {
-                    onEpisodeChange(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode);
+                    onEpisodeChange(
+                      nextEpInfo.file,
+                      nextEpInfo.season,
+                      nextEpInfo.episode,
+                      getEpisodeTitle(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode)
+                    );
                   }
                 }}
                 className="p-2 rounded-full hover:bg-white/20 text-gray-300 hover:text-white transition-colors cursor-pointer"
@@ -637,6 +951,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 step={0.05}
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
+                style={{
+                  background: `linear-gradient(to right, #f43f5e 0%, #f43f5e ${(isMuted ? 0 : volume) * 100}%, 
+                  rgba(255, 255, 255, 0.3) ${(isMuted ? 0 : volume) * 100}%, rgba(255, 255, 255, 0.3) 100%)`
+                }}
                 className="w-16 h-1 bg-white/30 rounded appearance-none cursor-pointer accent-rose-500 opacity-80 group-hover:opacity-100 transition-opacity"
               />
             </div>
@@ -668,47 +986,67 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             </div>
 
             {/* Subtitles Selector */}
-            {subtitleTracks.length > 0 && (
-              <div className="relative flex items-center space-x-1 text-xs">
-                <Subtitles className="w-4 h-4 text-rose-400" />
-                <select
-                  value={selectedSubtitleId}
-                  onChange={(e) => setSelectedSubtitleId(e.target.value)}
-                  className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80"
-                >
-                  <option value="off" className="bg-[#14161f]">Subtitles Off</option>
-                  {subtitleTracks.map(sub => (
-                    <option key={sub.id} value={sub.id} className="bg-[#14161f]">
-                      {sub.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Audio Track Selector if available */}
-            {audioTracks.length > 1 && (
+            <div className="relative flex items-center space-x-1 text-xs" title={subtitleError || undefined}>
+              <Subtitles className="w-4 h-4 text-rose-400" />
               <select
-                value={selectedAudioTrackId}
-                onChange={(e) => {
-                  setSelectedAudioTrackId(e.target.value);
-                  const video = videoRef.current;
-                  if (video && 'audioTracks' in video) {
-                    const tracks: any = (video as any).audioTracks;
-                    for (let i = 0; i < tracks.length; i++) {
-                      tracks[i].enabled = String(i) === e.target.value;
-                    }
-                  }
-                }}
-                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80"
+                value={selectedSubtitleId}
+                onChange={(e) => setSelectedSubtitleId(e.target.value)}
+                aria-label="Subtitle track"
+                disabled={subtitleTracks.length + embeddedSubtitleTracks.length === 0}
+                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {audioTracks.map(at => (
-                  <option key={at.id} value={at.id} className="bg-[#14161f]">
-                    {at.label}
+                {subtitleTracks.length + embeddedSubtitleTracks.length === 0 ? (
+                  <option value="off" className="bg-[#14161f]">
+                    {subtitleError ? 'Subtitle load failed' : loading ? 'Searching subtitles…' : 'No sidecar subtitles'}
                   </option>
-                ))}
+                ) : (
+                  <>
+                    <option value="off" className="bg-[#14161f]">Subtitles Off</option>
+                    {subtitleTracks.map(sub => (
+                      <option key={sub.id} value={`sidecar:${sub.id}`} className="bg-[#14161f]">
+                        {sub.label}
+                      </option>
+                    ))}
+                    {embeddedSubtitleTracks.map(track => (
+                      <option key={track.id} value={track.id} className="bg-[#14161f]">
+                        {track.label} (Embedded)
+                      </option>
+                    ))}
+                  </>
+                )}
               </select>
-            )}
+            </div>
+
+            {/* Audio Track Selector */}
+            <div
+              className="relative flex items-center space-x-1 text-xs"
+              title={audioTrackSupport === false ? 'Audio track switching is not supported by this video runtime.' : undefined}
+            >
+              <AudioLines className="w-4 h-4 text-rose-400" />
+              <select
+                value={audioTracks.length ? selectedAudioTrackId : ''}
+                onChange={(e) => setSelectedAudioTrackId(e.target.value)}
+                aria-label="Audio track"
+                disabled={audioTracks.length < 2}
+                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {audioTracks.length === 0 ? (
+                  <option value="" className="bg-[#14161f]">
+                    {audioTrackSupport === false
+                      ? 'Audio switching unavailable'
+                      : audioTrackSupport === null
+                        ? 'Detecting audio…'
+                        : 'No alternate audio'}
+                  </option>
+                ) : (
+                  audioTracks.map(track => (
+                    <option key={track.id} value={track.id} className="bg-[#14161f]">
+                      {track.label}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
 
             {/* Fullscreen Toggle */}
             <button

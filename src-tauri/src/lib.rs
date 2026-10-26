@@ -79,6 +79,52 @@ fn get_subtitle_url(file_path: String) -> Result<String, String> {
     Ok(format!("http://127.0.0.1:{}/subtitle?path={}", port, encoded))
 }
 
+#[tauri::command]
+fn list_subtitle_files(video_path: String) -> Result<Vec<String>, String> {
+    let video = Path::new(&video_path);
+    let parent = video
+        .parent()
+        .ok_or_else(|| format!("Could not determine the video directory: {video_path}"))?;
+    let video_stem = video
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .ok_or_else(|| format!("Could not determine the video filename: {video_path}"))?;
+    let lower_video_stem = video_stem.to_lowercase();
+    let prefix = format!("{lower_video_stem}.");
+
+    let entries = std::fs::read_dir(parent)
+        .map_err(|error| format!("Could not scan for subtitle files: {error}"))?;
+    let mut subtitle_paths = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("Could not read directory entry: {error}"))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let extension = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .unwrap_or_default();
+        if !matches!(extension.to_ascii_lowercase().as_str(), "srt" | "vtt") {
+            continue;
+        }
+
+        let stem = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or_default()
+            .to_lowercase();
+        if stem == lower_video_stem || stem.starts_with(&prefix) {
+            subtitle_paths.push(path.to_string_lossy().into_owned());
+        }
+    }
+
+    subtitle_paths.sort();
+    Ok(subtitle_paths)
+}
+
 mod urlencoding {
     pub fn encode(s: &str) -> String {
         let mut result = String::new();
@@ -108,7 +154,8 @@ pub fn run() {
             select_folder,
             scan_directory,
             get_video_stream_url,
-            get_subtitle_url
+            get_subtitle_url,
+            list_subtitle_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

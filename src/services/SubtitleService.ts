@@ -28,51 +28,62 @@ export class SubtitleService {
    * Attempts to discover sidecar SRT files for a given video file path in Tauri or browser.
    */
   public async discoverSubtitlesForVideo(videoPath: string): Promise<SubtitleTrack[]> {
+    if (!videoPath || typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+      return [];
+    }
+
+    const { invoke } = await import('@tauri-apps/api/core');
+    const subtitlePaths = await invoke<string[]>('list_subtitle_files', { videoPath });
+    const videoName = videoPath.split(/[\\/]/).pop() || videoPath;
+    const videoStem = videoName.replace(/\.[^.]+$/, '');
     const tracks: SubtitleTrack[] = [];
-    if (!videoPath) return tracks;
 
-    const basePath = videoPath.substring(0, videoPath.lastIndexOf('.'));
+    for (const path of subtitlePaths) {
+      const subtitleUrl = await invoke<string>('get_subtitle_url', { filePath: path });
+      const subtitleName = path.split(/[\\/]/).pop() || path;
+      const extension = subtitleName.split('.').pop()?.toLowerCase();
+      const subtitleStem = subtitleName.replace(/\.[^.]+$/, '');
+      const suffix = subtitleStem.toLowerCase().startsWith(`${videoStem.toLowerCase()}.`)
+        ? subtitleStem.slice(videoStem.length + 1)
+        : '';
+      const languageParts = suffix.split('.').filter(Boolean);
+      const languageCode = languageParts.find(part => /^(en|eng|es|spa|fr|fra|de|deu|it|ita|pt|por|ja|jpn|ko|kor|zh|zho|ru|rus)$/i.test(part));
+      const languageNames: Record<string, string> = {
+        en: 'English', eng: 'English',
+        es: 'Spanish', spa: 'Spanish',
+        fr: 'French', fra: 'French',
+        de: 'German', deu: 'German',
+        it: 'Italian', ita: 'Italian',
+        pt: 'Portuguese', por: 'Portuguese',
+        ja: 'Japanese', jpn: 'Japanese',
+        ko: 'Korean', kor: 'Korean',
+        zh: 'Chinese', zho: 'Chinese',
+        ru: 'Russian', rus: 'Russian'
+      };
+      const language = languageCode?.toLowerCase() || 'und';
+      const labelParts = [
+        languageCode ? languageNames[language] || languageCode.toUpperCase() : suffix || 'Default',
+        ...languageParts.filter(part => part !== languageCode).map(part =>
+          part.charAt(0).toUpperCase() + part.slice(1)
+        )
+      ];
 
-    const candidates = [
-      { path: `${basePath}.srt`, label: 'English (Default)', lang: 'en' },
-      { path: `${basePath}.en.srt`, label: 'English', lang: 'en' },
-      { path: `${basePath}.eng.srt`, label: 'English', lang: 'en' },
-      { path: `${basePath}.vtt`, label: 'English (VTT)', lang: 'en' },
-    ];
-
-    for (const item of candidates) {
-      try {
-        if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-          const { invoke } = await import('@tauri-apps/api/core');
-          const subUrl = await invoke<string>('get_subtitle_url', { filePath: item.path });
-
-          // Fetch the subtitle content to convert if it's SRT
-          if (item.path.endsWith('.srt')) {
-            const resp = await fetch(subUrl);
-            if (resp.ok) {
-              const text = await resp.text();
-              const vttText = this.convertSrtToVtt(text);
-              const blob = new Blob([vttText], { type: 'text/vtt' });
-              const blobUrl = URL.createObjectURL(blob);
-              tracks.push({
-                id: item.path,
-                label: item.label,
-                language: item.lang,
-                url: blobUrl
-              });
-            }
-          } else if (item.path.endsWith('.vtt')) {
-            tracks.push({
-              id: item.path,
-              label: item.label,
-              language: item.lang,
-              url: subUrl
-            });
-          }
+      let url = subtitleUrl;
+      if (extension === 'srt') {
+        const response = await fetch(subtitleUrl);
+        if (!response.ok) {
+          throw new Error(`Could not load subtitle file "${subtitleName}" (${response.status}).`);
         }
-      } catch {
-        // Candidate file does not exist or fetch failed
+        const vtt = this.convertSrtToVtt(await response.text());
+        url = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
       }
+
+      tracks.push({
+        id: path,
+        label: `${labelParts.join(' · ')} (${extension?.toUpperCase()})`,
+        language,
+        url
+      });
     }
 
     return tracks;

@@ -52,6 +52,7 @@ import {
 interface MediaDetailViewProps {
   media: Media;
   onBack: () => void;
+  isCollapsed: boolean;
   onSelectMedia?: (media: Media) => void;
   onAccentColorChange?: (color: string) => void;
   accentColorOverride?: string;
@@ -109,7 +110,7 @@ function getFileQualityLabel(file: LocalFile): string {
   return 'SD / Default';
 }
 
-export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, onSelectMedia, onAccentColorChange, cardTransition, accentColorOverride }) => {
+export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isCollapsed, onSelectMedia, onAccentColorChange, cardTransition, accentColorOverride }) => {
   const {
     currentMedia,
     historyList,
@@ -1593,17 +1594,18 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           episodeTitle={activePlayerSession.title}
           initialPosition={activePlayerSession.position}
           allLocalFiles={localFiles}
+          sideBarIsCollapsed={isCollapsed}
           onClose={() => {
             setActivePlayerSession(null);
             refreshLocalFiles();
           }}
-          onEpisodeChange={(nextFile, s, ep) => {
+          onEpisodeChange={(nextFile, s, ep, title) => {
             setActivePlayerSession({
               file: nextFile,
               season: s || nextFile.season || 1,
               episode: ep || nextFile.episode || 1,
               position: 0,
-              title: nextFile.parsed_title || nextFile.filename
+              title: title || nextFile.parsed_title || nextFile.filename
             });
             refreshLocalFiles();
           }}

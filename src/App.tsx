@@ -427,6 +427,7 @@ export function App() {
         key={selectedMedia.id}
         media={selectedMedia}
         onBack={handleBackToTab}
+        isCollapsed={isCollapsed}
         onAccentColorChange={setSelectedAccentColor}
         cardTransition={cardTransition?.mediaId === selectedMedia.id ? cardTransition : undefined}
         accentColorOverride={selectedAccentColor}
