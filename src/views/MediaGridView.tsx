@@ -383,6 +383,7 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
           onMediaAdded={() => refreshList()}
+          isCollapsed={isCollapsed}
         />
       )}
     </div>

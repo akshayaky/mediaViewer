@@ -5,12 +5,14 @@ import { igdbProvider } from '../providers/IGDBProvider';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { Image as ImageIcon, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { dbService } from '../services/DatabaseService';
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
 interface BackdropPickerModalProps {
   media: Media;
   isOpen: boolean;
   onClose: () => void;
   onBackgroundUpdated: (updatedMedia: Media) => void;
+  isCollapsed: boolean;
 }
 
 type QualityLevel = 'veryHigh'| 'high' | 'med' | 'low';
@@ -26,7 +28,8 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
   media,
   isOpen,
   onClose,
-  onBackgroundUpdated
+  onBackgroundUpdated,
+  isCollapsed
 }) => {
   const [backdrops, setBackdrops] = useState<{ url: string; thumbnailUrl: string; width: number; height: number }[]>([]);
   const [resolvedExternalIds, setResolvedExternalIds] = useState(media.external_ids || []);
@@ -34,6 +37,8 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [quality, setQuality] = useState<QualityLevel>('veryHigh'); // default to high
+  const { isDesktop, pagePadding} = useSidebarPadding(isCollapsed);
+  const bottomPaddingForMobile = `5rem`;
 
   const initialBackdropRef = useRef<string | null>(media.backdrop || null);
   
@@ -200,7 +205,11 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+      style={{ 
+        paddingLeft: pagePadding,
+        paddingBottom: isDesktop? undefined: bottomPaddingForMobile
+        }}>
       <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl w-full max-w-4xl flex flex-col max-h-[90vh] shadow-2xl overflow-hidden animate-fadeIn">
         <div className="p-5 border-b border-[#232736] flex items-center justify-between">
           <div className="flex items-center space-x-3">

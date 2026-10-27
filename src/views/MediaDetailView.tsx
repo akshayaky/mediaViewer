@@ -1378,6 +1378,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             setMergePair({ mediaA, mediaB });
             setShowMergeModal(true);
           }}
+          isCollapsed={isCollapsed}
         />
       )}
 
@@ -1390,6 +1391,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           onBackgroundUpdated={(updated) => {
             updateCurrentMedia(updated);
           }}
+          isCollapsed={isCollapsed}
         />
       )}
 

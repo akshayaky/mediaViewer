@@ -6,6 +6,8 @@ import { igdbProvider } from '../providers/IGDBProvider';
 import { dbService } from '../services/DatabaseService';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { Search, Loader2, X, RefreshCw, CheckCircle2, Film, Tv, Gamepad2 } from 'lucide-react';
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
+
 
 interface FixMatchModalProps {
   media: Media;
@@ -13,6 +15,7 @@ interface FixMatchModalProps {
   onClose: () => void;
   onMatchedUpdated: (updatedMedia: Media) => void;
   onRequestMerge?: (mediaA: Media, mediaB: Media) => void;
+  isCollapsed: boolean;
 }
 
 export const FixMatchModal: React.FC<FixMatchModalProps> = ({
@@ -20,7 +23,8 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   isOpen,
   onClose,
   onMatchedUpdated,
-  onRequestMerge
+  onRequestMerge,
+  isCollapsed
 }) => {
   const [query, setQuery] = useState(media.title);
   const [results, setResults] = useState<MetadataSearchResult[]>([]);
@@ -30,7 +34,8 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   const [previewDetails, setPreviewDetails] = useState<Partial<Media> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState(query);
-
+  const { isDesktop, pagePadding} = useSidebarPadding(isCollapsed);
+  const bottomPaddingForMobile = `5rem`;
 
   useEffect(() => {
     if (isOpen) {
@@ -204,7 +209,12 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+      style={{ 
+        paddingLeft: pagePadding,
+        paddingBottom: isDesktop? undefined: bottomPaddingForMobile
+        }}
+      >
       <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl w-full max-w-3xl flex flex-col max-h-[85vh] shadow-2xl overflow-hidden animate-fadeIn">
         {/* Header */}
         <div className="p-5 border-b border-[#232736] flex items-center justify-between">

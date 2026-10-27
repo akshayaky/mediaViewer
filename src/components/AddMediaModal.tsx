@@ -5,19 +5,22 @@ import { igdbProvider } from '../providers/IGDBProvider';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { dbService } from '../services/DatabaseService';
 import { Search, Loader2, X, Plus, CheckCircle2, Film, Tv, Gamepad2 } from 'lucide-react';
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
 interface AddMediaModalProps {
   type: MediaType;
   isOpen: boolean;
   onClose: () => void;
   onMediaAdded?: (media: Media) => void;
+  isCollapsed?: boolean;
 }
 
 export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   type,
   isOpen,
   onClose,
-  onMediaAdded
+  onMediaAdded,
+  isCollapsed
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Record<MediaType, MetadataSearchResult[]>>({} as Record<MediaType, MetadataSearchResult[]>);
@@ -27,6 +30,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
   // const [mediaType, setMediaType] = useState(type);
 
+  const { pagePadding } = useSidebarPadding(isCollapsed);
   const handleSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
 
@@ -185,7 +189,8 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+    style={{ paddingLeft: pagePadding }}>
       <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl w-full max-w-3xl flex flex-col max-h-[85vh] shadow-2xl overflow-hidden animate-fadeIn">
         {/* Modal Header */}
         <div className="p-6 border-b border-[#232736] flex items-center justify-between">
