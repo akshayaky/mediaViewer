@@ -632,10 +632,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 if (element) {
                   subtitleTrackElementsRef.current.set(sub.id, element);
                   element.track.mode = selectedSubtitleId === `sidecar:${sub.id}` ? 'hidden' : 'disabled';
-                  discoverEmbeddedSubtitleTracks();
                 } else {
                   subtitleTrackElementsRef.current.delete(sub.id);
-                  discoverEmbeddedSubtitleTracks();
                 }
               }}
               kind="subtitles"
