@@ -81,6 +81,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [duration, setDuration] = useState<number>(0);
   const [volume, setVolume] = useState<number>(1);
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [audioSettingsLoaded, setAudioSettingsLoaded] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
@@ -161,8 +162,30 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   useEffect(() => {
     dbService.getSettings().then(s => {
       setAutoplayNextSetting(s.autoplay_next_episode !== false);
+      const audioSettings = s.player_audio_settings;
+      if (audioSettings && Number.isFinite(audioSettings.volume)) {
+        setVolume(Math.min(1, Math.max(0, audioSettings.volume)));
+        setIsMuted(audioSettings.muted === true);
+      }
+      setAudioSettingsLoaded(true);
+    }).catch(error => {
+      console.error('Failed to load player audio settings:', error);
     });
   }, []);
+
+  useEffect(() => {
+    if (!audioSettingsLoaded) return;
+    void dbService.saveSetting('player_audio_settings', { volume, muted: isMuted }).catch(error => {
+      console.error('Failed to save player audio settings:', error);
+    });
+  }, [audioSettingsLoaded, volume, isMuted]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = volume;
+    video.muted = isMuted;
+  }, [streamUrl, volume, isMuted]);
 
   // Resolve Video Stream URL & Subtitles
   useEffect(() => {
@@ -700,22 +723,22 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               setIsEpisodePickerOpen(open => !open);
             }}
             aria-expanded={isEpisodePickerOpen}
-            className="flex items-center gap-2 rounded-xl border border-white/15 bg-[#111319]/90 px-4 py-2.5 text-sm font-semibold text-white shadow-xl backdrop-blur-xl transition-colors hover:bg-[#1a1d26]"
+            className="flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#111319]/90 px-3 py-2 text-xs font-semibold text-white shadow-xl backdrop-blur-xl transition-colors hover:bg-[#1a1d26] sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm"
           >
             <span>S{String(seasonNumber).padStart(2, '0')}E{String(episodeNumber).padStart(2, '0')}</span>
             <ChevronDown className={`h-4 w-4 transition-transform ${isEpisodePickerOpen ? 'rotate-180' : ''}`} />
           </button>
 
           {isEpisodePickerOpen && (
-            <div className="absolute right-0 top-14 flex max-h-[calc(100dvh-5.5rem)] w-[calc(100vw-2rem)] max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-[#111319]/95 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))]">
-              <nav aria-label="Select season" className="flex w-16 shrink-0 flex-col gap-1 overflow-y-auto border-r border-white/10 bg-[#111319]/80 p-2 sm:w-24">
+            <div className="absolute right-0 top-14 flex h-[18rem] max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111319]/95 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))] min-[899px]:h-[min(36rem,max(0px,calc(100dvh-12rem-var(--sab,0px))))] min-[899px]:max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] min-[899px]:flex-row sm:rounded-2xl">
+              <nav aria-label="Select season" className="flex w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-contain border-b border-white/10 bg-[#111319]/80 p-1 touch-pan-x min-[899px]:w-24 min-[899px]:flex-col min-[899px]:gap-1 min-[899px]:overflow-x-hidden min-[899px]:overflow-y-auto min-[899px]:border-b-0 min-[899px]:border-r min-[899px]:p-2 min-[899px]:touch-pan-y">
                 {pickerSeasons.map(season => (
                   <button
                     key={season}
                     type="button"
                     onClick={() => setSelectedPickerSeason(season)}
                     aria-pressed={selectedPickerSeason === season}
-                    className={`rounded-lg px-1 py-2 text-[11px] font-semibold transition-colors sm:px-2 sm:text-xs ${
+                    className={`whitespace-nowrap rounded-lg px-1.5 py-1.5 text-[10px] font-semibold transition-colors min-[380px]:px-2 min-[380px]:text-[11px] sm:py-2 sm:text-xs ${
                       selectedPickerSeason === season
                         ? 'bg-rose-500/20 text-rose-300'
                         : 'text-gray-400 hover:bg-white/[0.06] hover:text-white'
@@ -726,7 +749,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 ))}
               </nav>
 
-              <div className="min-w-0 flex-1 space-y-1 overflow-y-auto p-2 sm:p-3">
+              <div className="min-h-0 min-w-0 flex flex-1 flex-row items-stretch gap-1 overflow-x-auto overflow-y-hidden overscroll-contain p-1.5 touch-pan-x min-[380px]:p-2 min-[899px]:flex-col min-[899px]:space-y-1 min-[899px]:overflow-x-hidden min-[899px]:overflow-y-auto min-[899px]:touch-pan-y sm:p-3">
                 {allLocalFiles
                   .filter(file => file.exists && file.season === selectedPickerSeason && file.episode !== undefined)
                   .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0))
@@ -744,11 +767,11 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                         onEpisodeChange?.(file, season, episode, getEpisodeTitle(file, season, episode));
                         setIsEpisodePickerOpen(false);
                       }}
-                      className={`flex w-full gap-3 rounded-xl p-2 text-left transition-colors ${
+                      className={`flex min-w-0 flex-[0_0_calc(33.333%_-_0.167rem)] flex-col gap-1 rounded-lg p-1 text-left transition-colors min-[899px]:w-full min-[899px]:flex-none min-[899px]:flex-row min-[899px]:gap-3 min-[899px]:rounded-xl min-[899px]:p-2 ${
                         isCurrentEpisode ? 'bg-white/10' : 'hover:bg-white/[0.07]'
                       }`}
                     >
-                      <span className="group/image relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-black/40 sm:h-20 sm:w-32">
+                      <span className="group/image relative h-20 w-full shrink-0 overflow-hidden rounded-md bg-black/40 min-[899px]:h-20 min-[899px]:w-32 min-[899px]:rounded-lg">
                         {(details?.still_path || media.backdrop || media.poster) && (
                           <img
                             src={details?.still_path || media.backdrop || media.poster}
@@ -760,14 +783,14 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                           <Play className="h-5 w-5 scale-75 fill-current text-white opacity-0 drop-shadow transition-all group-hover/image:scale-100 group-hover/image:opacity-100 group-focus-visible/image:scale-100 group-focus-visible/image:opacity-100" />
                         </span>
                       </span>
-                      <span className="min-w-0 flex-1 py-1">
-                        <span className="block truncate text-[10px] font-semibold text-rose-300 sm:text-xs">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[10px] font-semibold text-rose-300 min-[899px]:text-xs">
                           S{String(season).padStart(2, '0')}E{String(episode).padStart(2, '0')}
                         </span>
-                        <span className="mt-1 block truncate text-xs font-bold text-white sm:text-sm">
+                        <span className="block truncate text-[10px] font-bold text-white min-[899px]:mt-1 min-[899px]:text-sm">
                           {getEpisodeTitle(file, season, episode)}
                         </span>
-                        <span className="mt-1 hidden line-clamp-2 text-xs leading-relaxed text-gray-300 min-[380px]:block">
+                        <span className="mt-0.5 line-clamp-3 text-[9px] leading-tight text-gray-300 min-[899px]:mt-1 min-[899px]:line-clamp-2 min-[899px]:text-xs min-[899px]:leading-relaxed">
                           {details?.overview || 'Episode description unavailable.'}
                         </span>
                       </span>
