@@ -407,7 +407,7 @@ export function App() {
       case 'history':
         return <HistoryView onSelectMedia={handleSelectMedia} />;
       case 'inbox':
-        return <UnmatchedInboxView onMediaMatched={() => {}} />;
+        return <UnmatchedInboxView onMediaMatched={() => {}} isCollapsed={isCollapsed} />;
       case 'settings':
         return <SettingsView />;
       default:

@@ -23,9 +23,10 @@ import {
 
 interface UnmatchedInboxViewProps {
   onMediaMatched?: () => void;
+  isCollapsed?: boolean;
 }
 
-export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaMatched }) => {
+export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaMatched, isCollapsed }) => {
   const [unmatchedFiles, setUnmatchedFiles] = useState<LocalFile[]>([]);
   const [allMedia, setAllMedia] = useState<Media[]>([]);
   const [searchQueries, setSearchQueryMap] = useState<Record<string, string>>({});
@@ -34,6 +35,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
   const [successMessage, setSavedMessage] = useState('');
   const [clearError, setClearError] = useState('');
 
+  console.log("Iscollapsed : " + isCollapsed)
   useEffect(() => {
     void refreshFiles();
   }, []);
@@ -238,7 +240,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
   };
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto">
+    <div className={`p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto transition-all duration-500 ${isCollapsed ? 'md:pl-[7rem]' : 'md:pl-[18rem]'}`}>
       {/* Header Bar */}
       <div className="border-b border-[#1f222e] pb-6 flex items-center justify-between">
         <div>
