@@ -93,10 +93,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
 
   return (
     <>
-      {/* Desktop Sidebar (>= 768px) */}
+      {/* Desktop Sidebar (>= 900px) */}
       <aside
         data-media-sidebar
-        className={`hidden min-[900px]:flex fixed inset-y-0 left-0 flex-col justify-between select-none z-40 transition-all duration-500
+        className={`hidden sidebar:flex fixed inset-y-0 left-0 flex-col justify-between select-none z-40 transition-all duration-500
           ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-white/10 shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.05)] ${
           isCollapsed ? 'w-20' : 'w-64'
         } ${accentColors ? '' : 'bg-[#111319]/80 backdrop-blur-xl'}`}
@@ -233,9 +233,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
          </div>
        </aside>
 
-      {/* Mobile Bottom Navigation (< 899px) */}
+      {/* Mobile Bottom Navigation (< 900px) */}
       <nav
-        className="min-[899px]:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 shadow-2xl flex items-center justify-around px-2 py-2"
+        className="flex sidebar:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 shadow-2xl items-center justify-around px-2 py-2"
         style={{
           backgroundColor: 'rgba(17, 19, 25, 0.58)',
           backdropFilter: 'blur(24px) saturate(180%)',
@@ -281,7 +281,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
 
       {/* Mobile "More" Bottom Sheet Overlay */}
       {isMoreSheetOpen && (
-        <div className="min-[900px]:hidden fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="sidebar:hidden fixed inset-0 z-50 flex flex-col justify-end">
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"

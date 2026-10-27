@@ -5,10 +5,11 @@ import { Media } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { getAccentRgb } from '../helper/mediaDetailTheme';
 import { useDominantColor } from '../helper/useDominantColour';
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
 interface HomeViewProps {
-  onSelectMedia: (media: Media) => void,
-  onAccentColorChange: (color?: string) => void,
+  onSelectMedia: (media: Media) => void;
+  onAccentColorChange: (color?: string) => void;
   isCollapsed?: boolean;
 }
 
@@ -17,6 +18,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
    onAccentColorChange,
    isCollapsed
   }) => {
+  const { pagePadding } = useSidebarPadding(isCollapsed);
+
   const [homeData, setHomeData] = useState<{
     allMedia: Media[];
     continueWatching: Media[];
@@ -25,18 +28,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
     abandonedList: Media[];
     localLibraryList: Media[];
   }>({ allMedia: [], continueWatching: [], recentlyWatched: [], rewatchCandidates: [], abandonedList: [], localLibraryList: [] });
-
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
-
-  useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const pagePadding = windowWidth >= 900 
-    ? (isCollapsed ? '6rem' : '18rem') 
-    : '1rem';
 
   useEffect(() => {
     let isMounted = true;

@@ -403,13 +403,13 @@ export function App() {
       case 'games':
         return renderGridView();
       case 'wishlist':
-        return <WishlistView />;
+        return <WishlistView isCollapsed={isCollapsed} />;
       case 'history':
-        return <HistoryView onSelectMedia={handleSelectMedia} />;
+        return <HistoryView onSelectMedia={handleSelectMedia} isCollapsed={isCollapsed} />;
       case 'inbox':
         return <UnmatchedInboxView onMediaMatched={() => {}} isCollapsed={isCollapsed} />;
       case 'settings':
-        return <SettingsView />;
+        return <SettingsView isCollapsed={isCollapsed} />;
       default:
         return (
           <HomeView

@@ -20,6 +20,7 @@ import {
   Gamepad2,
   Trash2
 } from 'lucide-react';
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
 interface UnmatchedInboxViewProps {
   onMediaMatched?: () => void;
@@ -27,6 +28,7 @@ interface UnmatchedInboxViewProps {
 }
 
 export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaMatched, isCollapsed }) => {
+  const { pagePadding } = useSidebarPadding(isCollapsed);
   const [unmatchedFiles, setUnmatchedFiles] = useState<LocalFile[]>([]);
   const [allMedia, setAllMedia] = useState<Media[]>([]);
   const [searchQueries, setSearchQueryMap] = useState<Record<string, string>>({});
@@ -34,8 +36,6 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
   const [isSearchingExternal, setIsSearchingExternal] = useState<Record<string, boolean>>({});
   const [successMessage, setSavedMessage] = useState('');
   const [clearError, setClearError] = useState('');
-
-  console.log("Iscollapsed : " + isCollapsed)
   useEffect(() => {
     void refreshFiles();
   }, []);
@@ -240,7 +240,10 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
   };
 
   return (
-    <div className={`p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto transition-all duration-500 ${isCollapsed ? 'md:pl-[7rem]' : 'md:pl-[18rem]'}`}>
+    <div
+      className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto transition-all duration-300"
+      style={{ paddingLeft: pagePadding }}
+    >
       {/* Header Bar */}
       <div className="border-b border-[#1f222e] pb-6 flex items-center justify-between">
         <div>

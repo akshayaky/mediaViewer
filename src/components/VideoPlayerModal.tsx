@@ -614,10 +614,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     : ''
   const controlsLeftOffset = isFullscreen ? 'left-0' : (!sideBarIsCollapsed ? 'left-64' : 'left-20');
   const backButtonLeftOffset = isFullscreen
-    ? 'min-[900px]:left-4'
+    ? 'sidebar:left-4'
     : sideBarIsCollapsed
-      ? 'min-[900px]:left-[6.5rem]'
-      : 'min-[900px]:left-[17.5rem]';
+      ? 'sidebar:left-[6.5rem]'
+      : 'sidebar:left-[17.5rem]';
   
   return (
     <div
@@ -730,8 +730,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           </button>
 
           {isEpisodePickerOpen && (
-            <div className="absolute right-0 top-14 flex h-[18rem] max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111319]/95 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))] min-[899px]:h-[min(36rem,max(0px,calc(100dvh-12rem-var(--sab,0px))))] min-[899px]:max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] min-[899px]:flex-row sm:rounded-2xl">
-              <nav aria-label="Select season" className="flex w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-contain border-b border-white/10 bg-[#111319]/80 p-1 touch-pan-x min-[899px]:w-24 min-[899px]:flex-col min-[899px]:gap-1 min-[899px]:overflow-x-hidden min-[899px]:overflow-y-auto min-[899px]:border-b-0 min-[899px]:border-r min-[899px]:p-2 min-[899px]:touch-pan-y">
+            <div className="absolute right-0 top-14 flex h-[18rem] max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111319]/95 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))] sidebar:h-[min(36rem,max(0px,calc(100dvh-12rem-var(--sab,0px))))] sidebar:max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] sidebar:flex-row sm:rounded-2xl">
+              <nav aria-label="Select season" className="flex w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-contain border-b border-white/10 bg-[#111319]/80 p-1 touch-pan-x sidebar:w-24 sidebar:flex-col sidebar:gap-1 sidebar:overflow-x-hidden sidebar:overflow-y-auto sidebar:border-b-0 sidebar:border-r sidebar:p-2 sidebar:touch-pan-y">
                 {pickerSeasons.map(season => (
                   <button
                     key={season}
@@ -749,7 +749,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 ))}
               </nav>
 
-              <div className="min-h-0 min-w-0 flex flex-1 flex-row items-stretch gap-1 overflow-x-auto overflow-y-hidden overscroll-contain p-1.5 touch-pan-x min-[380px]:p-2 min-[899px]:flex-col min-[899px]:space-y-1 min-[899px]:overflow-x-hidden min-[899px]:overflow-y-auto min-[899px]:touch-pan-y sm:p-3">
+              <div className="min-h-0 min-w-0 flex flex-1 flex-row items-stretch gap-1 overflow-x-auto overflow-y-hidden overscroll-contain p-1.5 touch-pan-x min-[380px]:p-2 sidebar:flex-col sidebar:space-y-1 sidebar:overflow-x-hidden sidebar:overflow-y-auto sidebar:touch-pan-y sm:p-3">
                 {allLocalFiles
                   .filter(file => file.exists && file.season === selectedPickerSeason && file.episode !== undefined)
                   .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0))
@@ -767,11 +767,11 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                         onEpisodeChange?.(file, season, episode, getEpisodeTitle(file, season, episode));
                         setIsEpisodePickerOpen(false);
                       }}
-                      className={`flex min-w-0 flex-[0_0_calc(33.333%_-_0.167rem)] flex-col gap-1 rounded-lg p-1 text-left transition-colors min-[899px]:w-full min-[899px]:flex-none min-[899px]:flex-row min-[899px]:gap-3 min-[899px]:rounded-xl min-[899px]:p-2 ${
+                      className={`flex min-w-0 flex-[0_0_calc(33.333%_-_0.167rem)] flex-col gap-1 rounded-lg p-1 text-left transition-colors sidebar:w-full sidebar:flex-none sidebar:flex-row sidebar:gap-3 sidebar:rounded-xl sidebar:p-2 ${
                         isCurrentEpisode ? 'bg-white/10' : 'hover:bg-white/[0.07]'
                       }`}
                     >
-                      <span className="group/image relative h-20 w-full shrink-0 overflow-hidden rounded-md bg-black/40 min-[899px]:h-20 min-[899px]:w-32 min-[899px]:rounded-lg">
+                      <span className="group/image relative h-20 w-full shrink-0 overflow-hidden rounded-md bg-black/40 sidebar:h-20 sidebar:w-32 sidebar:rounded-lg">
                         {(details?.still_path || media.backdrop || media.poster) && (
                           <img
                             src={details?.still_path || media.backdrop || media.poster}
@@ -784,13 +784,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                         </span>
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[10px] font-semibold text-rose-300 min-[899px]:text-xs">
+                        <span className="block truncate text-[10px] font-semibold text-rose-300 sidebar:text-xs">
                           S{String(season).padStart(2, '0')}E{String(episode).padStart(2, '0')}
                         </span>
-                        <span className="block truncate text-[10px] font-bold text-white min-[899px]:mt-1 min-[899px]:text-sm">
+                        <span className="block truncate text-[10px] font-bold text-white sidebar:mt-1 sidebar:text-sm">
                           {getEpisodeTitle(file, season, episode)}
                         </span>
-                        <span className="mt-0.5 line-clamp-3 text-[9px] leading-tight text-gray-300 min-[899px]:mt-1 min-[899px]:line-clamp-2 min-[899px]:text-xs min-[899px]:leading-relaxed">
+                        <span className="mt-0.5 line-clamp-3 text-[9px] leading-tight text-gray-300 sidebar:mt-1 sidebar:line-clamp-2 sidebar:text-xs sidebar:leading-relaxed">
                           {details?.overview || 'Episode description unavailable.'}
                         </span>
                       </span>
@@ -828,7 +828,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           p-6 flex items-center justify-between transition-opacity duration-300 z-10 
           
           ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}
-        max-[898px]:left-0 max-[898px]:bottom-35 min-[899px]: ${controlsLeftOffset} min-[899px]:bottom-20
+        max-sidebar:left-0 max-sidebar:bottom-35 sidebar: ${controlsLeftOffset} sidebar:bottom-20
         `}
       >
       <div className="relative isolate flex flex-col space-y-1 text-white truncate max-w-2xl px-4 py-3 -ml-3
@@ -893,7 +893,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       <div
   className={`absolute bottom-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 space-y-3 transition-opacity duration-300 z-10 ${
     showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
-  } max-[898px]:left-0 max-[898px]:bottom-15 min-[899px]: ${controlsLeftOffset} min-[899px]:bottom-0`}
+  } max-sidebar:left-0 max-sidebar:bottom-15 sidebar: ${controlsLeftOffset} sidebar:bottom-0`}
 >
         {/* Seekbar Progress Slider */}
         <div className="relative group flex items-center">

@@ -4,6 +4,7 @@ import { AddMediaModal } from '../components/AddMediaModal';
 import { Media, MediaType } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { Search, Filter, Plus, X, RotateCcw } from 'lucide-react';
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
 interface MediaGridViewProps {
   typeFilter?: MediaType;
@@ -26,6 +27,8 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   onAddNewMedia,
   isCollapsed
 }) => {
+  const { pagePadding } = useSidebarPadding(isCollapsed);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -46,18 +49,6 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
     setStateByMediaId(Object.fromEntries(states.map(state => [state.media_id, state])));
     setScoreByMediaId(Object.fromEntries(media.map((item, index) => [item.id, histories[index][0]?.score])));
   };
-
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
-  
-    useEffect(() => {
-      const handleResize = () => setWindowWidth(window.innerWidth);
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }, []);
-  
-    const pagePadding = windowWidth >= 900 
-      ? (isCollapsed ? '6rem' : '18rem') 
-      : '1rem';
   
 
   useEffect(() => {

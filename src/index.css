@@ -1,6 +1,11 @@
 @import "tailwindcss";
 
+@theme {
+  --breakpoint-sidebar: 900px;
+}
+
 :root {
+  --sidebar-breakpoint: 900px;
   --sat: env(safe-area-inset-top, 0px);
   --sar: env(safe-area-inset-right, 0px);
   --sab: env(safe-area-inset-bottom, 0px);

@@ -2,8 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Wishlist, MediaType } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { Heart, Plus, ExternalLink, Calendar, Tag } from 'lucide-react';
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
-export const WishlistView: React.FC = () => {
+interface WishlistViewProps {
+  isCollapsed?: boolean;
+}
+
+export const WishlistView: React.FC<WishlistViewProps> = ({ isCollapsed }) => {
+  const { pagePadding } = useSidebarPadding(isCollapsed);
   const [wishlistItems, setWishlistItems] = useState<Wishlist[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [title, setTitle] = useState('');
@@ -40,7 +46,10 @@ export const WishlistView: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto">
+    <div
+      className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto transition-all duration-300"
+      style={{ paddingLeft: pagePadding }}
+    >
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1f222e] pb-6">
         <div>
