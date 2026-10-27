@@ -281,7 +281,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
 
       {/* Mobile "More" Bottom Sheet Overlay */}
       {isMoreSheetOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="min-[900px]:hidden fixed inset-0 z-50 flex flex-col justify-end">
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
