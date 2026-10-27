@@ -29,6 +29,8 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewDetails, setPreviewDetails] = useState<Partial<Media> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+
 
   useEffect(() => {
     if (isOpen) {
@@ -48,30 +50,50 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
     };
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+      const handler = setTimeout(() => {
+        setDebouncedQuery(query);
+      }, 800);
+  
+      return () => {
+        clearTimeout(handler);
+      };
+    }, [query]);
+  
+    useEffect(() => {
+      if (debouncedQuery.trim()) { 
+        handleSearch(debouncedQuery);
+      }
+    }, [debouncedQuery]);
+
   if (!isOpen) return null;
 
-  const handleSearch = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!query.trim()) return;
+  const handleSearch = async (searchQuery: string) => {
+      if (!searchQuery.trim()) return;
 
-    setIsSearching(true);
-    setResults([]);
-    setSelectedResult(null);
-    setPreviewDetails(null);
+      setIsSearching(true);
+      setResults([]);
+      setSelectedResult(null);
+      setPreviewDetails(null);
 
-    try {
-      let searchResults: MetadataSearchResult[] = [];
-      if (media.type === 'VideoGame') {
-        searchResults = await igdbProvider.searchMedia(query, 'VideoGame');
-      } else {
-        searchResults = await tmdbProvider.searchMedia(query, media.type);
+      try {
+        let searchResults: MetadataSearchResult[] = [];
+        if (media.type === 'VideoGame') {
+          searchResults = await igdbProvider.searchMedia(searchQuery, 'VideoGame');
+        } else {
+          searchResults = await tmdbProvider.searchMedia(searchQuery, media.type);
+        }
+        setResults(searchResults);
+      } catch (err) {
+        console.error('Failed to search external provider for match correction:', err);
+      } finally {
+        setIsSearching(false);
       }
-      setResults(searchResults);
-    } catch (err) {
-      console.error('Failed to search external provider for match correction:', err);
-    } finally {
-      setIsSearching(false);
-    }
+    };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    handleSearch(query)
   };
 
   const handleSelectCandidate = async (candidate: MetadataSearchResult) => {
@@ -205,7 +227,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
         {/* Body */}
         <div className="p-6 space-y-4 flex-1 overflow-y-auto">
           {/* Search bar */}
-          <form onSubmit={handleSearch} className="flex space-x-2">
+          <form onSubmit={handleSubmit} className="flex space-x-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
