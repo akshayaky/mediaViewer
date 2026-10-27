@@ -1,5 +1,8 @@
 import { NotionColumnMapping } from '../providers/interfaces';
 
+/** Sidebar / Navigation responsive breakpoint in pixels */
+export const SIDEBAR_BREAKPOINT = 900;
+
 /** Storage keys for LocalStorage persistence */
 export const STORAGE_KEYS = {
   SQLITE_DB: 'my_media_library_sqlite_db',

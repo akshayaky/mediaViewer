@@ -2,12 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { Media } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { History, Star, Film, Tv, Gamepad2, Bookmark } from 'lucide-react';
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
 interface HistoryViewProps {
   onSelectMedia: (media: Media) => void;
+  isCollapsed?: boolean;
 }
 
-export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia }) => {
+export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia, isCollapsed }) => {
+  const { pagePadding } = useSidebarPadding(isCollapsed);
   const [entries, setEntries] = useState<Array<{ history: Awaited<ReturnType<typeof dbService.getAllHistory>>[number]; media: Media }>>([]);
 
   useEffect(() => {
@@ -40,7 +43,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia }) => {
   };
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto">
+    <div
+      className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto transition-all duration-300"
+      style={{ paddingLeft: pagePadding }}
+    >
       {/* Header Bar */}
       <div className="border-b border-[#1f222e] pb-6">
         <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center space-x-3">

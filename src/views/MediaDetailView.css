@@ -39,7 +39,7 @@
   --mdv-play-text: #ffffff;
 }
 
-@media (min-width: 1000px) {
+@media (min-width: var(--sidebar-breakpoint, 900px)) {
   .mdv-page {
     --mdv-hero-height: 90vh;/*720px;*/
   }
@@ -295,7 +295,7 @@
   }
 }
 
-@media (min-width: 900px) {
+@media (min-width: var(--sidebar-breakpoint, 900px)) {
   .mdv-play-row {
     padding-left: 2rem;
   }

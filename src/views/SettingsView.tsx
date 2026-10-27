@@ -30,7 +30,14 @@ import {
   Trash2
 } from 'lucide-react';
 
-export const SettingsView: React.FC = () => {
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
+
+interface SettingsViewProps {
+  isCollapsed?: boolean;
+}
+
+export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
+  const { pagePadding } = useSidebarPadding(isCollapsed);
   const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const [settings, setSettings] = useState<AppSettings>({});
 
@@ -298,7 +305,10 @@ export const SettingsView: React.FC = () => {
   const schemaKeys = Object.keys(schema);
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-8 max-w-5xl mx-auto">
+    <div
+      className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-8 max-w-5xl mx-auto transition-all duration-300"
+      style={{ paddingLeft: pagePadding }}
+    >
       {/* Hidden Folder Directory Inputs */}
       <input
         type="file"

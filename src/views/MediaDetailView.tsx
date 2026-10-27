@@ -5,6 +5,7 @@ import { useDominantColor } from '../helper/useDominantColour';
 import { getMediaTheme } from '../helper/mediaDetailTheme';
 import { getHighQualityBackdropUrl, getLastWatchedEpisodeArtwork, isEpisodeWatched } from '../helper/episodeProgress';
 import { dbService } from '../services/DatabaseService';
+import { SIDEBAR_BREAKPOINT } from '../constants/appConstants';
 import './MediaDetailView.css';
 import { MetadataSearchResult } from '../providers/interfaces';
 import { FixMatchModal } from '../components/FixMatchModal';
@@ -194,11 +195,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     }
   };
 
-  const [isDesktopLayout, setIsDesktopLayout] = useState(typeof window !== 'undefined' && window.innerWidth >= 900);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(typeof window !== 'undefined' && window.innerWidth >= SIDEBAR_BREAKPOINT);
 
   useEffect(() => {
     const handleResize = () => {
-      const isDesktop = window.innerWidth >= 900;
+      const isDesktop = window.innerWidth >= SIDEBAR_BREAKPOINT;
       setIsDesktopLayout(current => current === isDesktop ? current : isDesktop);
     };
     window.addEventListener('resize', handleResize);
@@ -213,7 +214,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     let animationFrame = 0;
     const updateContentPositions = () => {
       animationFrame = 0;
-      const sidebarRight = window.innerWidth >= 900 ? sidebar.getBoundingClientRect().right : 0;
+      const sidebarRight = window.innerWidth >= SIDEBAR_BREAKPOINT ? sidebar.getBoundingClientRect().right : 0;
       const content = page.querySelectorAll<HTMLElement>('[data-sidebar-aware]');
 
       const shifts = Array.from(content, element => {
