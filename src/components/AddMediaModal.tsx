@@ -20,7 +20,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   onMediaAdded
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [results, setResults] = useState<MetadataSearchResult[]>([]);
+  const [results, setResults] = useState<Record<MediaType, MetadataSearchResult[]>>({} as Record<MediaType, MetadataSearchResult[]>);
   const [isSearching, setIsSearching] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
@@ -31,7 +31,6 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
-    setResults([]);
 
     try {
       let searchResults: MetadataSearchResult[] = [];
@@ -40,7 +39,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
       } else {
         searchResults = await tmdbProvider.searchMedia(searchQuery, type);
       }
-      setResults(searchResults);
+      setResults(prev => ({ ...prev, [type]: searchResults }));
     } catch (err) {
       console.error('Failed to search external provider:', err);
     } finally {
@@ -61,9 +60,9 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   }, [isOpen]);
 
   useEffect(() => {
-    // Only trigger search if the query isn't empty AND we don't already have results for this type
-    if (searchQuery.trim())
+    if (searchQuery.trim() && (!results[type] || results[type].length === 0)) {
       handleSearch(searchQuery);
+    }
   }, [type])
 
   useEffect(() => {
@@ -81,15 +80,20 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedQuery(searchQuery);
-    }, 800); // X milliseconds
+    }, 800);
 
     return () => {
-      clearTimeout(handler); // Clears the timer if query changes before 500ms
+      clearTimeout(handler);
     };
   }, [searchQuery]);
 
   useEffect(() => {
     if (debouncedQuery.trim()) {
+      // When the query changes, we should probably clear cached results 
+      // or trigger a search for the current type.
+      // To ensure other types also refresh when they are eventually selected,
+      // we clear the results cache for all types when the query changes.
+      setResults({} as Record<MediaType, MetadataSearchResult[]>); 
       handleSearch(debouncedQuery);
     }
   }, [debouncedQuery]);
@@ -237,9 +241,9 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
           </form>
 
           {/* Results Grid */}
-          {results.length > 0 ? (
+          {results[type] && results[type].length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              {results.map((res, idx) => {
+              {results[type].map((res, idx) => {
                 const isAdded = addedIds.has(res.external_id);
                 const isImporting = importingId === res.external_id;
 
@@ -313,7 +317,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
                 );
               })}
             </div>
-          ) : searchQuery && !isSearching ? (
+          ) : searchQuery && !isSearching && (!results[type] || results[type].length === 0) ? (
             <div className="p-8 text-center text-gray-400 bg-[#1b1d2a] rounded-xl border border-[#2d3145]">
               <p className="text-sm font-medium">No results found for "{searchQuery}". Try a different search term.</p>
             </div>
