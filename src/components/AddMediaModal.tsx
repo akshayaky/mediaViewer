@@ -24,29 +24,10 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
+  // const [mediaType, setMediaType] = useState(type);
 
-  useEffect(() => {
-    if (isOpen) {
-      window.history.pushState({ isModalOpen: true }, '');
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleCloseSheets = (e: CustomEvent) => {
-      onClose();
-      e.preventDefault();
-    };
-    window.addEventListener('close-mobile-sheets' as any, handleCloseSheets);
-    return () => {
-      window.removeEventListener('close-mobile-sheets' as any, handleCloseSheets);
-    };
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
-  const handleSearch = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
@@ -66,6 +47,56 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
       setIsSearching(false);
     }
   };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    handleSearch(searchQuery)
+  };
+
+
+  useEffect(() => {
+    if (isOpen) {
+      window.history.pushState({ isModalOpen: true }, '');
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    // Only trigger search if the query isn't empty AND we don't already have results for this type
+    if (searchQuery.trim())
+      handleSearch(searchQuery);
+  }, [type])
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleCloseSheets = (e: CustomEvent) => {
+      onClose();
+      e.preventDefault();
+    };
+    window.addEventListener('close-mobile-sheets' as any, handleCloseSheets);
+    return () => {
+      window.removeEventListener('close-mobile-sheets' as any, handleCloseSheets);
+    };
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 800); // X milliseconds
+
+    return () => {
+      clearTimeout(handler); // Clears the timer if query changes before 500ms
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (debouncedQuery.trim()) {
+      handleSearch(debouncedQuery);
+    }
+  }, [debouncedQuery]);
+
+  if (!isOpen) return null;
+
+
 
   const handleImportMedia = async (candidate: MetadataSearchResult) => {
     setImportingId(candidate.external_id);
@@ -173,7 +204,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
         {/* Modal Body */}
         <div className="p-6 space-y-4 flex-1 overflow-y-auto">
           {/* Search Form */}
-          <form onSubmit={handleSearch} className="flex space-x-2">
+          <form onSubmit={handleSubmit} className="flex space-x-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -182,6 +213,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-rose-500"
+                autoFocus
               />
             </div>
 

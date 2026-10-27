@@ -214,6 +214,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-rose-500"
+                autoFocus
               />
             </div>
 
