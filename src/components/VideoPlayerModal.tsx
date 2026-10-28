@@ -105,6 +105,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   // Next Episode Countdown state
   const [showNextCountdown, setShowNextCountdown] = useState<boolean>(false);
   const [countdownSeconds, setCountdownSeconds] = useState<number>(5);
+  const [countdownCancelled, setCountdownCancelled] = useState<boolean>(false);
   const countdownIntervalRef = useRef<any>(null);
 
   // Settings: Autoplay Next
@@ -422,13 +423,17 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     setCurrentTime(video.currentTime);
 
     // If reached end (>= 98%) or ended, handle next episode countdown
-    if (video.duration > 0 && video.currentTime / video.duration >= 0.98 && !showNextCountdown) {
+    if (video.duration > 0 && video.currentTime / video.duration >= 0.98 && !showNextCountdown && !countdownCancelled) {
       saveProgress(video.currentTime, video.duration, true);
 
       if (media.type === 'TV Series' && nextEpInfo && autoplayNextSetting) {
         setShowNextCountdown(true);
         setCountdownSeconds(5);
       }
+    } else if ((video.duration > 0 && video.currentTime / video.duration < 0.98)) {
+      // If user seeks back, hide the countdown and reset cancellation
+      setShowNextCountdown(false);
+      setCountdownCancelled(false);
     }
   };
 
@@ -861,6 +866,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               onClick={() => {
                 if (countdownIntervalRef.current) clearTimeout(countdownIntervalRef.current);
                 setShowNextCountdown(false);
+                setCountdownCancelled(true);
               }}
               className="px-3.5 py-1.5 rounded-xl border border-white/20 text-gray-300 hover:bg-white/10 text-xs font-semibold cursor-pointer"
             >
