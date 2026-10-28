@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { subtitleService } from '../services/SubtitleService';
 import { dbService } from '../services/DatabaseService';
 import { PlaybackProgress } from '../types/media';

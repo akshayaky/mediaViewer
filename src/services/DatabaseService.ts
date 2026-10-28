@@ -16,27 +16,35 @@ export class DatabaseService {
   private db: DatabaseTauri | null = null;
   private initialized = false;
   private inMemoryStore = new Map<string, string>();
+  private instancePrefix: string;
+
+  constructor(prefix: string = '') {
+    this.instancePrefix = prefix;
+  }
 
   private getItem(key: string): string | null {
+    const fullKey = this.instancePrefix ? `${this.instancePrefix}:${key}` : key;
     if (typeof localStorage !== 'undefined') {
-      return localStorage.getItem(key);
+      return localStorage.getItem(fullKey);
     }
-    return this.inMemoryStore.get(key) || null;
+    return this.inMemoryStore.get(fullKey) || null;
   }
 
   private setItem(key: string, value: string): void {
+    const fullKey = this.instancePrefix ? `${this.instancePrefix}:${key}` : key;
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(key, value);
+      localStorage.setItem(fullKey, value);
     } else {
-      this.inMemoryStore.set(key, value);
+      this.inMemoryStore.set(fullKey, value);
     }
   }
 
   private removeItem(key: string): void {
+    const fullKey = this.instancePrefix ? `${this.instancePrefix}:${key}` : key;
     if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem(key);
+      localStorage.removeItem(fullKey);
     } else {
-      this.inMemoryStore.delete(key);
+      this.inMemoryStore.delete(fullKey);
     }
   }
 
@@ -179,6 +187,13 @@ export class DatabaseService {
         updated_at TEXT NOT NULL,
         is_completed INTEGER DEFAULT 0,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
+      )`,
+      `CREATE TABLE IF NOT EXISTS sync_tombstones (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        deleted_at TEXT NOT NULL,
+        device_id TEXT
       )`
     ];
 
@@ -218,6 +233,15 @@ export class DatabaseService {
     await this.addColumnIfNotExists('local_file', 'end_episode', 'INTEGER');
     await this.addColumnIfNotExists('local_file', 'parsed_title', 'TEXT');
     await this.addColumnIfNotExists('local_file', 'parsed_year', 'INTEGER');
+    await this.addColumnIfNotExists('wishlist', 'updated_at', 'TEXT');
+    await this.addColumnIfNotExists('external_ids', 'updated_at', 'TEXT');
+    await this.addColumnIfNotExists('availability', 'updated_at', 'TEXT');
+
+    try {
+      await this.db.execute('CREATE INDEX IF NOT EXISTS idx_sync_tombstones_type_id ON sync_tombstones(entity_type, entity_id);');
+    } catch {
+      // Index already exists
+    }
 
     try {
       await this.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_external_ids_provider_ext ON external_ids(provider, external_id);');
@@ -240,8 +264,7 @@ export class DatabaseService {
   /** Retrieves all media items sorted alphabetically by title. */
   public async getAllMedia(): Promise<Media[]> {
     if (!this.db) {
-      if (typeof localStorage === 'undefined') return [];
-      const stored = localStorage.getItem('web_media_library');
+      const stored = this.getItem('web_media_library');
       return stored ? JSON.parse(stored) : [];
     }
     const res = await this.db.select<Media[]>('SELECT * FROM media ORDER BY title ASC');
@@ -250,8 +273,7 @@ export class DatabaseService {
 
   public async getMediaById(id: string): Promise<Media | null> {
     if (!this.db) {
-      if (typeof localStorage === 'undefined') return null;
-      const stored = localStorage.getItem('web_media_library');
+      const stored = this.getItem('web_media_library');
       const mediaList: Media[] = stored ? JSON.parse(stored) : [];
       return mediaList.find(m => m.id === id) || null;
     }
@@ -318,8 +340,7 @@ export class DatabaseService {
 
   public async saveMedia(media: Media): Promise<void> {
     if (!this.db) {
-      if (typeof localStorage === 'undefined') return;
-      const stored = localStorage.getItem('web_media_library');
+      const stored = this.getItem('web_media_library');
       const mediaList: Media[] = stored ? JSON.parse(stored) : [];
       const index = mediaList.findIndex(m => m.id === media.id);
       if (index > -1) {
@@ -327,7 +348,7 @@ export class DatabaseService {
       } else {
         mediaList.push(media);
       }
-      localStorage.setItem('web_media_library', JSON.stringify(mediaList));
+      this.setItem('web_media_library', JSON.stringify(mediaList));
       return;
     }
     await this.db.execute(
@@ -470,7 +491,28 @@ export class DatabaseService {
     }
   }
 
-  public async deleteMedia(id: string): Promise<void> {
+  public async deleteMedia(id: string, deviceId?: string): Promise<void> {
+    const now = new Date().toISOString();
+    // Gather related entity IDs before deletion to create tombstones
+    const histories = await this.getHistoryForMedia(id);
+    const availabilities = await this.getAvailabilityForMedia(id);
+    const externalIds = await this.getExternalIdsForMedia(id);
+    const progresses = await this.getAllPlaybackProgressForMedia(id);
+
+    await this.recordTombstone('media', id, deviceId, now);
+    for (const h of histories) {
+      await this.recordTombstone('media_history', h.id, deviceId, now);
+    }
+    for (const a of availabilities) {
+      await this.recordTombstone('availability', a.id, deviceId, now);
+    }
+    for (const e of externalIds) {
+      await this.recordTombstone('external_ids', e.id, deviceId, now);
+    }
+    for (const p of progresses) {
+      await this.recordTombstone('playback_progress', p.id, deviceId, now);
+    }
+
     await this.deleteMediaRecords('id = ?', [id]);
   }
 
@@ -495,7 +537,18 @@ export class DatabaseService {
 
   private async deleteMediaRecords(mediaFilter: string, params: string[]): Promise<number> {
     if (!this.db) {
-      throw new Error('Database is not initialized.');
+      const stored = this.getItem('web_media_library');
+      let list: Media[] = stored ? JSON.parse(stored) : [];
+      const initLen = list.length;
+      if (mediaFilter === 'id = ?' && params[0]) {
+        list = list.filter(m => m.id !== params[0]);
+      } else if (mediaFilter === 'type = ?' && params[0]) {
+        list = list.filter(m => m.type !== params[0]);
+      } else {
+        list = [];
+      }
+      this.setItem('web_media_library', JSON.stringify(list));
+      return initLen - list.length;
     }
 
     try {
@@ -540,7 +593,10 @@ export class DatabaseService {
 
   /** Retrieves linked provider external IDs for a media item. */
   public async getExternalIdsForMedia(media_id: string): Promise<ExternalID[]> {
-    if (!this.db) return [];
+    if (!this.db) {
+      const all = await this.getAllExternalIds();
+      return all.filter(e => e.media_id === media_id);
+    }
     const res = await this.db.select<ExternalID[]>('SELECT * FROM external_ids WHERE media_id = ?', [media_id]);
     const results: ExternalID[] = [];
     for (const row of res) {
@@ -555,13 +611,51 @@ export class DatabaseService {
   }
 
   public async saveExternalId(ext: ExternalID): Promise<void> {
-    if (!this.db) return;
+    const updatedAt = ext.updated_at || new Date().toISOString();
+    if (!this.db) {
+      const all = await this.getAllExternalIds();
+      const idx = all.findIndex(e => e.id === ext.id);
+      const record = { ...ext, updated_at: updatedAt };
+      if (idx > -1) {
+        all[idx] = record;
+      } else {
+        all.push(record);
+      }
+      this.setItem('web_external_ids', JSON.stringify(all));
+      return;
+    }
     await this.db.execute(
-      `INSERT INTO external_ids (id, media_id, provider, external_id)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET provider=excluded.provider, external_id=excluded.external_id`,
-      [ext.id, ext.media_id, ext.provider, ext.external_id]
+      `INSERT INTO external_ids (id, media_id, provider, external_id, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET provider=excluded.provider, external_id=excluded.external_id, updated_at=excluded.updated_at`,
+      [ext.id, ext.media_id, ext.provider, ext.external_id, updatedAt]
     );
+  }
+
+  public async getAllExternalIds(): Promise<ExternalID[]> {
+    if (!this.db) {
+      const stored = this.getItem('web_external_ids');
+      return stored ? JSON.parse(stored) : [];
+    }
+    const res = await this.db.select<Record<string, any>[]>('SELECT * FROM external_ids');
+    return res.map(row => ({
+      id: row.id as string,
+      media_id: row.media_id as string,
+      provider: row.provider as string,
+      external_id: row.external_id as string,
+      updated_at: (row.updated_at as string) || undefined
+    }));
+  }
+
+  public async deleteExternalId(id: string, deviceId?: string): Promise<void> {
+    await this.recordTombstone('external_ids', id, deviceId);
+    if (!this.db) {
+      const all = await this.getAllExternalIds();
+      const filtered = all.filter(e => e.id !== id);
+      this.setItem('web_external_ids', JSON.stringify(filtered));
+      return;
+    }
+    await this.db.execute('DELETE FROM external_ids WHERE id = ?', [id]);
   }
 
   // ==========================================
@@ -570,7 +664,10 @@ export class DatabaseService {
 
   /** Retrieves interaction logs for a specific media item sorted newest first. */
   public async getHistoryForMedia(media_id: string): Promise<MediaHistory[]> {
-    if (!this.db) return [];
+    if (!this.db) {
+      const all = await this.getAllHistory();
+      return all.filter(h => h.media_id === media_id);
+    }
     const res = await this.db.select<MediaHistory[]>('SELECT * FROM media_history WHERE media_id = ? ORDER BY created_at DESC', [media_id]);
     const results: MediaHistory[] = [];
     for (const row of res) {
@@ -594,7 +691,10 @@ export class DatabaseService {
   }
 
   public async getAllHistory(): Promise<MediaHistory[]> {
-    if (!this.db) return [];
+    if (!this.db) {
+      const stored = this.getItem('web_media_history');
+      return stored ? JSON.parse(stored) : [];
+    }
     const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM media_history ORDER BY created_at DESC');
     return rows.map(row => ({
       id: row.id,
@@ -612,9 +712,31 @@ export class DatabaseService {
     }));
   }
 
+  public async deleteHistory(id: string, deviceId?: string): Promise<void> {
+    await this.recordTombstone('media_history', id, deviceId);
+    if (!this.db) {
+      const all = await this.getAllHistory();
+      const filtered = all.filter(h => h.id !== id);
+      this.setItem('web_media_history', JSON.stringify(filtered));
+      return;
+    }
+    await this.db.execute('DELETE FROM media_history WHERE id = ?', [id]);
+  }
+
   public async saveHistory(history: MediaHistory): Promise<void> {
-    if (!this.db) return;
     const updatedAt = history.updated_at || new Date().toISOString();
+    const record = { ...history, updated_at: updatedAt };
+    if (!this.db) {
+      const all = await this.getAllHistory();
+      const idx = all.findIndex(h => h.id === history.id);
+      if (idx > -1) {
+        all[idx] = record;
+      } else {
+        all.push(record);
+      }
+      this.setItem('web_media_history', JSON.stringify(all));
+      return;
+    }
     await this.db.execute(
       `INSERT INTO media_history (id, media_id, started_at, completed_at, status, score, thoughts, context, source, original_source_record_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -827,7 +949,10 @@ export class DatabaseService {
 
   /** Retrieves streaming availability entries for a specific media item. */
   public async getAvailabilityForMedia(media_id: string): Promise<Availability[]> {
-    if (!this.db) return [];
+    if (!this.db) {
+      const all = await this.getAllAvailability();
+      return all.filter(a => a.media_id === media_id);
+    }
     const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM availability WHERE media_id = ?', [media_id]);
     return rows.map(row => ({
         id: row.id as string,
@@ -841,16 +966,29 @@ export class DatabaseService {
   }
 
   public async saveAvailability(avail: Availability): Promise<void> {
-    if (!this.db) return;
+    const updatedAt = avail.updated_at || avail.last_checked || new Date().toISOString();
+    if (!this.db) {
+      const all = await this.getAllAvailability();
+      const idx = all.findIndex(a => a.id === avail.id);
+      const record = { ...avail, updated_at: updatedAt };
+      if (idx > -1) {
+        all[idx] = record;
+      } else {
+        all.push(record);
+      }
+      this.setItem('web_availability', JSON.stringify(all));
+      return;
+    }
     await this.db.execute(
-      `INSERT INTO availability (id, media_id, provider, country, availability_type, url, last_checked)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO availability (id, media_id, provider, country, availability_type, url, last_checked, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          provider=excluded.provider,
          country=excluded.country,
          availability_type=excluded.availability_type,
          url=excluded.url,
-         last_checked=excluded.last_checked`,
+         last_checked=excluded.last_checked,
+         updated_at=excluded.updated_at`,
       [
         avail.id,
         avail.media_id,
@@ -858,9 +996,39 @@ export class DatabaseService {
         avail.country || null,
         avail.availability_type,
         avail.url || null,
-        avail.last_checked
+        avail.last_checked,
+        updatedAt
       ]
     );
+  }
+
+  public async getAllAvailability(): Promise<Availability[]> {
+    if (!this.db) {
+      const stored = this.getItem('web_availability');
+      return stored ? JSON.parse(stored) : [];
+    }
+    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM availability');
+    return rows.map(row => ({
+      id: row.id as string,
+      media_id: row.media_id as string,
+      provider: row.provider as string,
+      country: (row.country as string) || undefined,
+      availability_type: row.availability_type as any,
+      url: (row.url as string) || undefined,
+      last_checked: row.last_checked as string,
+      updated_at: (row.updated_at as string) || row.last_checked as string
+    }));
+  }
+
+  public async deleteAvailability(id: string, deviceId?: string): Promise<void> {
+    await this.recordTombstone('availability', id, deviceId);
+    if (!this.db) {
+      const all = await this.getAllAvailability();
+      const filtered = all.filter(a => a.id !== id);
+      this.setItem('web_availability', JSON.stringify(filtered));
+      return;
+    }
+    await this.db.execute('DELETE FROM availability WHERE id = ?', [id]);
   }
 
   // ==========================================
@@ -869,7 +1037,10 @@ export class DatabaseService {
 
   /** Retrieves all wishlist items sorted newest first. */
   public async getAllWishlist(): Promise<Wishlist[]> {
-    if (!this.db) return [];
+    if (!this.db) {
+      const stored = this.getItem('web_wishlist');
+      return stored ? JSON.parse(stored) : [];
+    }
     const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM wishlist ORDER BY added_at DESC');
     return rows.map(row => ({
       id: row.id,
@@ -886,10 +1057,22 @@ export class DatabaseService {
   }
 
   public async saveWishlist(item: Wishlist): Promise<void> {
-    if (!this.db) return;
+    const updatedAt = item.updated_at || item.added_at || new Date().toISOString();
+    if (!this.db) {
+      const all = await this.getAllWishlist();
+      const idx = all.findIndex(w => w.id === item.id);
+      const record = { ...item, updated_at: updatedAt };
+      if (idx > -1) {
+        all[idx] = record;
+      } else {
+        all.push(record);
+      }
+      this.setItem('web_wishlist', JSON.stringify(all));
+      return;
+    }
     await this.db.execute(
-      `INSERT INTO wishlist (id, media_id, title, type, source, external_url, notes, added_at, target_release_date, poster)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO wishlist (id, media_id, title, type, source, external_url, notes, added_at, target_release_date, poster, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          media_id=excluded.media_id,
          title=excluded.title,
@@ -897,7 +1080,8 @@ export class DatabaseService {
          source=excluded.source,
          external_url=excluded.external_url,
          notes=excluded.notes,
-         poster=excluded.poster`,
+         poster=excluded.poster,
+         updated_at=excluded.updated_at`,
       [
         item.id,
         item.media_id || null,
@@ -908,9 +1092,21 @@ export class DatabaseService {
         item.notes || null,
         item.added_at,
         item.target_release_date || null,
-        item.poster || null
+        item.poster || null,
+        updatedAt
       ]
     );
+  }
+
+  public async deleteWishlist(id: string, deviceId?: string): Promise<void> {
+    await this.recordTombstone('wishlist', id, deviceId);
+    if (!this.db) {
+      const all = await this.getAllWishlist();
+      const filtered = all.filter(w => w.id !== id);
+      this.setItem('web_wishlist', JSON.stringify(filtered));
+      return;
+    }
+    await this.db.execute('DELETE FROM wishlist WHERE id = ?', [id]);
   }
 
   // ==========================================
@@ -969,8 +1165,7 @@ export class DatabaseService {
   /** Retrieves application settings key-value object. */
   public async getSettings(): Promise<AppSettings> {
     if (!this.db) {
-      if (typeof localStorage === 'undefined') return {};
-      const stored = localStorage.getItem('app_settings');
+      const stored = this.getItem('app_settings');
       return stored ? JSON.parse(stored) : {};
     }
     const rows = await this.db.select<{ key: string; value: string }[]>('SELECT key, value FROM settings');
@@ -989,11 +1184,10 @@ export class DatabaseService {
 
   public async saveSetting(key: keyof AppSettings, value: any): Promise<void> {
     if (!this.db) {
-      if (typeof localStorage === 'undefined') return;
-      const stored = localStorage.getItem('app_settings');
+      const stored = this.getItem('app_settings');
       const settings = stored ? JSON.parse(stored) : {};
       settings[key] = value;
-      localStorage.setItem('app_settings', JSON.stringify(settings));
+      this.setItem('app_settings', JSON.stringify(settings));
       return;
     }
     const strVal = typeof value === 'string' ? value : JSON.stringify(value);
@@ -1039,18 +1233,19 @@ export class DatabaseService {
   public async getAllPlaybackProgressForMedia(media_id: string): Promise<PlaybackProgress[]> {
     if (!this.db) {
       const results: PlaybackProgress[] = [];
-      const prefix = `playback_progress_${media_id}_`;
+      const targetPrefix = `playback_progress_${media_id}_`;
+      const fullTarget = this.instancePrefix ? `${this.instancePrefix}:${targetPrefix}` : targetPrefix;
       if (typeof localStorage !== 'undefined') {
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key && key.startsWith(prefix)) {
+          if (key && key.startsWith(fullTarget)) {
             const item = localStorage.getItem(key);
             if (item) results.push(JSON.parse(item));
           }
         }
       } else {
         for (const [key, value] of this.inMemoryStore.entries()) {
-          if (key.startsWith(prefix)) {
+          if (key.startsWith(fullTarget)) {
             results.push(JSON.parse(value));
           }
         }
@@ -1075,13 +1270,22 @@ export class DatabaseService {
 
   public async getAllPlaybackProgress(): Promise<PlaybackProgress[]> {
     if (!this.db) {
-      if (typeof localStorage === 'undefined') return [];
       const results: PlaybackProgress[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('playback_progress_')) {
-          const item = localStorage.getItem(key);
-          if (item) results.push(JSON.parse(item));
+      const targetPrefix = 'playback_progress_';
+      const fullTarget = this.instancePrefix ? `${this.instancePrefix}:${targetPrefix}` : targetPrefix;
+      if (typeof localStorage !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(fullTarget)) {
+            const item = localStorage.getItem(key);
+            if (item) results.push(JSON.parse(item));
+          }
+        }
+      } else {
+        for (const [key, value] of this.inMemoryStore.entries()) {
+          if (key.startsWith(fullTarget)) {
+            results.push(JSON.parse(value));
+          }
         }
       }
       return results;
@@ -1145,7 +1349,11 @@ export class DatabaseService {
     }
   }
 
-  public async deletePlaybackProgress(media_id: string, season: number = 0, episode: number = 0): Promise<void> {
+  public async deletePlaybackProgress(media_id: string, season: number = 0, episode: number = 0, deviceId?: string): Promise<void> {
+    const progress = await this.getPlaybackProgress(media_id, season, episode);
+    if (progress) {
+      await this.recordTombstone('playback_progress', progress.id, deviceId);
+    }
     if (!this.db) {
       this.removeItem(`playback_progress_${media_id}_${season}_${episode}`);
       return;
@@ -1154,6 +1362,79 @@ export class DatabaseService {
       'DELETE FROM playback_progress WHERE media_id = ? AND season = ? AND episode = ?',
       [media_id, season, episode]
     );
+  }
+
+  // ==========================================
+  // 10. SYNC TOMBSTONES REPOSITORY & RETENTION
+  // ==========================================
+
+  public async recordTombstone(
+    entity_type: 'media' | 'media_history' | 'wishlist' | 'playback_progress' | 'external_ids' | 'availability',
+    entity_id: string,
+    device_id?: string,
+    deleted_at?: string
+  ): Promise<void> {
+    const tombstoneId = `tomb_${entity_type}_${entity_id}`;
+    const timestamp = deleted_at || new Date().toISOString();
+    if (!this.db) {
+      this.setItem(`tombstone_${tombstoneId}`, JSON.stringify({
+        id: tombstoneId,
+        entity_type,
+        entity_id,
+        deleted_at: timestamp,
+        device_id: device_id || 'local'
+      }));
+      return;
+    }
+    await this.db.execute(
+      `INSERT INTO sync_tombstones (id, entity_type, entity_id, deleted_at, device_id)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET deleted_at=excluded.deleted_at, device_id=excluded.device_id`,
+      [tombstoneId, entity_type, entity_id, timestamp, device_id || null]
+    );
+  }
+
+  public async getSyncTombstones(since?: string): Promise<any[]> {
+    if (!this.db) {
+      const tombstones: any[] = [];
+      const targetPrefix = 'tombstone_';
+      const fullTarget = this.instancePrefix ? `${this.instancePrefix}:${targetPrefix}` : targetPrefix;
+      if (typeof localStorage !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(fullTarget)) {
+            const val = localStorage.getItem(key);
+            if (val) {
+              const parsed = JSON.parse(val);
+              if (!since || parsed.deleted_at > since) tombstones.push(parsed);
+            }
+          }
+        }
+      } else {
+        for (const [key, val] of this.inMemoryStore.entries()) {
+          if (key.startsWith(fullTarget)) {
+            const parsed = JSON.parse(val);
+            if (!since || parsed.deleted_at > since) tombstones.push(parsed);
+          }
+        }
+      }
+      return tombstones;
+    }
+
+    if (since) {
+      return this.db.select<Record<string, any>[]>(
+        'SELECT * FROM sync_tombstones WHERE deleted_at > ? ORDER BY deleted_at ASC',
+        [since]
+      );
+    }
+    return this.db.select<Record<string, any>[]>('SELECT * FROM sync_tombstones ORDER BY deleted_at ASC');
+  }
+
+  public async cleanupOldTombstones(retentionDays: number = 30): Promise<number> {
+    const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+    if (!this.db) return 0;
+    const res = await this.db.execute('DELETE FROM sync_tombstones WHERE deleted_at < ?', [cutoff]);
+    return res.rowsAffected;
   }
 
   private async syncCompletionToHistory(media_id: string, season: number, episode: number): Promise<void> {

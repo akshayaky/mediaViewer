@@ -7,6 +7,7 @@ export interface ExternalID {
   media_id: string;
   provider: 'TMDB' | 'IGDB' | 'RAWG' | 'Steam' | 'Notion' | string;
   external_id: string;
+  updated_at?: string;
 }
 
 export interface CastMember {
@@ -114,6 +115,7 @@ export interface Availability {
   availability_type: 'Stream' | 'Buy' | 'Rent' | 'Local' | 'Subscription';
   url?: string;
   last_checked: string;
+  updated_at?: string;
 }
 
 export interface Wishlist {
@@ -127,6 +129,15 @@ export interface Wishlist {
   added_at: string;
   target_release_date?: string;
   poster?: string;
+  updated_at?: string;
+}
+
+export interface SyncTombstone {
+  id: string;
+  entity_type: 'media' | 'media_history' | 'wishlist' | 'playback_progress' | 'external_ids' | 'availability';
+  entity_id: string;
+  deleted_at: string;
+  device_id?: string;
 }
 
 export interface NotionRawRecord {

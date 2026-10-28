@@ -6,6 +6,9 @@ import { AppSettings, MediaType } from '../types/media';
 import { useNotionImporter } from '../hooks/useNotionImporter';
 import { useNotionSync } from '../hooks/useNotionSync';
 import { useLibraryScanner } from '../hooks/useLibraryScanner';
+import { googleOAuthService } from '../services/GoogleOAuthService';
+import { googleDriveSyncEngine, SyncStatus } from '../services/GoogleDriveSyncEngine';
+import { secureStorageService } from '../services/SecureStorageService';
 import { DEFAULT_FOLDERS } from '../constants/appConstants';
 import {
   Settings,
@@ -27,7 +30,11 @@ import {
   ArrowRightLeft,
   Check,
   Plus,
-  Trash2
+  Trash2,
+  Cloud,
+  RefreshCw,
+  LogOut,
+  Shield
 } from 'lucide-react';
 
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
@@ -100,6 +107,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
 
   const [tokenInput, setTokenInput] = useState(notionToken);
   const [selectedDbId, setSelectedDbId] = useState(notionDbId);
+
+  // Google Drive Sync State
+  const [gdriveSyncStatus, setGdriveSyncStatus] = useState<SyncStatus>(googleDriveSyncEngine.getStatus());
+  const [gdriveUser, setGdriveUser] = useState<{ email?: string; name?: string; picture?: string } | null>(null);
+  const [isConnectingGdrive, setIsConnectingGdrive] = useState(false);
+  const [gdriveError, setGdriveError] = useState<string | null>(null);
+  const [oauthCodeInput, setOauthCodeInput] = useState('');
+  const [showCodeInputModal, setShowCodeInputModal] = useState(false);
+
+  useEffect(() => {
+    const unsubscribeSync = googleDriveSyncEngine.subscribeStatus(status => {
+      setGdriveSyncStatus(status);
+    });
+
+    // Check existing Google user profile
+    googleOAuthService.getValidAccessToken().then(token => {
+      if (token) {
+        googleOAuthService.fetchUserProfile(token).then(profile => {
+          setGdriveUser(profile);
+        }).catch(() => setGdriveUser(null));
+      }
+    });
+
+    return () => {
+      unsubscribeSync();
+    };
+  }, []);
 
   useEffect(() => {
     dbService.getSettings().then(nextSettings => {
@@ -337,6 +371,220 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
         accept={isAndroid ? '*/*' : undefined}
         {...(!isAndroid ? ({ webkitdirectory: '', directory: '' } as any) : {})}
       />
+
+      {/* Google Drive Multi-Device Synchronization Section */}
+      <section className="bg-[#14161f] p-6 rounded-2xl border border-sky-500/30 space-y-5 shadow-lg">
+        <div className="flex items-center justify-between border-b border-[#232736] pb-4">
+          <div className="flex items-center space-x-3">
+            <Cloud className="w-6 h-6 text-sky-400" />
+            <div>
+              <h2 className="text-xl font-bold text-white">Google Drive Cloud Synchronization</h2>
+              <p className="text-xs text-gray-400">
+                Synchronize your media library, ratings, rewatch history, wishlist, and playback progress across desktop and Android devices via your private Google Drive AppData folder
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {gdriveUser ? (
+              <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-xs px-3 py-1 rounded-full font-bold flex items-center space-x-1.5">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Drive Connected</span>
+              </span>
+            ) : (
+              <span className="bg-amber-950 text-amber-400 border border-amber-500/40 text-xs px-3 py-1 rounded-full font-semibold">
+                Not Connected
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Security & OS Vault Notice */}
+        <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] text-xs space-y-1.5">
+          <div className="flex items-center space-x-2 font-bold text-gray-200">
+            <Shield className="w-4 h-4 text-sky-400" />
+            <span>Secure Storage Status</span>
+          </div>
+          <p className="text-gray-300 leading-relaxed">
+            {secureStorageService.getSecureStorageStatusMessage()}
+          </p>
+        </div>
+
+        {/* Connection Controls & User Details */}
+        <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-4">
+          {!gdriveUser ? (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Connect Google Account</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Connect using Google OAuth 2.0 PKCE flow. Only application data scope (`drive.appdata`) is requested.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsConnectingGdrive(true);
+                    setGdriveError(null);
+                    try {
+                      const { authUrl } = await googleOAuthService.prepareAuthUrl();
+                      if (typeof window !== 'undefined') {
+                        window.open(authUrl, '_blank');
+                        setShowCodeInputModal(true);
+                      }
+                    } catch (err: any) {
+                      setGdriveError(err.message || 'Failed to initialize Google sign-in');
+                    } finally {
+                      setIsConnectingGdrive(false);
+                    }
+                  }}
+                  disabled={isConnectingGdrive}
+                  className="bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl flex items-center justify-center space-x-2 transition-all shadow-md cursor-pointer shrink-0"
+                >
+                  {isConnectingGdrive ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Cloud className="w-4 h-4" />
+                  )}
+                  <span>Connect Google Account</span>
+                </button>
+              </div>
+
+              {/* OAuth Code Entry Modal / Input */}
+              {showCodeInputModal && (
+                <div className="bg-[#13151f] p-4 rounded-xl border border-sky-500/40 space-y-3 animate-fadeIn">
+                  <p className="text-xs text-gray-200 font-semibold">
+                    Complete Google Sign-In in the browser window, then paste the authorization code below:
+                  </p>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={oauthCodeInput}
+                      onChange={e => setOauthCodeInput(e.target.value)}
+                      placeholder="Paste Google OAuth Authorization Code"
+                      className="flex-1 bg-[#1a1d29] border border-[#2d3145] rounded-xl p-2.5 text-xs text-white font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!oauthCodeInput.trim()) return;
+                        setIsConnectingGdrive(true);
+                        setGdriveError(null);
+                        try {
+                          const state = Math.random().toString(36).substring(2, 15);
+                          await googleOAuthService.exchangeCodeForTokens(oauthCodeInput.trim(), state);
+                          const token = await googleOAuthService.getValidAccessToken();
+                          if (token) {
+                            const profile = await googleOAuthService.fetchUserProfile(token);
+                            setGdriveUser(profile);
+                          }
+                          setShowCodeInputModal(false);
+                          setOauthCodeInput('');
+                          setSavedMessage('Connected Google Account successfully!');
+                          setTimeout(() => setSavedMessage(''), 3000);
+                        } catch (err: any) {
+                          setGdriveError(err.message || 'Authorization code exchange failed');
+                        } finally {
+                          setIsConnectingGdrive(false);
+                        }
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer"
+                    >
+                      Complete Link
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                {gdriveUser.picture ? (
+                  <img src={gdriveUser.picture} alt="Google Profile" className="w-10 h-10 rounded-full border border-sky-500/50" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-sky-900/60 border border-sky-500/50 flex items-center justify-center font-bold text-sky-300">
+                    {gdriveUser.name ? gdriveUser.name[0] : 'G'}
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-sm font-bold text-white">{gdriveUser.name || 'Connected Google User'}</h3>
+                  <p className="text-xs text-gray-400 font-mono">{gdriveUser.email}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await googleDriveSyncEngine.performSync();
+                  }}
+                  disabled={gdriveSyncStatus.state === 'syncing'}
+                  className="bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-2 transition-all shadow-md cursor-pointer"
+                >
+                  <RefreshCw className={`w-4 h-4 ${gdriveSyncStatus.state === 'syncing' ? 'animate-spin' : ''}`} />
+                  <span>{gdriveSyncStatus.state === 'syncing' ? 'Syncing...' : 'Sync Now'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await googleOAuthService.signOut();
+                    setGdriveUser(null);
+                    setSavedMessage('Disconnected Google Account.');
+                    setTimeout(() => setSavedMessage(''), 3000);
+                  }}
+                  className="bg-[#232736] hover:bg-rose-950/40 text-gray-300 hover:text-rose-300 border border-[#2d3145] hover:border-rose-500/30 text-xs font-semibold px-3.5 py-2.5 rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Disconnect</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Sync Status Banner */}
+          <div className="pt-2 border-t border-[#2d3145] flex flex-wrap items-center justify-between text-xs gap-2">
+            <div className="flex items-center space-x-2">
+              <span className="text-gray-400">Sync Status:</span>
+              {gdriveSyncStatus.state === 'syncing' && (
+                <span className="text-sky-400 font-bold flex items-center space-x-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Syncing with Google Drive...</span>
+                </span>
+              )}
+              {gdriveSyncStatus.state === 'success' && (
+                <span className="text-emerald-400 font-bold flex items-center space-x-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Synchronized</span>
+                </span>
+              )}
+              {gdriveSyncStatus.state === 'error' && (
+                <span className="text-rose-400 font-bold flex items-center space-x-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>Sync Error</span>
+                </span>
+              )}
+              {gdriveSyncStatus.state === 'idle' && (
+                <span className="text-gray-400 font-medium">Idle</span>
+              )}
+            </div>
+
+            {gdriveSyncStatus.last_sync_time && (
+              <span className="text-gray-400 font-mono">
+                Last Successful Sync: {new Date(gdriveSyncStatus.last_sync_time).toLocaleString()}
+              </span>
+            )}
+          </div>
+
+          {(gdriveError || gdriveSyncStatus.error_message) && (
+            <div role="alert" className="bg-[#2a1719] border border-rose-500/40 p-3 rounded-xl text-xs text-rose-300 flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{gdriveError || gdriveSyncStatus.error_message}</span>
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Header */}
       <div className="border-b border-[#1f222e] pb-6 flex items-center justify-between">

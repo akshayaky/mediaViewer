@@ -18,6 +18,7 @@ A personal entertainment library desktop application for Windows 10/11 built wit
 * **Local Library Folders**: Folder configuration for Movies, TV Shows, and Games folders with file existence tracking and launch info support.
 * **Wishlist & Wanted**: Model supporting wishlists originating from Google, Notion, or manual entries.
 * **Extensible Provider Architecture**: Interfaces for `MetadataProvider`, `ArtworkProvider`, `AvailabilityProvider`, `NotionProvider`, `LocalLibraryScanner`, and `WishlistProvider`.
+* **Google Drive Multi-Device Synchronization**: Account-based synchronization using Google Drive (`drive.appdata` scope) and PKCE OAuth 2.0. Syncs media metadata, ratings, rewatch history, wishlist, and playback progress across desktop and Android devices with deterministic conflict resolution and deletion tombstones.
 
 ---
 
@@ -125,4 +126,5 @@ npm run build
 ## 📚 Developer Guides & Documentation
 
 * 📐 **[System Architecture Guide](./docs/ARCHITECTURE.md)**: Detailed breakdown of project modules, database layer, custom hooks, and data models.
+* ☁️ **[Google Drive Sync Guide](./docs/GOOGLE_DRIVE_SYNC.md)**: Architecture, Google OAuth 2.0 PKCE setup, platform secure storage requirements, conflict resolution policies, and multi-device simulation tests.
 * 🛠️ **[Developer Guide](./docs/DEVELOPER_GUIDE.md)**: Step-by-step instructions for common tasks (adding UI views, extending database tables, adding metadata providers, or modifying scanner rules).
