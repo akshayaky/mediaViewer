@@ -98,7 +98,8 @@ export class GoogleOAuthService {
   /**
    * Initializes the PKCE OAuth flow and builds authorization URL.
    */
-  public async prepareAuthUrl(redirectUri: string = 'http://127.0.0.1:1420/oauth2callback'): Promise<{ authUrl: string; oauthState: OAuthState }> {
+  public async prepareAuthUrl(redirectUri?: string): Promise<{ authUrl: string; oauthState: OAuthState }> {
+    const effectiveRedirectUri = redirectUri || (typeof window !== 'undefined' ? `${window.location.origin}/oauth2callback` : 'http://127.0.0.1:1420/oauth2callback');
     const codeVerifier = this.generateCodeVerifier();
     const codeChallenge = await this.generateCodeChallenge(codeVerifier);
     const state = Math.random().toString(36).substring(2, 15);
@@ -106,13 +107,21 @@ export class GoogleOAuthService {
     const oauthState: OAuthState = {
       codeVerifier,
       state,
-      redirectUri
+      redirectUri: effectiveRedirectUri
     };
     this.pendingOAuthState = oauthState;
 
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        window.sessionStorage.setItem('__gdrive_oauth_state__', JSON.stringify(oauthState));
+      } catch {
+        // Ignore session storage error
+      }
+    }
+
     const params = new URLSearchParams({
       client_id: this.clientId,
-      redirect_uri: redirectUri,
+      redirect_uri: effectiveRedirectUri,
       response_type: 'code',
       scope: `${GOOGLE_DRIVE_SCOPE} https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile`,
       code_challenge: codeChallenge,
@@ -124,6 +133,69 @@ export class GoogleOAuthService {
 
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
     return { authUrl, oauthState };
+  }
+
+  /**
+   * Starts seamless 1-click Google Sign-In flow in browser/window popup.
+   */
+  public async startOneClickSignIn(): Promise<GoogleOAuthTokens> {
+    const { authUrl } = await this.prepareAuthUrl();
+
+    return new Promise<GoogleOAuthTokens>((resolve, reject) => {
+      const width = 500;
+      const height = 650;
+      const left = window.screen.width / 2 - width / 2;
+      const top = window.screen.height / 2 - height / 2;
+
+      const popup = window.open(
+        authUrl,
+        'GoogleSignIn',
+        `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
+      );
+
+      const handleMessage = async (event: MessageEvent) => {
+        if (event.data && event.data.type === 'GOOGLE_OAUTH_REDIRECT') {
+          window.removeEventListener('message', handleMessage);
+          if (popup && !popup.closed) popup.close();
+
+          try {
+            const url = new URL(event.data.url);
+            const code = url.searchParams.get('code');
+            const state = url.searchParams.get('state');
+
+            if (!code) {
+              reject(new Error('OAuth failed: No authorization code received from Google'));
+              return;
+            }
+
+            const tokens = await this.exchangeCodeForTokens(code, state || undefined);
+            window.dispatchEvent(new Event('google-oauth-connected'));
+            resolve(tokens);
+          } catch (err) {
+            reject(err);
+          }
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+
+      // Interval fallback for popup closing
+      const timer = setInterval(async () => {
+        if (!popup || popup.closed) {
+          clearInterval(timer);
+          window.removeEventListener('message', handleMessage);
+
+          // Check if tokens were exchanged in background
+          const activeToken = await this.getValidAccessToken();
+          if (activeToken) {
+            const tokens = await secureStorageService.getTokens();
+            if (tokens) resolve(tokens);
+          } else {
+            reject(new Error('Sign-in window closed before completion'));
+          }
+        }
+      }, 1000);
+    });
   }
 
   /**

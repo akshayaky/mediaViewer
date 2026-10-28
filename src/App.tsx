@@ -8,6 +8,7 @@ import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
 import { UnmatchedInboxView } from './views/UnmatchedInboxView';
 import { dbService } from './services/DatabaseService';
+import { googleOAuthService } from './services/GoogleOAuthService';
 import { Media } from './types/media';
 
 interface CardTransitionState {
@@ -142,6 +143,32 @@ export function App() {
       }
     }
     initApp();
+
+    // Check if current window was loaded via Google OAuth 2.0 redirect
+    if (typeof window !== 'undefined' && window.location.search) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
+
+      if (code) {
+        if (window.opener) {
+          try {
+            window.opener.postMessage(
+              { type: 'GOOGLE_OAUTH_REDIRECT', url: window.location.href },
+              '*'
+            );
+            window.close();
+          } catch {
+            // Fallback if popup cannot post message
+          }
+        } else {
+          googleOAuthService.exchangeCodeForTokens(code, state || undefined).then(() => {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            window.dispatchEvent(new Event('google-oauth-connected'));
+          }).catch(err => console.error('Automated OAuth token exchange error:', err));
+        }
+      }
+    }
   }, []);
 
   const handleSelectTab = (tab: NavTab) => {

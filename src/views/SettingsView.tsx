@@ -113,25 +113,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
   const [gdriveUser, setGdriveUser] = useState<{ email?: string; name?: string; picture?: string } | null>(null);
   const [isConnectingGdrive, setIsConnectingGdrive] = useState(false);
   const [gdriveError, setGdriveError] = useState<string | null>(null);
-  const [oauthCodeInput, setOauthCodeInput] = useState('');
-  const [showCodeInputModal, setShowCodeInputModal] = useState(false);
 
   useEffect(() => {
     const unsubscribeSync = googleDriveSyncEngine.subscribeStatus(status => {
       setGdriveSyncStatus(status);
     });
 
-    // Check existing Google user profile
-    googleOAuthService.getValidAccessToken().then(token => {
-      if (token) {
-        googleOAuthService.fetchUserProfile(token).then(profile => {
-          setGdriveUser(profile);
-        }).catch(() => setGdriveUser(null));
-      }
-    });
+    const refreshProfile = () => {
+      googleOAuthService.getValidAccessToken().then(token => {
+        if (token) {
+          googleOAuthService.fetchUserProfile(token).then(profile => {
+            setGdriveUser(profile);
+          }).catch(() => setGdriveUser(null));
+        } else {
+          setGdriveUser(null);
+        }
+      });
+    };
+
+    refreshProfile();
+
+    const handleConnected = () => {
+      refreshProfile();
+    };
+
+    window.addEventListener('google-oauth-connected', handleConnected);
 
     return () => {
       unsubscribeSync();
+      window.removeEventListener('google-oauth-connected', handleConnected);
     };
   }, []);
 
@@ -428,13 +438,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                     setIsConnectingGdrive(true);
                     setGdriveError(null);
                     try {
-                      const { authUrl } = await googleOAuthService.prepareAuthUrl();
-                      if (typeof window !== 'undefined') {
-                        window.open(authUrl, '_blank');
-                        setShowCodeInputModal(true);
+                      await googleOAuthService.startOneClickSignIn();
+                      const token = await googleOAuthService.getValidAccessToken();
+                      if (token) {
+                        const profile = await googleOAuthService.fetchUserProfile(token);
+                        setGdriveUser(profile);
                       }
+                      setSavedMessage('Connected Google Account successfully!');
+                      setTimeout(() => setSavedMessage(''), 3000);
                     } catch (err: any) {
-                      setGdriveError(err.message || 'Failed to initialize Google sign-in');
+                      if (!err.message?.includes('closed')) {
+                        setGdriveError(err.message || 'Failed to complete Google sign-in');
+                      }
                     } finally {
                       setIsConnectingGdrive(false);
                     }
@@ -450,52 +465,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                   <span>Connect Google Account</span>
                 </button>
               </div>
-
-              {/* OAuth Code Entry Modal / Input */}
-              {showCodeInputModal && (
-                <div className="bg-[#13151f] p-4 rounded-xl border border-sky-500/40 space-y-3 animate-fadeIn">
-                  <p className="text-xs text-gray-200 font-semibold">
-                    Complete Google Sign-In in the browser window, then paste the authorization code below:
-                  </p>
-                  <div className="flex space-x-2">
-                    <input
-                      type="text"
-                      value={oauthCodeInput}
-                      onChange={e => setOauthCodeInput(e.target.value)}
-                      placeholder="Paste Google OAuth Authorization Code"
-                      className="flex-1 bg-[#1a1d29] border border-[#2d3145] rounded-xl p-2.5 text-xs text-white font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!oauthCodeInput.trim()) return;
-                        setIsConnectingGdrive(true);
-                        setGdriveError(null);
-                        try {
-                          const state = Math.random().toString(36).substring(2, 15);
-                          await googleOAuthService.exchangeCodeForTokens(oauthCodeInput.trim(), state);
-                          const token = await googleOAuthService.getValidAccessToken();
-                          if (token) {
-                            const profile = await googleOAuthService.fetchUserProfile(token);
-                            setGdriveUser(profile);
-                          }
-                          setShowCodeInputModal(false);
-                          setOauthCodeInput('');
-                          setSavedMessage('Connected Google Account successfully!');
-                          setTimeout(() => setSavedMessage(''), 3000);
-                        } catch (err: any) {
-                          setGdriveError(err.message || 'Authorization code exchange failed');
-                        } finally {
-                          setIsConnectingGdrive(false);
-                        }
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer"
-                    >
-                      Complete Link
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
