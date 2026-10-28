@@ -998,7 +998,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
           <div className="flex items-center space-x-3">
             {/* Playback Speed Selector */}
-            <div className="relative flex items-center space-x-1 text-xs">
+            <div className="hidden min-[1090px]:flex relative flex items-center space-x-1 text-xs">
               <Sliders className="w-4 h-4 text-gray-400" />
               <select
                 value={playbackSpeed}
@@ -1015,7 +1015,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             </div>
 
             {/* Subtitles Selector */}
-            <div className="relative flex items-center space-x-1 text-xs" title={subtitleError || undefined}>
+            <div className="hidden min-[1000px]:flex relative flex items-center space-x-1 text-xs" title={subtitleError || undefined}>
               <Subtitles className="w-4 h-4 text-rose-400" />
               <select
                 value={selectedSubtitleId}
@@ -1048,7 +1048,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
             {/* Audio Track Selector */}
             <div
-              className="relative flex items-center space-x-1 text-xs"
+              className="hidden min-[950px]:flex relative flex items-center space-x-1 text-xs"
               title={audioTrackSupport === false ? 'Audio track switching is not supported by this video runtime.' : undefined}
             >
               <AudioLines className="w-4 h-4 text-rose-400" />
