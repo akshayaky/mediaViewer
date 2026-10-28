@@ -498,13 +498,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     }
   };
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     if (videoRef.current) {
       const nextMuted = !isMuted;
       videoRef.current.muted = nextMuted;
       setIsMuted(nextMuted);
     }
-  };
+  }, [isMuted]);
 
   // Speed
   const handleSpeedChange = (speed: number) => {
@@ -554,7 +554,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           e.preventDefault();
           setVolume(prev => {
             const next = Math.min(1, prev + 0.1);
-            if (video) video.volume = next;
+            video.volume = next; // 1. Update DOM first
+            setVolume(next);     // 2. Sync React state
             return next;
           });
           break;
@@ -562,7 +563,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           e.preventDefault();
           setVolume(prev => {
             const next = Math.max(0, prev - 0.1);
-            if (video) video.volume = next;
+            video.volume = next; // 1. Update DOM first
+            setVolume(next);   
             return next;
           });
           break;
@@ -587,7 +589,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [togglePlay, toggleMute, toggleFullscreen]);
 
   const handleExitPlayer = () => {
     const video = videoRef.current;
