@@ -40,6 +40,9 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const [mediaList, setMediaList] = useState<Media[]>([]);
   const [stateByMediaId, setStateByMediaId] = useState<Record<string, Awaited<ReturnType<typeof dbService.getMediaState>>>>({});
   const [scoreByMediaId, setScoreByMediaId] = useState<Record<string, number | undefined>>({});
+  const [pullOffset, setPullOffset] = useState<number>(0);
+  //const [crossedThreshold, setCrossedThreshold] = useState<boolean>(false);
+  const crossedThresholdRef = useRef<boolean>(false);
 
   // Add this near your state definitions
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -89,12 +92,15 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
 useEffect(() => {
   if (isDetailsOpen || isAddModalOpen || isFilterSheetOpen) return;
   let touchStartY = 0;
-  const SWIPE_THRESHOLD = 200; // Pixels needed to trigger focus
+  let maxPullReached = 0;
+  const SWIPE_TRIGGER_THRESHOLD = 120; // Pixels pulled before triggering focus
+  const RESISTANCE_FACTOR = 0.4;       // 1:1 tracking scaled down uniformly for comfortable drag feedback
 
   const handleTouchStart = (e: TouchEvent) => {
     // Check if the user is at the absolute top of the page scroll
     if (window.scrollY === 0) {
       touchStartY = e.touches[0].clientY;
+      maxPullReached = 0;
     } else {
       touchStartY = 0;
     }
@@ -104,24 +110,57 @@ useEffect(() => {
     if (touchStartY === 0) return;
 
     const currentY = e.touches[0].clientY;
-    const pullDistance = currentY - touchStartY;
+    const rawPullDistance  = currentY - touchStartY;
 
-    if (pullDistance > SWIPE_THRESHOLD) {
-      searchInputRef.current?.focus();
-      touchStartY = 0; // Prevent repeated firing in a single gesture
-    }
-    else if(pullDistance < 0)
-    {
+   if (rawPullDistance > 0) {
+      let elasticOffset = rawPullDistance * RESISTANCE_FACTOR;
+      setPullOffset(elasticOffset);
+      if (elasticOffset > maxPullReached) {
+        maxPullReached = elasticOffset;
+      } else {
+        // As you move back up, it scales back down immediately at the exact same speed
+        elasticOffset = Math.max(0, maxPullReached - (maxPullReached - elasticOffset));
+      }
+      // Trigger focus if pulled past the action barrier
+      if (elasticOffset > SWIPE_TRIGGER_THRESHOLD) {
+        // searchInputRef.current?.focus();
+        crossedThresholdRef.current = true;
+      }
+      else
+      {
+        crossedThresholdRef.current = false;
+      }
+    } else if (rawPullDistance <= 0) {
       searchInputRef.current?.blur();
+      setPullOffset(0);
+      if(rawPullDistance < SWIPE_TRIGGER_THRESHOLD)
+      {
+        crossedThresholdRef.current = false;
+      }
     }
+    console.log("............");
+
+  };
+  
+  const handleTouchEnd = () => {
+    if (crossedThresholdRef.current) {
+      searchInputRef.current?.focus();
+    }
+    // Smoothly snap the grid container back to its original layout position
+    setPullOffset(0);
+    crossedThresholdRef.current = false;
+    touchStartY = 0;
+    maxPullReached = 0;
   };
 
   window.addEventListener('touchstart', handleTouchStart, { passive: true });
   window.addEventListener('touchmove', handleTouchMove, { passive: true });
+  window.addEventListener('touchend', handleTouchEnd, { passive: true });
 
   return () => {
     window.removeEventListener('touchstart', handleTouchStart);
     window.removeEventListener('touchmove', handleTouchMove);
+    window.removeEventListener('touchend', handleTouchEnd);
   };
 }, [isDetailsOpen, isAddModalOpen, isFilterSheetOpen]);
 
@@ -203,7 +242,12 @@ useEffect(() => {
 
         {(onAddNewMedia || typeFilter) && (
           <button
-            onClick={handleAddButtonClick}
+            onClick={() => {
+              handleAddButtonClick();
+              navigator.vibrate(15);
+            }
+
+            }
             className="flex items-center justify-center space-x-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-rose-950/30 transition-all cursor-pointer touch-target w-full sm:w-auto"
           >
             <Plus className="w-4 h-4" />
@@ -302,11 +346,18 @@ useEffect(() => {
 
       {/* Grid */}
       {items.length === 0 ? (
-        <div className="p-8 sm:p-12 text-center text-gray-400 bg-[#14161f] rounded-xl border border-[#232736]">
-          <p className="text-sm sm:text-base font-medium">No media found matching your filter criteria.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5">
+      <div className="p-8 sm:p-12 text-center text-gray-400 bg-[#14161f] rounded-xl border border-[#232736]">
+        <p className="text-sm sm:text-base font-medium">No media found matching your filter criteria.</p>
+      </div>
+    ) : (
+      <div 
+        className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5 will-change-transform"
+        style={{
+          transform: `translateY(${pullOffset}px)`,
+          // Turn off hard CSS transition delays while dragging for 60fps tracking; animate only during the return snap
+          transition: pullOffset === 0 ? 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)' : 'none'
+        }}
+      >
           {items.map(media => {
             return (
               <MediaCard
