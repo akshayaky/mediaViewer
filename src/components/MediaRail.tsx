@@ -46,7 +46,8 @@ export const MediaRail: React.FC<MediaRailProps> = ({ title, subtitle, items, on
       <div className="flex space-x-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none">
         {items.map(media => {
           return (
-            <div key={media.id} className="w-48 shrink-0">
+            <div key={media.id} 
+              className="w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(15%-12px)] shrink-0">
               <MediaCard
                 media={media}
                 state={states[media.id]}

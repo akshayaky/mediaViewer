@@ -37,7 +37,7 @@ interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
-  const { pagePadding } = useSidebarPadding(isCollapsed);
+  const { isDesktop, pagePadding } = useSidebarPadding(isCollapsed);
   const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const [settings, setSettings] = useState<AppSettings>({});
 
@@ -307,7 +307,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
   return (
     <div
       className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-8 max-w-5xl mx-auto transition-all duration-300"
-      style={{ paddingLeft: pagePadding }}
+      style={{
+          paddingLeft: pagePadding,
+          paddingTop: isDesktop? '' : '3rem' 
+        }}
     >
       {/* Hidden Folder Directory Inputs */}
       <input
@@ -316,7 +319,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
         onChange={(e) => handleHTMLFolderSelect(e, 'movies')}
         style={{ display: 'none' }}
         multiple={isAndroid}
-        accept={isAndroid ? 'video/*' : undefined}
+        accept={isAndroid ? '*' : undefined}
         {...(!isAndroid ? ({ webkitdirectory: '', directory: '' } as any) : {})}
       />
       <input

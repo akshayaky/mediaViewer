@@ -28,7 +28,7 @@ interface UnmatchedInboxViewProps {
 }
 
 export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaMatched, isCollapsed }) => {
-  const { pagePadding } = useSidebarPadding(isCollapsed);
+  const { isDesktop, pagePadding } = useSidebarPadding(isCollapsed);
   const [unmatchedFiles, setUnmatchedFiles] = useState<LocalFile[]>([]);
   const [allMedia, setAllMedia] = useState<Media[]>([]);
   const [searchQueries, setSearchQueryMap] = useState<Record<string, string>>({});
@@ -242,10 +242,13 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
   return (
     <div
       className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto transition-all duration-300"
-      style={{ paddingLeft: pagePadding }}
+      style={{ 
+        paddingLeft: pagePadding,
+        paddingTop: isDesktop? '' : '3rem'
+     }}
     >
       {/* Header Bar */}
-      <div className="border-b border-[#1f222e] pb-6 flex items-center justify-between">
+      <div className="border-b border-[#1f222e] pb-6 flex flex-wrap items-center gap-3">
         <div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center space-x-3">
             <Inbox className="w-8 h-8 text-rose-500" />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MediaCard } from '../components/MediaCard';
 import { AddMediaModal } from '../components/AddMediaModal';
 import { Media, MediaType } from '../types/media';
@@ -15,6 +15,7 @@ interface MediaGridViewProps {
   onPreviewEnd?: () => void;
   onAddNewMedia?: () => void;
   isCollapsed?: boolean;
+  isDetailsOpen?: boolean
 }
 
 export const MediaGridView: React.FC<MediaGridViewProps> = ({
@@ -25,9 +26,10 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   onPreviewStart,
   onPreviewEnd,
   onAddNewMedia,
-  isCollapsed
+  isCollapsed,
+  isDetailsOpen
 }) => {
-  const { pagePadding } = useSidebarPadding(isCollapsed);
+  const { isDesktop, pagePadding } = useSidebarPadding(isCollapsed);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
@@ -38,6 +40,9 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const [mediaList, setMediaList] = useState<Media[]>([]);
   const [stateByMediaId, setStateByMediaId] = useState<Record<string, Awaited<ReturnType<typeof dbService.getMediaState>>>>({});
   const [scoreByMediaId, setScoreByMediaId] = useState<Record<string, number | undefined>>({});
+
+  // Add this near your state definitions
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const refreshList = async () => {
     const media = await dbService.getAllMedia();
@@ -79,6 +84,43 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
       window.removeEventListener('close-mobile-sheets' as any, handleCloseSheets);
     };
   }, [isFilterSheetOpen]);
+
+  // Catch over-swipe/pull down at the top of the viewport to focus search
+useEffect(() => {
+  let touchStartY = 0;
+  const SWIPE_THRESHOLD = 200; // Pixels needed to trigger focus
+
+  const handleTouchStart = (e: TouchEvent) => {
+    // Check if the user is at the absolute top of the page scroll
+    if (window.scrollY === 0) {
+      touchStartY = e.touches[0].clientY;
+    } else {
+      touchStartY = 0;
+    }
+  };
+
+  const handleTouchMove = (e: TouchEvent) => {
+    if (touchStartY === 0) return;
+
+    const currentY = e.touches[0].clientY;
+    const pullDistance = currentY - touchStartY;
+
+    if (pullDistance > SWIPE_THRESHOLD) {
+      searchInputRef.current?.focus();
+      touchStartY = 0; // Prevent repeated firing in a single gesture
+    }
+  };
+
+  window.addEventListener('touchstart', handleTouchStart, { passive: true });
+  window.addEventListener('touchmove', handleTouchMove, { passive: true });
+
+  return () => {
+    window.removeEventListener('touchstart', handleTouchStart);
+    window.removeEventListener('touchmove', handleTouchMove);
+  };
+}, []);
+
+
 
   // Filter by media type if specified
   let items = typeFilter ? mediaList.filter(m => m.type === typeFilter) : mediaList;
@@ -143,7 +185,8 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
     <div
       className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 mx-auto max-w-none transition-all duration-300"
       style={{
-        paddingLeft: pagePadding
+        paddingLeft: pagePadding,
+        paddingTop: isDesktop?'': '3rem'
       }}
     >
       {/* Header Bar */}
@@ -165,11 +208,13 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="sticky top-0 z-30 flex items-center gap-3 bg-[#14161f]/95 backdrop-blur-xl p-3 sm:p-4 rounded-xl border border-[#232736] shadow-lg">
+      <div style={{ top: `${isDesktop}`? 30: 30 }} 
+      className="sticky top-0 z-30 flex items-center gap-3 bg-[#14161f]/95 backdrop-blur-xl p-3 sm:p-4 rounded-xl border border-[#232736] shadow-lg">
         {/* Search Box */}
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search by title, publisher..."
             value={searchQuery}

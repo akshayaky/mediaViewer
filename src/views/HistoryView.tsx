@@ -10,7 +10,7 @@ interface HistoryViewProps {
 }
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia, isCollapsed }) => {
-  const { pagePadding } = useSidebarPadding(isCollapsed);
+  const { isDesktop, pagePadding } = useSidebarPadding(isCollapsed);
   const [entries, setEntries] = useState<Array<{ history: Awaited<ReturnType<typeof dbService.getAllHistory>>[number]; media: Media }>>([]);
 
   useEffect(() => {
@@ -45,7 +45,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia, isColla
   return (
     <div
       className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto transition-all duration-300"
-      style={{ paddingLeft: pagePadding }}
+      style={{ 
+        paddingLeft: pagePadding,
+        paddingTop: isDesktop? '' : '3rem' 
+      }}
     >
       {/* Header Bar */}
       <div className="border-b border-[#1f222e] pb-6">

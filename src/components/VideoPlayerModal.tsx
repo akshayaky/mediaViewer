@@ -430,7 +430,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         setShowNextCountdown(true);
         setCountdownSeconds(5);
       }
-    } else if ((video.duration > 0 && video.currentTime / video.duration < 0.98)) {
+    } else if (video.duration > 0 && video.currentTime / video.duration < 0.95 && showNextCountdown) {
       // If user seeks back, hide the countdown and reset cancellation
       setShowNextCountdown(false);
       setCountdownCancelled(false);
@@ -454,7 +454,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         );
       }
     }
-
+    console.log("paused :" + videoRef.current?.paused)
     return () => {
       if (countdownIntervalRef.current) clearTimeout(countdownIntervalRef.current);
     };

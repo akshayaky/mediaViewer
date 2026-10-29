@@ -9,7 +9,7 @@ interface WishlistViewProps {
 }
 
 export const WishlistView: React.FC<WishlistViewProps> = ({ isCollapsed }) => {
-  const { pagePadding } = useSidebarPadding(isCollapsed);
+  const { isDesktop, pagePadding } = useSidebarPadding(isCollapsed);
   const [wishlistItems, setWishlistItems] = useState<Wishlist[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [title, setTitle] = useState('');
@@ -48,7 +48,10 @@ export const WishlistView: React.FC<WishlistViewProps> = ({ isCollapsed }) => {
   return (
     <div
       className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 max-w-7xl mx-auto transition-all duration-300"
-      style={{ paddingLeft: pagePadding }}
+      style={{ 
+        paddingLeft: pagePadding,
+        paddingTop: isDesktop? '' : '3rem' 
+      }}
     >
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1f222e] pb-6">
