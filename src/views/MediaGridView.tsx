@@ -138,8 +138,6 @@ useEffect(() => {
         crossedThresholdRef.current = false;
       }
     }
-    console.log("............");
-
   };
   
   const handleTouchEnd = () => {
