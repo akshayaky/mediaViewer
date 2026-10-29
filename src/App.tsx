@@ -353,6 +353,7 @@ export function App() {
             onPreviewStart={enableHoverPreview ? handlePreviewStart : undefined}
             onPreviewEnd={enableHoverPreview ? handlePreviewEnd : undefined}
             isCollapsed={isCollapsed}
+            isDetailsOpen={selectedMedia!=null}
           />
         );
       case 'tv':
@@ -365,6 +366,7 @@ export function App() {
             onPreviewStart={enableHoverPreview ? handlePreviewStart : undefined}
             onPreviewEnd={enableHoverPreview ? handlePreviewEnd : undefined}
             isCollapsed={isCollapsed}
+            isDetailsOpen={selectedMedia!=null}
           />
         );
       case 'games':
@@ -377,6 +379,7 @@ export function App() {
             onPreviewStart={enableHoverPreview ? handlePreviewStart : undefined}
             onPreviewEnd={enableHoverPreview ? handlePreviewEnd : undefined}
             isCollapsed={isCollapsed}
+            isDetailsOpen={selectedMedia!=null}
           />
         );
       default:

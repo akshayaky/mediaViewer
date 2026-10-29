@@ -87,6 +87,7 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
 
   // Catch over-swipe/pull down at the top of the viewport to focus search
 useEffect(() => {
+  if (isDetailsOpen || isAddModalOpen || isFilterSheetOpen) return;
   let touchStartY = 0;
   const SWIPE_THRESHOLD = 200; // Pixels needed to trigger focus
 
@@ -109,6 +110,10 @@ useEffect(() => {
       searchInputRef.current?.focus();
       touchStartY = 0; // Prevent repeated firing in a single gesture
     }
+    else if(pullDistance < 0)
+    {
+      searchInputRef.current?.blur();
+    }
   };
 
   window.addEventListener('touchstart', handleTouchStart, { passive: true });
@@ -118,7 +123,7 @@ useEffect(() => {
     window.removeEventListener('touchstart', handleTouchStart);
     window.removeEventListener('touchmove', handleTouchMove);
   };
-}, []);
+}, [isDetailsOpen, isAddModalOpen, isFilterSheetOpen]);
 
 
 
