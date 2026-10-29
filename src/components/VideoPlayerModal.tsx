@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Media, LocalFile } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { subtitleService, SubtitleTrack } from '../services/SubtitleService';
+import { localScannerService } from '../services/LocalScannerService';
 import {
   Play,
   Pause,
@@ -191,6 +192,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   // Resolve Video Stream URL & Subtitles
   useEffect(() => {
     let isMounted = true;
+    let objectUrl: string | undefined;
     setLoading(true);
     setError(null);
     setSubtitleTracks([]);
@@ -204,6 +206,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
     const resolveStream = async () => {
       try {
+        const selectedFile = localScannerService.getWebSelectedFile(media.type, activeFile.path);
+        if (selectedFile) {
+          objectUrl = URL.createObjectURL(selectedFile);
+          if (isMounted) setStreamUrl(objectUrl);
+          return;
+        }
+
         if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
           const { invoke } = await import('@tauri-apps/api/core');
           const url = await invoke<string>('get_video_stream_url', { filePath: activeFile.path });
@@ -236,8 +245,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
     return () => {
       isMounted = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [activeFile.path, activeFile.filename]);
+  }, [activeFile.path, activeFile.filename, media.type]);
 
   const discoverEmbeddedSubtitleTracks = useCallback(() => {
     const textTracks = videoRef.current?.textTracks;

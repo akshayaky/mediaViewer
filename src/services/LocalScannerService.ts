@@ -25,9 +25,18 @@ export interface ScanResult {
 
 export class LocalScannerService {
   private webFilesMap: Map<MediaType, File[]> = new Map();
+  private webFilePathMap: Map<MediaType, Map<string, File>> = new Map();
 
   public setWebSelectedFiles(mediaType: MediaType, files: File[]) {
     this.webFilesMap.set(mediaType, files);
+    const filesByPath = new Map<string, File>();
+    for (const file of files) {
+      filesByPath.set(file.name.toLowerCase(), file);
+      if (file.webkitRelativePath) {
+        filesByPath.set(file.webkitRelativePath.replace(/\//g, '\\').toLowerCase(), file);
+      }
+    }
+    this.webFilePathMap.set(mediaType, filesByPath);
   }
 
   public getWebSelectedFiles(mediaType: MediaType): File[] | undefined {
@@ -36,6 +45,18 @@ export class LocalScannerService {
 
   public clearWebSelectedFiles(mediaType: MediaType) {
     this.webFilesMap.delete(mediaType);
+    this.webFilePathMap.delete(mediaType);
+  }
+
+  public getWebSelectedFile(mediaType: MediaType, filePath: string): File | undefined {
+    const normalizedPath = filePath.replace(/\//g, '\\').toLowerCase();
+    const filesByPath = this.webFilePathMap.get(mediaType);
+    const directMatch = filesByPath?.get(normalizedPath);
+    if (directMatch) return directMatch;
+
+    const filename = normalizedPath.split('\\').pop();
+    const matches = this.webFilesMap.get(mediaType)?.filter(file => file.name.toLowerCase() === filename) || [];
+    return matches.length === 1 ? matches[0] : undefined;
   }
 
   /**
@@ -217,16 +238,25 @@ export class LocalScannerService {
           return targetExtensions.includes(ext) || mediaType === 'VideoGame' || selectedFiles.length < 10;
         });
 
+        const filesByPath = this.webFilePathMap.get(mediaType) || new Map<string, File>();
         discoveredItems = validFiles.map(f => {
           const relPath = f.webkitRelativePath || f.name;
           const cleanFolderPath = folderPath ? folderPath.replace(/[\\\/]+$/, '') : 'C:\\Media';
-          const fullPath = `${cleanFolderPath}\\${relPath.replace(/\//g, '\\')}`;
+          let fullPath;
+          if (relPath === f.name && cleanFolderPath === f.name) {
+            fullPath = f.name;
+          } else {
+            fullPath = `${cleanFolderPath}\\${relPath.replace(/\//g, '\\')}`;
+          }
+          filesByPath.set(fullPath.toLowerCase(), f);
+
           return {
             path: fullPath,
             filename: f.name,
             size: f.size
           };
         });
+        this.webFilePathMap.set(mediaType, filesByPath);
       }
     }
 

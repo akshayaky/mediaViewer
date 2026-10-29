@@ -274,7 +274,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       if (firstFile.webkitRelativePath) {
         folderName = firstFile.webkitRelativePath.split('/')[0];
       } else if (isAndroid) {
-        folderName = `${fileArray.length} Android files selected`;
+        folderName = firstFile.name;
       }
 
       const folderPath = isAndroid ? folderName : `C:\\Media\\${folderName}`;
@@ -319,7 +319,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
         onChange={(e) => handleHTMLFolderSelect(e, 'movies')}
         style={{ display: 'none' }}
         multiple={isAndroid}
-        accept={isAndroid ? '*' : undefined}
+        accept={isAndroid ? 'video/*' : undefined}
         {...(!isAndroid ? ({ webkitdirectory: '', directory: '' } as any) : {})}
       />
       <input
