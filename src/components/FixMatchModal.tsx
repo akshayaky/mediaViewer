@@ -34,10 +34,11 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   const [previewDetails, setPreviewDetails] = useState<Partial<Media> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const [lastSearchedQuery, setLastSearchedQuery] = useState('');
   const { isDesktop, pagePadding} = useSidebarPadding(isCollapsed);
   const bottomPaddingForMobile = `5rem`;
 
-  useEffect(() => {
+  useEffect(() => {``
     if (isOpen) {
       window.history.pushState({ isModalOpen: true }, '');
     }
@@ -66,7 +67,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
     }, [query]);
   
     useEffect(() => {
-      if (debouncedQuery.trim()) { 
+      if (debouncedQuery.trim() && debouncedQuery.trim() !== lastSearchedQuery.trim()) { 
         handleSearch(debouncedQuery);
       }
     }, [debouncedQuery]);
@@ -76,6 +77,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   const handleSearch = async (searchQuery: string) => {
       if (!searchQuery.trim()) return;
 
+      setLastSearchedQuery(searchQuery);
       setIsSearching(true);
       setResults([]);
       setSelectedResult(null);
@@ -98,7 +100,8 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    handleSearch(query)
+    if(debouncedQuery.trim()!==lastSearchedQuery.trim())
+      handleSearch(query)
   };
 
   const handleSelectCandidate = async (candidate: MetadataSearchResult) => {
