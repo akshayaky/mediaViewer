@@ -668,7 +668,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       {activeLocalFile && isAvailableLocally && (
         <div
           ref={playButtonRowRef}
-          className={`mdv-play-row mdv-sidebar-aware flex flex-wrap ${isPlayButtonStuck ? isDesktopLayout ?'items-center':'w-full justify-center' : ''} gap-3`}
+          className={`mdv-play-row mdv-sidebar-aware flex flex-wrap ${isPlayButtonStuck ? isDesktopLayout ?'w-full justify-center':'w-full justify-center' : ''} gap-3`}
           data-sidebar-aware
           style={{ 
             paddingLeft: isDesktopLayout ? undefined : '1rem',
