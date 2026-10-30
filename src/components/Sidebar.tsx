@@ -162,52 +162,67 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
 
            {/* Navigation Items */}
            <nav className="p-3 space-y-1.5 flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
-             {allNavItems.map(item => {
-               const Icon = item.icon;
-               const isActive = activeTab === item.id;
-               return (
-                 <button
-                   key={item.id}
-                   onClick={() => onSelectTab(item.id)}
-                   title={isCollapsed ? item.label : undefined}
-                   className={`group relative w-full flex items-center rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer ${
-                     isCollapsed ? 'justify-center p-3' : 'justify-between px-4 py-2.5'
-                   } ${
-                     isActive
-                       ? 'text-white ring-1 ring-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.2),inset_0_0_0_1px_rgba(255,255,255,0.1)]'
-                       : 'text-white/70 hover:text-white hover:translate-x-1 active:scale-[0.98]'
-                   }`}
-                   style={isActive ? {
-                     backgroundColor: accentColors ? accentColors.activeBackground : 'rgba(255, 255, 255, 0.08)',
-                   } : {
-                     backgroundColor: 'transparent',
-                     color: accentColors?.inactiveForeground,
-                   }}
-                 >
-                   <div className="flex items-center space-x-3.5">
-                     <Icon
-                       className={`w-5 h-5 min-w-5 transition-colors duration-300 ${
-                         isActive
-                           ? (accentColors ? 'text-white' : 'text-rose-400')
-                           : 'text-white/40 group-hover:text-white'
-                       }`}
-                       style={accentColors
-                         ? { color: isActive ? '#FFFFFF' : accentColors.inactiveForeground }
-                         : undefined}
-                     />
-                     {!isCollapsed && <span className="whitespace-nowrap transition-colors duration-300">{item.label}</span>}
-                   </div>
+            {allNavItems.map(item => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              const hasBadge = item.badge !== undefined && item.badge > 0;
 
-                   {!isCollapsed && item.badge !== undefined && item.badge > 0 && (
-                     <span className={`text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ring-1 ring-white/20 ${accentColors ? '' : 'bg-rose-500'}`}
-                           style={accentColors ? { backgroundColor: accentColors.activeBackground } : undefined}>
-                       {item.badge}
-                     </span>
-                   )}
-                 </button>
-               );
-             })}
-           </nav>
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onSelectTab(item.id)}
+                  title={isCollapsed ? item.label : undefined}
+                  className={`group relative w-full flex items-center rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer ${
+                    isCollapsed ? 'justify-center p-3' : 'justify-between px-4 py-2.5'
+                  } ${
+                    isActive
+                      ? 'text-white ring-1 ring-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.2),inset_0_0_0_1px_rgba(255,255,255,0.1)]'
+                      : 'text-white/70 hover:text-white hover:translate-x-1 active:scale-[0.98]'
+                  }`}
+                  style={isActive ? {
+                    backgroundColor: accentColors ? accentColors.activeBackground : 'rgba(255, 255, 255, 0.08)',
+                  } : {
+                    backgroundColor: 'transparent',
+                    color: accentColors?.inactiveForeground,
+                  }}
+                >
+                  {/* Icon & Label Container */}
+                  <div className={`flex items-center ${isCollapsed ? 'relative' : 'space-x-3.5'}`}>
+                    <Icon
+                      className={`w-5 h-5 min-w-5 transition-colors duration-300 ${
+                        isActive
+                          ? (accentColors ? 'text-white' : 'text-rose-400')
+                          : 'text-white/40 group-hover:text-white'
+                      }`}
+                      style={accentColors
+                        ? { color: isActive ? '#FFFFFF' : accentColors.inactiveForeground }
+                        : undefined}
+                    />
+                    
+                    {/* Collapsed Badge (Overlays the top-right of the icon) */}
+                    {isCollapsed && hasBadge && item.badge != undefined && (
+                      <span 
+                        className={`absolute -top-1.5 -right-1.5 z-10 text-white text-[9px] font-bold h-4 min-w-4 px-1 flex items-center justify-center rounded-full shadow-sm ring-1 ring-white/20 ${accentColors ? '' : 'bg-rose-500'}`}
+                        style={accentColors ? { backgroundColor: accentColors.activeBackground } : undefined}
+                      >
+                        {item.badge > 99 ? '99+' : item.badge}
+                      </span>
+                    )}
+
+                    {!isCollapsed && <span className="whitespace-nowrap transition-colors duration-300">{item.label}</span>}
+                  </div>
+
+                  {/* Expanded Badge (Right-aligned layout) */}
+                  {!isCollapsed && item.badge != undefined && hasBadge &&  (
+                    <span className={`text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ring-1 ring-white/20 ${accentColors ? '' : 'bg-rose-500'}`}
+                          style={accentColors ? { backgroundColor: accentColors.activeBackground } : undefined}>
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
          </div>
 
          {/* Footer System Status */}
