@@ -220,8 +220,10 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
             </div>
           </div>
           <button onClick={() =>{
+            if(selectedBackdrop)
               handleApply(undefined,true);
-              //onClose();
+            else
+              onClose();
             }
           }
              className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#1f222e] transition-colors cursor-pointer">
