@@ -161,7 +161,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
            </div>
 
            {/* Navigation Items */}
-           <nav className="p-3 space-y-1.5 flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
+           <nav className="p-3 space-y-1.5 flex-1 flex flex-col justify-center overflow-y-auto overflow-x-hidden scrollbar-hide">
             {allNavItems.map(item => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -312,9 +312,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
           className={`relative flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all touch-target cursor-pointer ${
             isSecondaryActive || isMoreSheetOpen ? 'text-rose-400 font-semibold' : 'text-gray-400 hover:text-white'
           }`}
+          style={accentColors
+                  ? { color: accentColors.inactiveForeground }
+                  : undefined}
         >
           <div className="relative">
-            <MoreHorizontal className={`w-5 h-5 mb-1 ${isSecondaryActive || isMoreSheetOpen ? 'text-rose-500 scale-110' : 'text-gray-400'}`} />
+            <MoreHorizontal className={`w-5 h-5 mb-1 ${isSecondaryActive || isMoreSheetOpen ? 'text-rose-500 scale-110' : 'text-gray-400'}`} 
+            style={
+                    accentColors
+                    ? { color: accentColors.inactiveForeground }
+                    : undefined}
+              />
             {unmatchedCount > 0 && (
               <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ring-2 ring-[#111319]"
               style={accentColors
