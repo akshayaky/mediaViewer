@@ -668,9 +668,12 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       {activeLocalFile && isAvailableLocally && (
         <div
           ref={playButtonRowRef}
-          className="mdv-play-row mdv-sidebar-aware flex flex-wrap items-center gap-3"
+          className={`mdv-play-row mdv-sidebar-aware flex flex-wrap ${isPlayButtonStuck ? isDesktopLayout ?'items-center':'w-full justify-center' : ''} gap-3`}
           data-sidebar-aware
-          style={{ paddingLeft: isDesktopLayout ? undefined : '1rem' }}
+          style={{ 
+            paddingLeft: isDesktopLayout ? undefined : '1rem',
+            paddingTop: isPlayButtonStuck? undefined  :'1.5rem'
+          }}
         >
           <button
             onClick={() => handleTriggerPlay(undefined, false)}
@@ -680,7 +683,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             <span>{resumeTarget ? resumeTarget.label.toUpperCase() : `PLAY ${currentMedia.type === 'VideoGame' ? 'GAME' : 'MEDIA'}`}</span>
           </button>
 
-          {resumeTarget?.hasSavedProgress && currentMedia.type !== 'VideoGame' && (
+          {/* {resumeTarget?.hasSavedProgress && currentMedia.type !== 'VideoGame' && (
             <button
               onClick={() => handleTriggerPlay(undefined, true)}
               className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 backdrop-blur-md transition-all cursor-pointer shadow-md"
@@ -688,7 +691,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             >
               Start from Beginning
             </button>
-          )}
+          )} */}
         </div>
       )}
       {/* Main Content Layout */}
