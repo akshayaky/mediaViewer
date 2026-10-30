@@ -28,12 +28,14 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   const [importingId, setImportingId] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
+  const [lastSearchedQuery, setLastSearchedQuery] = useState('');
   // const [mediaType, setMediaType] = useState(type);
 
   const { pagePadding } = useSidebarPadding(isCollapsed);
   const handleSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
 
+    setLastSearchedQuery(searchQuery);
     setIsSearching(true);
 
     try {
@@ -53,7 +55,9 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    handleSearch(searchQuery)
+    if (debouncedQuery.trim() !== lastSearchedQuery.trim()) {
+      handleSearch(searchQuery);
+    }
   };
 
 
@@ -92,7 +96,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   }, [searchQuery]);
 
   useEffect(() => {
-    if (debouncedQuery.trim()) {
+    if (debouncedQuery.trim() && debouncedQuery.trim() !== lastSearchedQuery.trim()) {
       // When the query changes, we should probably clear cached results 
       // or trigger a search for the current type.
       // To ensure other types also refresh when they are eventually selected,

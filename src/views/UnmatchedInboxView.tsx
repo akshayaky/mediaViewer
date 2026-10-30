@@ -34,6 +34,8 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
   const [searchQueries, setSearchQueryMap] = useState<Record<string, string>>({});
   const [externalCandidates, setExternalCandidates] = useState<Record<string, MetadataSearchResult[]>>({});
   const [isSearchingExternal, setIsSearchingExternal] = useState<Record<string, boolean>>({});
+  const [lastSearchedQueries, setLastSearchedQueries] = useState<Record<string, string>>({});
+  const [searchTimeouts, setSearchTimeouts] = useState<Record<string, NodeJS.Timeout>>({});
   const [successMessage, setSavedMessage] = useState('');
   const [clearError, setClearError] = useState('');
   useEffect(() => {
@@ -106,15 +108,16 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
     }
   };
 
-  const handleSearchExternalProviders = async (file: LocalFile) => {
+  const handleSearchExternalProviders = async (file: LocalFile, queryOverride?: string) => {
     const mediaType: MediaType =
       file.file_type === 'game_executable' ? 'VideoGame' : file.file_type === 'tv_episode' ? 'TV Series' : 'Film';
 
     const parsed = localScannerService.parseFilePath(file.path, mediaType);
-    const query = searchQueries[file.id] || parsed.cleanTitle || file.filename;
+    const query = queryOverride || searchQueries[file.id] || parsed.cleanTitle || file.filename;
 
-    if (!query) return;
+    if (!query || query.trim() === lastSearchedQueries[file.id]?.trim()) return;
 
+    setLastSearchedQueries(prev => ({ ...prev, [file.id]: query }));
     setIsSearchingExternal(prev => ({ ...prev, [file.id]: true }));
 
     try {
@@ -396,11 +399,25 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
                         type="text"
                         placeholder="Search candidate title on TMDB / IGDB..."
                         value={searchQuery}
-                        onChange={e =>
-                          setSearchQueryMap({ ...searchQueries, [file.id]: e.target.value })
-                        }
+                        onChange={e => {
+                          const newValue = e.target.value;
+                          setSearchQueryMap({ ...searchQueries, [file.id]: newValue });
+                          
+                          if (searchTimeouts[file.id]) {
+                            clearTimeout(searchTimeouts[file.id]);
+                          }
+                          
+                          const timeout = setTimeout(() => {
+                            handleSearchExternalProviders(file, newValue);
+                          }, 800);
+                          
+                          setSearchTimeouts(prev => ({ ...prev, [file.id]: timeout }));
+                        }}
                         onKeyDown={e => {
-                          if (e.key === 'Enter') handleSearchExternalProviders(file);
+                          if (e.key === 'Enter') {
+                            if (searchTimeouts[file.id]) clearTimeout(searchTimeouts[file.id]);
+                            handleSearchExternalProviders(file);
+                          }
                         }}
                         className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg pl-9 pr-3 py-2 text-xs text-gray-100"
                       />

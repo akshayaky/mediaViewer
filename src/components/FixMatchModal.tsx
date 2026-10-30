@@ -258,12 +258,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
               disabled={isSearching || !query.trim()}
               className="bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold text-xs px-5 py-2.5 rounded-xl transition-all flex items-center space-x-2 cursor-pointer shrink-0"
             >
-              {isSearching ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Searching...</span>
-                </>
-              ) : (
+              {(
                 <>
                   <Search className="w-4 h-4" />
                   <span>Search</span>
@@ -273,45 +268,59 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
           </form>
 
           {/* Results list */}
-          {results.length > 0 && (
+          {(results.length > 0 || isSearching) && (
             <div className="space-y-2">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Search Candidates</h4>
               <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
-                {results.map((res, idx) => {
-                  const isSelected = selectedResult?.external_id === res.external_id;
-
-                  return (
-                    <div
-                      key={`${res.external_id}_${idx}`}
-                      onClick={() => handleSelectCandidate(res)}
-                      className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                        isSelected
-                          ? 'bg-rose-950/40 border-rose-500'
-                          : 'bg-[#1b1d2a] border-[#2d3145] hover:border-gray-500'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3 min-w-0">
-                        {res.poster ? (
-                          <img src={res.poster} alt={res.title} className="w-10 aspect-[2/3] object-cover rounded border border-[#2d3145] shrink-0" />
-                        ) : (
-                          <div className="w-10 aspect-[2/3] bg-[#232736] rounded shrink-0 flex items-center justify-center">
-                            {getTypeIcon()}
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <h5 className="font-bold text-xs text-white truncate">{res.title}</h5>
-                          <p className="text-[11px] text-gray-400">{res.release_year ? `Year: ${res.release_year}` : ''} • {res.provider}</p>
+                {isSearching && results.length === 0 ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="p-3 rounded-xl border border-[#2d3145] bg-[#1b1d2a] flex items-center space-x-3 animate-pulse">
+                        <div className="w-10 aspect-[2/3] bg-[#232736] rounded shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 bg-[#232736] rounded w-1/2" />
+                          <div className="h-2 bg-[#232736] rounded w-1/3" />
                         </div>
                       </div>
+                    ))}
+                  </div>
+                ) : (
+                  results.map((res, idx) => {
+                    const isSelected = selectedResult?.external_id === res.external_id;
 
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        isSelected ? 'bg-rose-500 border-rose-400 text-white' : 'border-gray-500'
-                      }`}>
-                        {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                    return (
+                      <div
+                        key={`${res.external_id}_${idx}`}
+                        onClick={() => handleSelectCandidate(res)}
+                        className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-rose-950/40 border-rose-500'
+                            : 'bg-[#1b1d2a] border-[#2d3145] hover:border-gray-500'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3 min-w-0">
+                          {res.poster ? (
+                            <img src={res.poster} alt={res.title} className="w-10 aspect-[2/3] object-cover rounded border border-[#2d3145] shrink-0" />
+                          ) : (
+                            <div className="w-10 aspect-[2/3] bg-[#232736] rounded shrink-0 flex items-center justify-center">
+                              {getTypeIcon()}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <h5 className="font-bold text-xs text-white truncate">{res.title}</h5>
+                            <p className="text-[11px] text-gray-400">{res.release_year ? `Year: ${res.release_year}` : ''} • {res.provider}</p>
+                          </div>
+                        </div>
+
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          isSelected ? 'bg-rose-500 border-rose-400 text-white' : 'border-gray-500'
+                        }`}>
+                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
           )}
