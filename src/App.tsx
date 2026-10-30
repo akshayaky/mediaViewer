@@ -154,7 +154,7 @@ export function App() {
     setDetailReturnTransition(null);
     setCardTransition(null);
 
-    if (activeTab === tab) {
+    if (activeTab === tab && !selectedMedia) {
       return;
     }
 
