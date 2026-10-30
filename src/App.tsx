@@ -153,6 +153,11 @@ export function App() {
     detailOrigin.current = null;
     setDetailReturnTransition(null);
     setCardTransition(null);
+
+    if (activeTab === tab) {
+      return;
+    }
+
     setActiveTab(tab);
     setSelectedMedia(null);
     setSelectedAccentColor(undefined);
