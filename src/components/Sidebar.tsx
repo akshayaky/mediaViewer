@@ -342,12 +342,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
           />
 
           {/* Sheet Drawer */}
-          <div className="relative z-50 bg-[#161822] border-t border-white/10 rounded-t-2xl p-5 shadow-2xl space-y-4 animate-in slide-in-from-bottom duration-250"
-            style={{ paddingBottom: 'calc(4.5rem + var(--sab, 0px))' }}
+          <div 
+            className="relative z-50 border-t border-white/10 rounded-t-2xl p-5 shadow-2xl space-y-4 animate-in slide-in-from-bottom duration-250"
+            style={{ 
+              paddingBottom: 'calc(4.5rem + var(--sab, 0px))',
+              backgroundColor: accentColors 
+                ? (accentColors.background.startsWith('#')
+                    ? `${accentColors.background.slice(0, 7)}cc`
+                    : accentColors.background)
+                : 'rgba(22, 24, 34, 0.8)',
+              backdropFilter: 'blur(40px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+            }}
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center space-x-2">
-                <Tv2 className="w-5 h-5 text-rose-500" />
+                <Tv2 className={`w-5 h-5 ${accentColors ? 'text-white' : 'text-rose-500'}`} />
                 <h3 className="text-base font-bold text-white tracking-tight">More Destinations</h3>
               </div>
               <button
@@ -368,17 +378,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
                     onClick={() => handleMobileTabSelect(item.id)}
                     className={`w-full flex items-center justify-between p-3.5 rounded-xl font-medium text-sm transition-all cursor-pointer ${
                       isActive
-                        ? 'bg-rose-600/20 border border-rose-500/40 text-rose-300'
-                        : 'bg-[#1f2230] hover:bg-[#282c3f] text-gray-200'
+                        ? (accentColors ? 'bg-white/10 border border-white/20 text-white' : 'bg-rose-600/20 border border-rose-500/40 text-rose-300')
+                        : (accentColors ? 'bg-white/5 hover:bg-white/10 text-white/70' : 'bg-[#1f2230] hover:bg-[#282c3f] text-gray-200')
                     }`}
                   >
                     <div className="flex items-center space-x-3.5">
-                      <Icon className={`w-5 h-5 ${isActive ? 'text-rose-400' : 'text-gray-400'}`} />
+                      <Icon className={`w-5 h-5 ${isActive ? (accentColors ? 'text-white' : 'text-rose-400') : 'text-gray-400'}`} />
                       <span>{item.label}</span>
                     </div>
 
                     {item.badge !== undefined && item.badge > 0 && (
-                      <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full ring-1 ring-white/20">
+                      <span className={`text-white text-xs font-bold px-2 py-0.5 rounded-full ring-1 ring-white/20 ${accentColors ? '' : 'bg-rose-500'}`}
+                            style={accentColors ? { backgroundColor: accentColors.activeBackground } : undefined}>
                         {item.badge}
                       </span>
                     )}
