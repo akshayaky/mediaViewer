@@ -251,12 +251,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
       {/* Mobile Bottom Navigation (< 900px) */}
       <nav
         className="flex sidebar:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 shadow-2xl items-center justify-around px-2 py-2"
-        style={{
-          backgroundColor: 'rgba(17, 19, 25, 0.58)',
-          backdropFilter: 'blur(24px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-          paddingBottom: 'calc(0.5rem + var(--sab, 0px))'
-        }}
+        style={
+            accentColors
+              ? {
+                  // If accentColors.background is already rgba/hsla, use it directly. 
+                  // Otherwise, we ensure a safe fallback color layer with solid contrast.
+                  backgroundColor: accentColors.background.startsWith('#')
+                    ? `${accentColors.background.slice(0, 7)}cc` // Strips existing alpha if present, appends 80%
+                    : accentColors.background,
+                  
+                  // Unified heavy blur to squash background text-checkerboarding completely
+                  backdropFilter: 'blur(40px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+                }
+              : {
+                  backgroundColor: 'rgba(17, 19, 25, 0.58)',
+                  backdropFilter: 'blur(24px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+                  paddingBottom: 'calc(0.5rem + var(--sab, 0px))'
+                }
+          }
       >
         {primaryNavItems.map(item => {
           const Icon = item.icon;
@@ -268,9 +282,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
               className={`flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all touch-target cursor-pointer ${
                 isActive ? 'text-rose-400 font-semibold' : 'text-gray-400 hover:text-white'
               }`}
+              style={isActive ? {
+                    backgroundColor: accentColors ? accentColors.activeBackground : 'rgba(255, 255, 255, 0.08)',
+                  } : {
+                    backgroundColor: 'transparent',
+                    color: accentColors?.inactiveForeground,
+                  }}
             >
-              <Icon className={`w-5 h-5 mb-1 ${isActive ? 'text-rose-500 scale-110' : 'text-gray-400'}`} />
-              <span className="text-[10px] tracking-tight truncate max-w-[60px] text-center">{item.label}</span>
+              <Icon className={`w-5 h-5 mb-1 ${isActive ? 'text-rose-500 scale-110' : 'text-gray-400'}`}
+                style={accentColors
+                  ? { color: isActive ? '#FFFFFF' : accentColors.inactiveForeground }
+                  : undefined}
+              />
+              <span 
+                className="text-[10px] tracking-tight truncate max-w-[60px] text-center"
+                style={accentColors
+                  ? { color: isActive ? '#FFFFFF' : accentColors.inactiveForeground }
+                  : undefined}
+                >
+                {item.label}
+              </span>
             </button>
           );
         })}
@@ -285,7 +316,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
           <div className="relative">
             <MoreHorizontal className={`w-5 h-5 mb-1 ${isSecondaryActive || isMoreSheetOpen ? 'text-rose-500 scale-110' : 'text-gray-400'}`} />
             {unmatchedCount > 0 && (
-              <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ring-2 ring-[#111319]">
+              <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ring-2 ring-[#111319]"
+              style={accentColors
+                  ? { 
+                    color: '#ffffff',
+                    backgroundColor: accentColors.activeBackground
+                   }
+                  : undefined}
+              >
                 {unmatchedCount}
               </span>
             )}
