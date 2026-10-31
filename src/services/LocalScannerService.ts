@@ -221,12 +221,35 @@ export class LocalScannerService {
         size: 1500000000
       }));
     } else if (selectedNativePaths?.length) {
-      discoveredItems = selectedNativePaths.map(path => ({
-        path,
-        filename: this.filenameFromPath(path),
-        // Android's document picker does not expose a file size with its URI.
-        size: 0
-      }));
+      discoveredItems = await Promise.all(
+        selectedNativePaths.map(async path => {
+          let filename = this.filenameFromPath(path);
+          let size = 0;
+          if (isTauri() && path.startsWith('content://')) {
+            try {
+              const name = await invoke<string>('plugin:android-fs|get_name', {
+                uri: { uri: path, documentTopTreeUri: null }
+              });
+              if (name) filename = name;
+            } catch (err) {
+              console.warn('Failed to query filename from android-fs:', err);
+            }
+            try {
+              const len = await invoke<number>('plugin:android-fs|get_file_byte_length', {
+                uri: { uri: path, documentTopTreeUri: null }
+              });
+              if (typeof len === 'number') size = len;
+            } catch (err) {
+              console.warn('Failed to query file length from android-fs:', err);
+            }
+          }
+          return {
+            path,
+            filename,
+            size
+          };
+        })
+      );
     } else if (isTauri() && !selectedFiles?.length) {
       if (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
         throw new Error('Select media files with Browse before scanning on Android.');
@@ -304,8 +327,9 @@ export class LocalScannerService {
         onProgress(i + 1);
       }
 
-      const parsed = this.parseFilePath(item.path, mediaType);
-      const ext = item.filename.split('.').pop() || '';
+      const parseTarget = item.path.startsWith('content://') && item.filename ? item.filename : item.path;
+      const parsed = this.parseFilePath(parseTarget, mediaType);
+      const ext = item.filename.includes('.') ? (item.filename.split('.').pop() || '') : '';
 
       const matchedMedia = this.findHighConfidenceMatch(parsed, mediaType, existingMedia);
       let localFileRecord = fileMapByPath.get(pathLower);

@@ -8,6 +8,11 @@ use std::thread;
 
 static STREAM_PORT: AtomicU16 = AtomicU16::new(0);
 static START_SERVER_ONCE: Once = Once::new();
+static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
+pub fn init_app_handle(app: tauri::AppHandle) {
+    let _ = APP_HANDLE.set(app);
+}
 
 pub fn ensure_stream_server_running() -> u16 {
     START_SERVER_ONCE.call_once(|| {
@@ -66,45 +71,84 @@ fn handle_connection(stream: &mut TcpStream) {
         }
     };
 
-    let path = Path::new(&file_path);
-    if !path.exists() || !path.is_file() {
-        let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 14\r\n\r\nFile Not Found");
-        return;
-    }
-
-    // Allowed extensions security filter
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    let is_video = matches!(ext.as_str(), "mp4" | "mkv" | "webm" | "avi" | "mov" | "m4v" | "ts" | "flv" | "wmv" | "ogv");
-    let is_sub = matches!(ext.as_str(), "srt" | "vtt" | "txt" | "ass");
-
-    if !is_video && !is_sub {
-        let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 18\r\n\r\nUnsupported format");
-        return;
-    }
-
-    let mime_type = match ext.as_str() {
-        "mp4" | "m4v" => "video/mp4",
-        "webm" => "video/webm",
-        "mkv" => "video/x-matroska",
-        "avi" => "video/x-msvideo",
-        "mov" => "video/quicktime",
-        "ogv" => "video/ogg",
-        "vtt" => "text/vtt",
-        "srt" | "txt" | "ass" => "text/plain; charset=utf-8",
-        _ => "application/octet-stream",
-    };
-
-    let mut file = match File::open(path) {
-        Ok(f) => f,
-        Err(_) => {
-            let _ = stream.write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 17\r\n\r\nFailed to open file");
+    let (mut file, file_len, mime_type) = if file_path.starts_with("content://") {
+        #[cfg(target_os = "android")]
+        {
+            use tauri_plugin_android_fs::AndroidFsExt;
+            let Some(app) = APP_HANDLE.get() else {
+                let _ = stream.write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 22\r\n\r\nMissing app handle");
+                return;
+            };
+            let uri = tauri_plugin_android_fs::FsUri::from_uri(&file_path);
+            let file = match app.android_fs().open_file_readable(&uri) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Failed to open content URI: {e}");
+                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 14\r\n\r\nFile Not Found");
+                    return;
+                }
+            };
+            let mut file = file;
+            let len = match file.metadata().map(|m| m.len()) {
+                Ok(l) if l > 0 => l,
+                _ => {
+                    let cur = file.stream_position().unwrap_or(0);
+                    let end = file.seek(SeekFrom::End(0)).unwrap_or(0);
+                    let _ = file.seek(SeekFrom::Start(cur));
+                    end
+                }
+            };
+            let mime = app.android_fs().get_mime_type(&uri).unwrap_or_else(|_| "video/mp4".to_string());
+            (file, len, mime)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 14\r\n\r\nFile Not Found");
             return;
         }
-    };
+    } else {
+        let path = Path::new(&file_path);
+        if !path.exists() || !path.is_file() {
+            let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 14\r\n\r\nFile Not Found");
+            return;
+        }
 
-    let file_len = match file.metadata() {
-        Ok(m) => m.len(),
-        Err(_) => 0,
+        // Allowed extensions security filter
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+        let is_video = matches!(ext.as_str(), "mp4" | "mkv" | "webm" | "avi" | "mov" | "m4v" | "ts" | "flv" | "wmv" | "ogv");
+        let is_sub = matches!(ext.as_str(), "srt" | "vtt" | "txt" | "ass");
+
+        if !is_video && !is_sub {
+            let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 18\r\n\r\nUnsupported format");
+            return;
+        }
+
+        let mime = match ext.as_str() {
+            "mp4" | "m4v" => "video/mp4",
+            "webm" => "video/webm",
+            "mkv" => "video/x-matroska",
+            "avi" => "video/x-msvideo",
+            "mov" => "video/quicktime",
+            "ogv" => "video/ogg",
+            "vtt" => "text/vtt",
+            "srt" | "txt" | "ass" => "text/plain; charset=utf-8",
+            _ => "application/octet-stream",
+        }.to_string();
+
+        let file = match File::open(path) {
+            Ok(f) => f,
+            Err(_) => {
+                let _ = stream.write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 17\r\n\r\nFailed to open file");
+                return;
+            }
+        };
+
+        let len = match file.metadata() {
+            Ok(m) => m.len(),
+            Err(_) => 0,
+        };
+
+        (file, len, mime)
     };
 
     // Check for Range header

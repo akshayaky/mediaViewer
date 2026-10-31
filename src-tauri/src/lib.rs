@@ -66,14 +66,16 @@ async fn scan_directory(
 }
 
 #[tauri::command]
-fn get_video_stream_url(file_path: String) -> Result<String, String> {
+fn get_video_stream_url(app: tauri::AppHandle, file_path: String) -> Result<String, String> {
+    stream_server::init_app_handle(app);
     let port = stream_server::ensure_stream_server_running();
     let encoded = urlencoding::encode(&file_path);
     Ok(format!("http://127.0.0.1:{}/stream?path={}", port, encoded))
 }
 
 #[tauri::command]
-fn get_subtitle_url(file_path: String) -> Result<String, String> {
+fn get_subtitle_url(app: tauri::AppHandle, file_path: String) -> Result<String, String> {
+    stream_server::init_app_handle(app);
     let port = stream_server::ensure_stream_server_running();
     let encoded = urlencoding::encode(&file_path);
     Ok(format!("http://127.0.0.1:{}/subtitle?path={}", port, encoded))

@@ -3,7 +3,6 @@ import { Media, LocalFile } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { subtitleService, SubtitleTrack } from '../services/SubtitleService';
 import { localScannerService } from '../services/LocalScannerService';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import {
   Play,
   Pause,
@@ -221,22 +220,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           if (isMounted) setStreamUrl(objectUrl);
           return;
         }
-        // WebView blocks content:// URLs. The Android filesystem plugin serves
-        // persisted document URIs through a range-aware Tauri protocol instead.
-        let rawPath = activeFile.path.trim();
-        if ((rawPath.startsWith('"') && rawPath.endsWith('"')) || (rawPath.startsWith("'") && rawPath.endsWith("'"))) {
-          rawPath = rawPath.slice(1, -1);
-        }
-
-        if (rawPath.startsWith('content://')) {
-          const contentUrl = convertFileSrc(
-            JSON.stringify(rawPath),
-            'android-fs-content'
-          );
-          if (isMounted) setStreamUrl(contentUrl);
-          return;
-        }
-        if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+        if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
           const { invoke } = await import('@tauri-apps/api/core');
           const url = await invoke<string>('get_video_stream_url', { filePath: activeFile.path });
           if (isMounted) setStreamUrl(url);
@@ -783,8 +767,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           onClick={togglePlay}
           onLoadedMetadata={handleLoadedMetadata}
           onTimeUpdate={handleTimeUpdate}
-          onError={() => {
-            setError(`Playback error: Unsupported format or missing file at ${activeFile.path}`);
+          onError={(e) => {
+            const vid = e.currentTarget;
+            const code = vid.error?.code;
+            const msg = vid.error?.message;
+            console.error('[VideoPlayer] onError', { src: streamUrl, error: vid.error });
+            setError(`Playback error: ${msg || (code === 4 ? 'Unsupported format or codec' : 'File cannot be read')} at ${activeFile.path}`);
             setLoading(false);
           }}
           onEnded={() => {
