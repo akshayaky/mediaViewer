@@ -214,6 +214,10 @@
   pointer-events: none;
   background: transparent;
   transition: all 0.5s ease-in-out;
+  padding-top: env(safe-area-inset-top, 0px);
+  min-height: calc(56px + env(safe-area-inset-top, 0px)); /* Adjust 56px to match your base header height */
+  display: flex;
+  align-items: center;
 }
 
 .mdv-header--stuck {

@@ -399,8 +399,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     }
     if (!scrollContainer || scrollContainer === document.body) return;
 
+    // Calculate exactly how far down the row sits inside the scroll view natively
+    const initialOffsetTop = playButtonRow.offsetTop;
+
     const updateStickyState = () => {
-      const isStuck = playButtonRow.getBoundingClientRect().top <= 24;
+      // 74px is your sticky threshold gap from the top
+      const triggerPoint = initialOffsetTop - 74;
+      const isStuck = scrollContainer.scrollTop >= triggerPoint;
+      
       setIsPlayButtonStuck(previousState => previousState === isStuck ? previousState : isStuck);
     };
 

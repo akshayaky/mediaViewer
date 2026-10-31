@@ -228,7 +228,7 @@ useEffect(() => {
       className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 mx-auto max-w-none transition-all duration-300"
       style={{
         paddingLeft: pagePadding,
-        paddingTop: isDesktop?'': '3rem'
+        paddingTop: isDesktop?'': 'calc(env(safe-area-inset-top, 0px) + 12px)'
       }}
     >
       {/* Header Bar */}

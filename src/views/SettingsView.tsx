@@ -312,7 +312,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-8 max-w-5xl mx-auto transition-all duration-300"
       style={{
           paddingLeft: pagePadding,
-          paddingTop: isDesktop? '' : '3rem' 
+          paddingTop: isDesktop?'': 'calc(env(safe-area-inset-top, 0px) + 12px)'
         }}
     >
       {/* Hidden Folder Directory Inputs */}
