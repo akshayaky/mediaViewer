@@ -1023,3 +1023,36 @@
 @media (prefers-reduced-motion: reduce) {
   .mdv-page, .mdv-header, .mdv-btn, .mdv-fade-in { transition: none; animation: none; }
 }
+
+/* Sidebar visibility in Media Detail View */
+.mdv-sidebar-detail-hidden {
+  transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+}
+
+body:has(.mdv-page) .mdv-sidebar-detail-hidden {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+body:has(.mdv-page) .mdv-sidebar-detail-hidden:hover {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mdv-sidebar-trigger-zone {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 100vh;
+  z-index: 39;
+  pointer-events: auto;
+}
+
+body:has(.mdv-page) .mdv-sidebar-trigger-zone:hover ~ .mdv-sidebar-detail-hidden {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}

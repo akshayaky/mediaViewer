@@ -455,6 +455,8 @@ export function App() {
 
   return (
     <div className="flex h-screen bg-[#0c0d10] text-gray-100 font-sans overflow-hidden">
+      {/* Sidebar trigger zone for Detail View */}
+      <div className="mdv-sidebar-trigger-zone" />
       {/* Navigation Sidebar */}
       <Sidebar
         activeTab={activeTab}

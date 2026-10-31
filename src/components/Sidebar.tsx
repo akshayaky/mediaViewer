@@ -99,7 +99,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
         className={`hidden sidebar:flex fixed inset-y-0 left-0 flex-col justify-between select-none z-40 transition-all duration-500
           ease-[cubic-bezier(0.16,1,0.3,1)] ${
           isCollapsed ? 'w-20' : 'w-64'
-        } ${accentColors ? '' : 'bg-[#111319]/80 backdrop-blur-xl'}`}
+        } ${accentColors ? '' : 'bg-[#111319]/80 backdrop-blur-xl'} ${
+          // Hide sidebar when in detail view unless hovered
+          'mdv-sidebar-detail-hidden'
+        }`}
           style={
             accentColors
               ? {
