@@ -255,7 +255,7 @@ useEffect(() => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div style={{ top: `${isDesktop}`? 30: 30 }} 
+      <div style={{ top: 'calc(env(safe-area-inset-top, 0px))' }} 
       className="sticky top-0 z-30 flex items-center gap-3 bg-[#14161f]/95 backdrop-blur-xl p-3 sm:p-4 rounded-xl border border-[#232736] shadow-lg">
         {/* Search Box */}
         <div className="relative flex-1">
