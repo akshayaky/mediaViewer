@@ -223,17 +223,19 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         }
         // WebView blocks content:// URLs. The Android filesystem plugin serves
         // persisted document URIs through a range-aware Tauri protocol instead.
-        if (activeFile.path.startsWith('content://')) {
-          console.log(" older : " + activeFile.path)
+        let rawPath = activeFile.path.trim();
+        if ((rawPath.startsWith('"') && rawPath.endsWith('"')) || (rawPath.startsWith("'") && rawPath.endsWith("'"))) {
+          rawPath = rawPath.slice(1, -1);
+        }
+
+        if (rawPath.startsWith('content://')) {
           const contentUrl = convertFileSrc(
-            JSON.stringify(activeFile.path),
+            JSON.stringify(rawPath),
             'android-fs-content'
           );
-          console.log(contentUrl)
           if (isMounted) setStreamUrl(contentUrl);
           return;
         }
-          console.log("outside")
         if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
           const { invoke } = await import('@tauri-apps/api/core');
           const url = await invoke<string>('get_video_stream_url', { filePath: activeFile.path });
@@ -485,7 +487,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         );
       }
     }
-    console.log("paused :" + videoRef.current?.paused)
     return () => {
       if (countdownIntervalRef.current) clearTimeout(countdownIntervalRef.current);
     };
@@ -777,7 +778,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       {streamUrl && (
         <video
           ref={videoRef}
-          crossOrigin="anonymous"
           src={streamUrl}
           className="w-full h-full object-contain cursor-pointer"
           onClick={togglePlay}
