@@ -496,7 +496,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       {/* Pinned Header Bar Actions */}
       <div className={`mdv-header ${isPlayButtonStuck ? 'mdv-header--stuck' : ''}`}>
         <div className="mdv-header-actions mdv-sidebar-aware" data-sidebar-aware
-             style={{ left: sidebarPadding }}>
+             style={{ left: sidebarPadding }}
+             >
         <button
           onClick={onBack}
           className="mdv-btn mdv-btn-glass cursor-pointer group flex items-center gap-2 w-10 hover:w-36 transition-[width] duration-300 ease-in-out overflow-hidden whitespace-nowrap px-0 hover:px-2 hover:backdrop-blur-md"
@@ -687,7 +688,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           className={`mdv-play-row mdv-sidebar-aware flex flex-wrap ${isPlayButtonStuck ? isDesktopLayout ?'w-full justify-center':'w-full justify-center' : ''} gap-3`}
           data-sidebar-aware
           style={{ 
-            paddingLeft: sidebarPadding,
+            paddingLeft: isDesktopLayout ? undefined : '1rem',
             paddingTop: isPlayButtonStuck? undefined  :'1.5rem'
           }}
         >
@@ -714,7 +715,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       <div
         className="mdv-main mdv-sidebar-aware"
         data-sidebar-aware
-        style={{ paddingLeft: sidebarPadding }}
+        style={{ paddingLeft: isDesktopLayout ? undefined : '1rem' }}
       >
         {/* Left Column: Overview, Multi-watch Breakdown, Seasons, Cast, Journal */}
         <div className="mdv-col mdv-col--main">
