@@ -97,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
       <aside
         data-media-sidebar
         className={`hidden sidebar:flex fixed inset-y-0 left-0 flex-col justify-between select-none z-40 transition-all duration-500
-          ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-white/10 shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.05)] ${
+          ease-[cubic-bezier(0.16,1,0.3,1)] ${
           isCollapsed ? 'w-20' : 'w-64'
         } ${accentColors ? '' : 'bg-[#111319]/80 backdrop-blur-xl'}`}
           style={
@@ -161,7 +161,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
            </div>
 
            {/* Navigation Items */}
-           <nav className="p-3 space-y-1.5 flex-1 flex flex-col justify-center overflow-y-auto overflow-x-hidden scrollbar-hide">
+           <nav className="p-3 space-y-1.5 flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
             {allNavItems.map(item => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
