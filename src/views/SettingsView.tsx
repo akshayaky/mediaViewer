@@ -53,6 +53,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
   const [steamApiKey, setSteamApiKey] = useState(settings.steam_api_key || '');
   const [playerMode, setPlayerMode] = useState<'builtin' | 'os_default'>(settings.player_mode || 'builtin');
   const [autoplayNext, setAutoplayNext] = useState<boolean>(settings.autoplay_next_episode !== false);
+  const [sidebarHideEnabled, setSidebarHideEnabled] = useState(settings.sidebar_hide_enabled !== false);
 
   const [savedMessage, setSavedMessage] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -115,6 +116,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       setSteamApiKey(nextSettings.steam_api_key || '');
       setPlayerMode(nextSettings.player_mode || 'builtin');
       setAutoplayNext(nextSettings.autoplay_next_episode !== false);
+      setSidebarHideEnabled(nextSettings.sidebar_hide_enabled !== false);
     }).catch(err => console.error('Failed to load settings:', err));
   }, []);
 
@@ -159,6 +161,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       dbService.saveSetting('country_region', region.trim()),
       dbService.saveSetting('player_mode', playerMode),
       dbService.saveSetting('autoplay_next_episode', autoplayNext),
+      dbService.saveSetting('sidebar_hide_enabled', sidebarHideEnabled),
       saveNotionConfig(tokenInput, selectedDbId, notionApiMapping)
     ]);
     setSavedMessage('API credentials and preferences saved locally in SQLite.');
@@ -1063,6 +1066,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
               <span>Automatically play next episode on completion with countdown</span>
             </label>
           </div>
+
+          <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-3">
+            <label className="text-xs text-gray-200 font-bold block">UI & Navigation</label>
+            <label className="flex items-center space-x-2 cursor-pointer text-gray-300 hover:text-white pt-1">
+              <input
+                type="checkbox"
+                checked={sidebarHideEnabled}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setSidebarHideEnabled(val);
+                  dbService.saveSetting('sidebar_hide_enabled', val);
+                }}
+                className="rounded text-rose-500 focus:ring-rose-500"
+              />
+              <span>Hide sidebar in Detail View (show on left edge hover)</span>
+            </label>
+          </div>
+
         </div>
       </section>
 

@@ -175,6 +175,7 @@ export interface AppSettings {
   streaming_preferences?: string[];
   player_mode?: 'builtin' | 'os_default';
   autoplay_next_episode?: boolean;
+  sidebar_hide_enabled?: boolean;
   player_audio_settings?: {
     volume: number;
     muted: boolean;

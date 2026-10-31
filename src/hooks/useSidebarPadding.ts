@@ -7,7 +7,7 @@ export interface UseSidebarPaddingResult {
   windowWidth: number;
 }
 
-export function useSidebarPadding(isCollapsed: boolean = false): UseSidebarPaddingResult {
+export function useSidebarPadding(isCollapsed: boolean = false, sidebarHideEnabled: boolean = false): UseSidebarPaddingResult {
   const [windowWidth, setWindowWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth : 0
   );
@@ -20,7 +20,7 @@ export function useSidebarPadding(isCollapsed: boolean = false): UseSidebarPaddi
 
   const isDesktop = windowWidth >= SIDEBAR_BREAKPOINT;
   const pagePadding = isDesktop
-    ? (isCollapsed ? '6rem' : '18rem')
+    ? (sidebarHideEnabled ? '1rem' : (isCollapsed ? '6rem' : '18rem'))
     : '1rem';
 
   return { isDesktop, pagePadding, windowWidth };

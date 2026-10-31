@@ -6,6 +6,7 @@ import { getMediaTheme } from '../helper/mediaDetailTheme';
 import { getHighQualityBackdropUrl, getLastWatchedEpisodeArtwork, isEpisodeWatched } from '../helper/episodeProgress';
 import { dbService } from '../services/DatabaseService';
 import { SIDEBAR_BREAKPOINT } from '../constants/appConstants';
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
 import './MediaDetailView.css';
 import { MetadataSearchResult } from '../providers/interfaces';
 import { FixMatchModal } from '../components/FixMatchModal';
@@ -139,6 +140,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   } = useMediaDetail(initialMedia);
 
   const [playerModeSetting, setPlayerModeSetting] = useState<'builtin' | 'os_default'>('builtin');
+  const [sidebarHideEnabled, setSidebarHideEnabled] = useState(false);
   const [activePlayerSession, setActivePlayerSession] = useState<{
     file: LocalFile;
     season: number;
@@ -150,8 +152,20 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   useEffect(() => {
     dbService.getSettings().then(s => {
       setPlayerModeSetting(s.player_mode || 'builtin');
+      setSidebarHideEnabled(s.sidebar_hide_enabled !== false);
     });
   }, []);
+
+  useEffect(() => {
+    const updateBodyClass = () => {
+      if (sidebarHideEnabled) {
+        document.body.classList.add('sidebar-hide-enabled');
+      } else {
+        document.body.classList.remove('sidebar-hide-enabled');
+      }
+    };
+    updateBodyClass();
+  }, [sidebarHideEnabled]);
 
   // Three dot menu state
   const [showMenu, setShowMenu] = useState(false);
@@ -196,6 +210,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   };
 
   const [isDesktopLayout, setIsDesktopLayout] = useState(typeof window !== 'undefined' && window.innerWidth >= SIDEBAR_BREAKPOINT);
+  const { pagePadding: sidebarPadding } = useSidebarPadding(isCollapsed, sidebarHideEnabled);
 
   useEffect(() => {
     const handleResize = () => {
@@ -480,7 +495,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
       {/* Pinned Header Bar Actions */}
       <div className={`mdv-header ${isPlayButtonStuck ? 'mdv-header--stuck' : ''}`}>
-        <div className="mdv-header-actions mdv-sidebar-aware" data-sidebar-aware>
+        <div className="mdv-header-actions mdv-sidebar-aware" data-sidebar-aware
+             style={{ left: sidebarPadding }}>
         <button
           onClick={onBack}
           className="mdv-btn mdv-btn-glass cursor-pointer group flex items-center gap-2 w-10 hover:w-36 transition-[width] duration-300 ease-in-out overflow-hidden whitespace-nowrap px-0 hover:px-2 hover:backdrop-blur-md"
@@ -671,7 +687,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           className={`mdv-play-row mdv-sidebar-aware flex flex-wrap ${isPlayButtonStuck ? isDesktopLayout ?'w-full justify-center':'w-full justify-center' : ''} gap-3`}
           data-sidebar-aware
           style={{ 
-            paddingLeft: isDesktopLayout ? undefined : '1rem',
+            paddingLeft: sidebarPadding,
             paddingTop: isPlayButtonStuck? undefined  :'1.5rem'
           }}
         >
@@ -698,7 +714,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       <div
         className="mdv-main mdv-sidebar-aware"
         data-sidebar-aware
-        style={{ paddingLeft: isDesktopLayout ? undefined : '1rem' }}
+        style={{ paddingLeft: sidebarPadding }}
       >
         {/* Left Column: Overview, Multi-watch Breakdown, Seasons, Cast, Journal */}
         <div className="mdv-col mdv-col--main">
@@ -1601,6 +1617,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           initialPosition={activePlayerSession.position}
           allLocalFiles={localFiles}
           sideBarIsCollapsed={isCollapsed}
+          sidebarHideEnabled={sidebarHideEnabled}
           onClose={() => {
             setActivePlayerSession(null);
             refreshLocalFiles();

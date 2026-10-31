@@ -52,6 +52,7 @@ export interface VideoPlayerModalProps {
   initialPosition?: number;
   allLocalFiles?: LocalFile[];
   sideBarIsCollapsed: boolean;
+  sidebarHideEnabled?: boolean;
   onClose: () => void;
   onEpisodeChange?: (nextFile: LocalFile, season?: number, episode?: number, title?: string) => void;
 }
@@ -65,6 +66,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   initialPosition = 0,
   allLocalFiles = [],
   sideBarIsCollapsed = false,
+  sidebarHideEnabled = false,
   onClose,
   onEpisodeChange
 }) => {
@@ -629,12 +631,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const subHeader = media.type === 'TV Series'? 
     `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}${episodeTitle ? ` - ${episodeTitle}` : ''}`
     : ''
-  const controlsLeftOffset = isFullscreen ? 'left-0' : (!sideBarIsCollapsed ? 'left-64' : 'left-20');
+  const controlsLeftOffset = isFullscreen ? 'left-0' : (sidebarHideEnabled ? 'left-0' : (!sideBarIsCollapsed ? 'left-64' : 'left-20'));
   const backButtonLeftOffset = isFullscreen
     ? 'sidebar:left-4'
-    : sideBarIsCollapsed
+    : (sidebarHideEnabled ? 'sidebar:left-4' : sideBarIsCollapsed
       ? 'sidebar:left-[6.5rem]'
-      : 'sidebar:left-[17.5rem]';
+      : 'sidebar:left-[17.5rem]');
   
   return (
     <div

@@ -1056,3 +1056,11 @@ body:has(.mdv-page) .mdv-sidebar-trigger-zone:hover ~ .mdv-sidebar-detail-hidden
   opacity: 1;
   pointer-events: auto;
 }
+
+/* Only hide the sidebar if the setting is enabled */
+body:not(.sidebar-hide-enabled) .mdv-sidebar-detail-hidden {
+  transform: translateX(0) !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
