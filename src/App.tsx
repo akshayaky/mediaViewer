@@ -291,6 +291,17 @@ export function App() {
 
   // Android / Browser Back Button & Popstate Handling
   useEffect(() => {
+    if (selectedAccentColor) {
+      document.documentElement.style.setProperty('--hero-accent', selectedAccentColor);
+      // Use color-mix to create a lighter shade for hover
+      document.documentElement.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${selectedAccentColor}, white 20%)`);
+    } else {
+      document.documentElement.style.removeProperty('--hero-accent');
+      document.documentElement.style.removeProperty('--hero-accent-light');
+    }
+  }, [selectedAccentColor]);
+
+  useEffect(() => {
     // Push dummy history entry when opening detail or sheet/modal view
     if (selectedMedia) {
       window.history.pushState({ isMediaDetail: true }, '');
