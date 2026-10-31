@@ -1112,34 +1112,39 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             {localFiles.length === 0 ? (
               <p className="mdv-empty mdv-empty--sm">No local file detected for this media item.</p>
             ) : (
-              <div className="mdv-list">
-                {localFiles.map(lf => (
-                  <div key={lf.id} className="mdv-tile mdv-tile--sm mdv-file">
-                    <div className="mdv-file-head">
-                      <p className="mdv-file-name" title={lf.path}>
-                        {lf.filename}
-                      </p>
-                      {lf.exists ? (
-                        <span className="mdv-tag mdv-tag--ok">Available</span>
-                      ) : (
-                        <span className="mdv-tag mdv-tag--warn">Missing</span>
+              <details className="mdv-dropdown">
+                <summary className="mdv-dropdown-trigger">
+                  View Local Files ({localFiles.length})
+                </summary>
+                <div className="mdv-list">
+                  {localFiles.map(lf => (
+                    <div key={lf.id} className="mdv-tile mdv-tile--sm mdv-file">
+                      <div className="mdv-file-head">
+                        <p className="mdv-file-name" title={lf.path}>
+                          {lf.filename}
+                        </p>
+                        {lf.exists ? (
+                          <span className="mdv-tag mdv-tag--ok">Available</span>
+                        ) : (
+                          <span className="mdv-tag mdv-tag--warn">Missing</span>
+                        )}
+                      </div>
+
+                      <p className="mdv-file-path">{lf.path}</p>
+
+                      {lf.exists && (
+                        <button
+                          onClick={() => handlePlayFile(lf)}
+                          className="mdv-btn mdv-btn-launch"
+                        >
+                          <Play className="mdv-icon-sm" fill="currentColor" />
+                          <span>Launch File</span>
+                        </button>
                       )}
                     </div>
-
-                    <p className="mdv-file-path">{lf.path}</p>
-
-                    {lf.exists && (
-                      <button
-                        onClick={() => handlePlayFile(lf)}
-                        className="mdv-btn mdv-btn-launch"
-                      >
-                        <Play className="mdv-icon-sm" fill="currentColor" />
-                        <span>Launch File</span>
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                </details>
             )}
           </section>
 
