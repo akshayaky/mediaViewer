@@ -11,6 +11,7 @@ import {
   Maximize,
   Minimize,
   ArrowLeft,
+  RotateCw,
   RotateCcw,
   SkipForward,
   Subtitles,
@@ -101,6 +102,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   // UI Control visibility state
   const [showControls, setShowControls] = useState<boolean>(true);
+  const [showSeekLeft, setShowSeekLeft] = useState(false);
+  const [showSeekRight, setShowSeekRight] = useState(false);
+  const [showVolumeChange, setShowVolumeChange] = useState(false);
   const hideControlsTimerRef = useRef<any>(null);
   const [isEpisodePickerOpen, setIsEpisodePickerOpen] = useState(false);
   const [selectedPickerSeason, setSelectedPickerSeason] = useState(seasonNumber);
@@ -116,6 +120,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   // Save Progress Throttle
   const lastSavedPosRef = useRef<number>(0);
+
+  const volumeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Find Next Episode
   const getNextEpisodeFile = useCallback((): { file: LocalFile; season: number; episode: number } | null => {
@@ -554,16 +560,34 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           break;
         case 'ArrowLeft':
           e.preventDefault();
+          setShowSeekLeft(true);
+          setShowSeekRight(false);
+          setTimeout(() => setShowSeekLeft(false), 800);
           video.currentTime = Math.max(0, video.currentTime - 10);
           setCurrentTime(video.currentTime);
           break;
         case 'ArrowRight':
           e.preventDefault();
+          setShowSeekRight(true);
+          setShowSeekLeft(false);
+          setTimeout(() => setShowSeekRight(false), 800);
           video.currentTime = Math.min(video.duration, video.currentTime + 10);
           setCurrentTime(video.currentTime);
           break;
         case 'ArrowUp':
           e.preventDefault();
+          
+          // Clear any active timer so it restarts
+          if (volumeTimerRef.current) {
+            clearTimeout(volumeTimerRef.current);
+          }
+          setShowVolumeChange(false);
+          // Set the new timer
+          volumeTimerRef.current = setTimeout(() => {
+            setShowVolumeChange(false);
+          }, 800);
+          setShowVolumeChange(true);
+
           setVolume(prev => {
             const next = Math.min(1, prev + 0.1);
             video.volume = next; // 1. Update DOM first
@@ -573,6 +597,18 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           break;
         case 'ArrowDown':
           e.preventDefault();
+
+          // Clear any active timer so it restarts
+          if (volumeTimerRef.current) {
+            clearTimeout(volumeTimerRef.current);
+          }
+
+          // Set the new timer
+          volumeTimerRef.current = setTimeout(() => {
+            setShowVolumeChange(false);
+          }, 800);
+          setShowVolumeChange(true);
+
           setVolume(prev => {
             const next = Math.max(0, prev - 0.1);
             video.volume = next; // 1. Update DOM first
@@ -611,6 +647,52 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     onClose();
   };
 
+  const handleVideoTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+
+    const touch = e.touches[0]; // Accessing the first touch item
+    const now = e.timeStamp;
+    
+    // Use type assertion to safely access the dataset from currentTarget
+    const currentTarget = e.currentTarget as HTMLDivElement;
+    const lastTap = parseFloat(currentTarget.dataset.lastTap || '0');
+    const delay = now - lastTap;
+
+    if (delay > 0 && delay < 300) {
+      e.preventDefault(); 
+      
+      const rect = currentTarget.getBoundingClientRect();
+      const touchX = touch.clientX - rect.left;
+      const midPoint = rect.width / 2;
+
+      if (touchX < midPoint) {
+        handleDoubleTapLeft();
+      } else {
+        handleDoubleTapRight();
+      }
+
+      currentTarget.dataset.lastTap = '0';
+    } else {
+      currentTarget.dataset.lastTap = now.toString();
+    }
+  };
+
+  const handleDoubleTapLeft = () => {
+    setShowSeekLeft(true);
+    setTimeout(() => setShowSeekLeft(false), 800);
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+    }
+  };
+
+  const handleDoubleTapRight = () => {
+    setShowSeekRight(true);
+    setTimeout(() => setShowSeekRight(false), 800);
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.min(videoRef.current.duration, videoRef.current.currentTime + 10);
+    }
+  };
+
   const formatTime = (secs: number) => {
     if (isNaN(secs)) return '00:00';
     const h = Math.floor(secs / 3600);
@@ -641,10 +723,43 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   return (
     <div
       ref={containerRef}
+      onTouchStart={handleVideoTouch} 
       onMouseMove={handleMouseMove}
       onClick={() => setIsEpisodePickerOpen(false)}
       className="fixed inset-0 z-50 bg-black flex items-center justify-center overflow-hidden select-none font-sans"
     >
+      {/* Centered Play Icon Wrapper */}
+      {!isPlaying && !showVolumeChange && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+          <div className="animate-[ping_0.15s_cubic-bezier(0.175,0.885,0.32,1.275)_reverse] transform origin-center">
+            <Play className="h-16 w-16 fill-current text-white opacity-80 drop-shadow-2xl" />
+          </div>
+        </div>
+      )}
+
+      {/* Centered Play Icon Wrapper */}
+      {showVolumeChange && (
+        
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+          <div className="animate-[ping_0.15s_ease-in_reverse] transform origin-center">
+            {volume === 0 ? (
+              <VolumeX className="h-16 w-16 fill-current text-white opacity-80 drop-shadow-2xl" />
+            ) : (
+              <Volume2 className="h-16 w-16 fill-current text-white opacity-80 drop-shadow-2xl" />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Seek Overlays */}
+      <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-between px-20">
+        <div className={`flex items-center justify-center w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm text-white drop-shadow-lg transition-opacity duration-300 ${showSeekLeft ? 'opacity-100' : 'opacity-0'}`}>
+          <RotateCcw className="h-8 w-8" />
+        </div>
+        <div className={`flex items-center justify-center w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm text-white drop-shadow-lg transition-opacity duration-300 ${showSeekRight ? 'opacity-100' : 'opacity-0'}`}>
+          <RotateCw  className="h-8 w-8" />
+        </div>
+      </div>
       {/* Video Element */}
       {streamUrl && (
         <video
@@ -911,9 +1026,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
       {/* Bottom Control Bar Overlay */}
       <div
-  className={`absolute bottom-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 space-y-3 transition-opacity duration-300 z-10 ${
-    showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
-  } max-sidebar:left-0 max-sidebar:bottom-15 sidebar: ${controlsLeftOffset} sidebar:bottom-0`}
+      className={`absolute bottom-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 space-y-3 transition-opacity duration-300 z-10 ${
+        showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      } max-sidebar:left-0 max-sidebar:bottom-15 sidebar: ${controlsLeftOffset} sidebar:bottom-0`}
 >
         {/* Seekbar Progress Slider */}
         <div className="relative group flex items-center">
