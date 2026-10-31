@@ -81,27 +81,9 @@ export function App() {
     clearPreviewStartTimer();
     if (transitionFrame.current !== null) cancelAnimationFrame(transitionFrame.current);
 
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const radius = getCardTransitionRadius(centerX, centerY);
-    const detailCenter = getDetailTransitionCenter(centerX, centerY, mainViewRef.current);
-
-    setCardTransition({
-      mediaId: media.id,
-      color: media.accent_color || '#e11d48',
-      centerX,
-      centerY,
-      ...detailCenter,
-      radius,
-      phase: 'preview',
-      entered: false
-    });
-    previewStartTimer.current = setTimeout(() => {
-      setCardTransition(current => current?.mediaId === media.id && current.phase === 'preview'
-        ? { ...current, entered: true }
-        : current);
-      previewStartTimer.current = null;
-    }, 34);
+    // Preview start is now disabled to remove the expanding circle effect
+    // but we still keep the logic for potential future use.
+    // setCardTransition(null); 
   };
 
   const handlePreviewEnd = () => {

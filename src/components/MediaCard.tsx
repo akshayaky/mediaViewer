@@ -77,6 +77,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onP
         return <Tv className="w-3.5 h-3.5 text-sky-400" />;
       case 'VideoGame':
         return <Gamepad2 className="w-3.5 h-3.5 text-purple-400" />;
+      default:
+        return null;
     }
   };
 
@@ -124,42 +126,54 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onP
           onPreviewEnd?.();
         }
       }}
-      className="group relative cursor-pointer flex flex-col bg-[#151720] rounded-sm overflow-hidden border border-[#232736] hover:border-rose-500/50 hover:shadow-xl hover:shadow-rose-950/20 transition-all duration-300 transform hover:-translate-y-1 touch-target"
+      className="group relative cursor-pointer flex flex-col bg-[#151720] rounded-sm transition-all duration-300 transform hover:-translate-y-1 touch-target"
     >
-      {/* Poster Image Container */}
-      <div className="relative aspect-[2/3] w-full bg-[#1b1e2b] overflow-hidden">
-        {posterUrl && !imgFailed ? (
-          <img
-            //src={media.poster.startsWith('http') ? media.poster : (typeof window !== 'undefined' && (window as any).__TAURI__ ? convertFileSrc(media.poster) : media.poster)}
-            src={posterUrl}
-            alt={media.title}
-            onError={handleImageError}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+      {/* Backlight Glow Effect */}
+      <div className="absolute -inset-4 opacity-0 group-hover:opacity-70 transition-opacity duration-500 blur-3xl pointer-events-none z-0">
+        {posterUrl && (
+          <img 
+            src={posterUrl} 
+            alt="" 
+            className="w-full h-full object-cover saturate-200" 
             loading="lazy"
           />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-gradient-to-b from-[#1b1e2b] to-[#12141d]">
-            {getTypeIcon()}
-            <span className="text-sm font-medium text-gray-300 mt-2 line-clamp-2">{media.title}</span>
-          </div>
         )}
+      </div>
 
-        {/* Gradient Overlay on Hover */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d10] via-transparent to-black/20 opacity-80 group-hover:opacity-90 transition-opacity" />
-
-        {/* Status Badge */}
-        {renderBadge()}
-
-        {/* Subtle Bottom Progress Bar */}
-        {progressPct > 0 && (
-          <div className="absolute bottom-0 inset-x-0 bg-black/60 h-1.5 z-10">
-            <div
-              className="bg-rose-500 h-full transition-all duration-300 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
-              style={{ width: `${progressPct}%` }}
+      {/* Main Card Content */}
+      <div className="relative flex flex-col bg-[#151720] rounded-sm overflow-hidden border border-transparent group-hover:border-white/10 hover:shadow-xl hover:shadow-black/50 transition-all duration-300 z-10">
+        {/* Poster Image Container */}
+        <div className="relative aspect-[2/3] w-full bg-[#1b1e2b] overflow-hidden">
+          {posterUrl && !imgFailed ? (
+            <img
+              src={posterUrl}
+              alt={media.title}
+              onError={handleImageError}
+              className="w-full h-full object-cover transition-transform duration-500"
+              loading="lazy"
             />
-          </div>
-        )}
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-gradient-to-b from-[#1b1e2b] to-[#12141d]">
+              {getTypeIcon()}
+              <span className="text-sm font-medium text-gray-300 mt-2 line-clamp-2">{media.title}</span>
+            </div>
+          )}
+          {/* Gradient Overlay on Hover */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d10] via-transparent to-black/20 opacity-80 group-hover:opacity-90 transition-opacity" />
 
+          {/* Status Badge */}
+          {renderBadge()}
+
+          {/* Subtle Bottom Progress Bar */}
+          {progressPct > 0 && (
+            <div className="absolute bottom-0 inset-x-0 bg-black/60 h-1.5 z-10">
+              <div
+                className="bg-rose-500 h-full transition-all duration-300 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          )}
+        </div>
         {/* Score Badge */}
         {/* {score && (
           <span className="absolute top-2 right-2 bg-black/75 backdrop-blur-md text-amber-400 text-xs font-bold px-2 py-0.5 rounded-md flex items-center space-x-1 border border-amber-500/20">

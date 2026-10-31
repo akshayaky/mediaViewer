@@ -1,0 +1,4 @@
+.svg-filtered-image {
+  /* Links to the ID specified in the SVG filter */
+  filter: url(#blur-and-scale);
+}
