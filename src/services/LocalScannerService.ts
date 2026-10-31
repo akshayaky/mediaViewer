@@ -26,6 +26,10 @@ export interface ScanResult {
 export class LocalScannerService {
   private webFilesMap: Map<MediaType, File[]> = new Map();
   private webFilePathMap: Map<MediaType, Map<string, File>> = new Map();
+  // Android's native document picker supplies content URIs. Unlike browser File
+  // objects, these are safe to keep as the database identifier after this JS
+  // process has been recreated.
+  private nativeSelectedPaths: Map<MediaType, string[]> = new Map();
 
   public setWebSelectedFiles(mediaType: MediaType, files: File[]) {
     this.webFilesMap.set(mediaType, files);
@@ -46,6 +50,15 @@ export class LocalScannerService {
   public clearWebSelectedFiles(mediaType: MediaType) {
     this.webFilesMap.delete(mediaType);
     this.webFilePathMap.delete(mediaType);
+  }
+
+  public setNativeSelectedPaths(mediaType: MediaType, paths: string[]) {
+    this.nativeSelectedPaths.set(mediaType, paths);
+    this.clearWebSelectedFiles(mediaType);
+  }
+
+  public clearNativeSelectedPaths(mediaType: MediaType) {
+    this.nativeSelectedPaths.delete(mediaType);
   }
 
   public getWebSelectedFile(mediaType: MediaType, filePath: string): File | undefined {
@@ -199,12 +212,20 @@ export class LocalScannerService {
     let discoveredItems: Array<{ path: string; filename: string; size: number }> = [];
 
     const selectedFiles = this.webFilesMap.get(mediaType);
+    const selectedNativePaths = this.nativeSelectedPaths.get(mediaType);
 
     if (samplePathsOverride) {
       discoveredItems = samplePathsOverride.map(p => ({
         path: p,
         filename: p.split(/\\|\//).pop() || p,
         size: 1500000000
+      }));
+    } else if (selectedNativePaths?.length) {
+      discoveredItems = selectedNativePaths.map(path => ({
+        path,
+        filename: this.filenameFromPath(path),
+        // Android's document picker does not expose a file size with its URI.
+        size: 0
       }));
     } else if (isTauri() && !selectedFiles?.length) {
       if (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
@@ -241,12 +262,19 @@ export class LocalScannerService {
         const filesByPath = this.webFilePathMap.get(mediaType) || new Map<string, File>();
         discoveredItems = validFiles.map(f => {
           const relPath = f.webkitRelativePath || f.name;
-          const cleanFolderPath = folderPath ? folderPath.replace(/[\\\/]+$/, '') : 'C:\\Media';
+          
+          // On Android/Web, we cannot reliably get a persistent absolute path via File API.
+          // However, we store the relative path (webkitRelativePath) if available, 
+          // otherwise just the filename. We prefix it with the provided folderPath 
+          // to create a pseudo-absolute path for DB uniqueness.
+          const cleanFolderPath = folderPath ? folderPath.replace(/[\\\/]+$/, '') : 'Media';
+          
           let fullPath;
           if (relPath === f.name && cleanFolderPath === f.name) {
             fullPath = f.name;
           } else {
-            fullPath = `${cleanFolderPath}\\${relPath.replace(/\//g, '\\')}`;
+            const normalizedRelPath = relPath.replace(/\\/g, '/');
+            fullPath = `${cleanFolderPath}/${normalizedRelPath}`;
           }
           filesByPath.set(fullPath.toLowerCase(), f);
 
@@ -352,6 +380,16 @@ export class LocalScannerService {
       missingMarkedCount,
       discoveredFiles
     };
+  }
+
+  private filenameFromPath(path: string): string {
+    const pathWithoutQuery = path.split(/[?#]/, 1)[0];
+    const filename = pathWithoutQuery.split(/\\|\//).pop() || path;
+    try {
+      return decodeURIComponent(filename);
+    } catch {
+      return filename;
+    }
   }
 
   /**

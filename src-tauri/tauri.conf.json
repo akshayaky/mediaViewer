@@ -44,10 +44,18 @@
             "sql:allow-load",
             "sql:allow-execute",
             "sql:allow-select",
-            "sql:allow-close"
+            "sql:allow-close",
+            "android-fs:default"
           ]
         }
       ]
+    }
+  },
+  "plugins": {
+    "android-fs": {
+      "contentProtocol": {
+        "enable": true
+      }
     }
   },
   "bundle": {

@@ -3,6 +3,7 @@ import { Media, LocalFile } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { subtitleService, SubtitleTrack } from '../services/SubtitleService';
 import { localScannerService } from '../services/LocalScannerService';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import {
   Play,
   Pause,
@@ -220,7 +221,19 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           if (isMounted) setStreamUrl(objectUrl);
           return;
         }
-
+        // WebView blocks content:// URLs. The Android filesystem plugin serves
+        // persisted document URIs through a range-aware Tauri protocol instead.
+        if (activeFile.path.startsWith('content://')) {
+          console.log(" older : " + activeFile.path)
+          const contentUrl = convertFileSrc(
+            JSON.stringify(activeFile.path),
+            'android-fs-content'
+          );
+          console.log(contentUrl)
+          if (isMounted) setStreamUrl(contentUrl);
+          return;
+        }
+          console.log("outside")
         if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
           const { invoke } = await import('@tauri-apps/api/core');
           const url = await invoke<string>('get_video_stream_url', { filePath: activeFile.path });

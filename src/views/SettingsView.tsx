@@ -192,6 +192,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
     const mediaType: MediaType = key === 'movies' ? 'Film' : key === 'tv' ? 'TV Series' : 'VideoGame';
 
     if (isAndroid) {
+      if (isTauri()) {
+        try {
+          type AndroidFsUri = { uri: string; documentTopTreeUri: string | null };
+          const selected = await invoke<AndroidFsUri[]>('plugin:android-fs|show_open_file_picker', {
+            mimeTypes: key === 'games' ? ['*/*'] : ['video/*'],
+            multiple: true,
+            pickerType: 'FilePicker',
+            needWritePermission: false,
+            localOnly: true,
+            initialLocation: null
+          });
+          await Promise.all(selected.map(uri => invoke<void>(
+            'plugin:android-fs|persist_picker_uri_permission',
+            { uri }
+          )));
+          const paths = selected.map(uri => uri.uri);
+          if (paths.length > 0) {
+            localScannerService.setNativeSelectedPaths(mediaType, paths);
+            const selectionLabel = `Android selection (${paths.length} file${paths.length === 1 ? '' : 's'})`;
+            if (key === 'movies') setMoviesFolder(selectionLabel);
+            if (key === 'tv') setTvFolder(selectionLabel);
+            if (key === 'games') setGamesFolder(selectionLabel);
+            setSavedMessage(`Selected ${paths.length} file${paths.length === 1 ? '' : 's'}. Scan now to add their Android paths to your library.`);
+            setTimeout(() => setSavedMessage(''), 4000);
+          }
+        } catch (err) {
+          console.error('Failed to open the Android document picker:', err);
+          setSavedMessage('Could not open the Android document picker. Please try again.');
+          setTimeout(() => setSavedMessage(''), 4000);
+        }
+        return;
+      }
+
       if (key === 'movies') moviesFolderInputRef.current?.click();
       if (key === 'tv') tvFolderInputRef.current?.click();
       if (key === 'games') gamesFolderInputRef.current?.click();
