@@ -207,7 +207,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
      let currentIndex = allTracks.findIndex(track =>
        selectedSubtitleId === `sidecar:${track.id}` || selectedSubtitleId === track.id
      );
-     
+
      if (currentIndex < 0) {
       if(lastSelectedSubtitleId >= 0 && lastSelectedSubtitleId < allTracks.length)
         currentIndex = lastSelectedSubtitleId;
@@ -671,15 +671,23 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           setShowSeekLeft(true);
           setShowSeekRight(false);
           setTimeout(() => setShowSeekLeft(false), 800);
-          video.currentTime = Math.max(0, video.currentTime - 10);
+          if (e.shiftKey) {
+            video.currentTime = Math.max(0, video.currentTime - 5);
+          } else {
+            video.currentTime = Math.max(0, video.currentTime - 10);
+          }
           setCurrentTime(video.currentTime);
           break;
         case 'ArrowRight':
           e.preventDefault();
-          setShowSeekRight(true);
-          setShowSeekLeft(false);
-          setTimeout(() => setShowSeekRight(false), 800);
-          video.currentTime = Math.min(video.duration, video.currentTime + 10);
+          setShowSeekLeft(true);
+          setShowSeekRight(false);
+          setTimeout(() => setShowSeekLeft(false), 800);
+          if (e.shiftKey) {
+            video.currentTime = Math.max(0, video.currentTime + 5);
+          } else {
+            video.currentTime = Math.max(0, video.currentTime + 10);
+          }
           setCurrentTime(video.currentTime);
           break;
         case 'ArrowUp':
