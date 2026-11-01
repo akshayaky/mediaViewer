@@ -1182,10 +1182,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             {/* Play/Pause */}
             <button
               onClick={togglePlay}
-              className="p-2 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
+              className="group p-2 text-white cursor-pointer"
               title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
             >
-              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 fill-current" />}
+              {isPlaying
+                ? <Pause className="w-6 h-6 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
+                : <Play className="w-6 h-6 fill-current transition-transform group-hover:scale-110 group-focus-visible:scale-110" />}
             </button>
 
             {/* Restart From Beginning */}
@@ -1196,10 +1198,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   setCurrentTime(0);
                 }
               }}
-              className="p-2 rounded-full hover:bg-white/20 text-gray-300 hover:text-white transition-colors cursor-pointer"
+              className="group p-2 text-gray-300 hover:text-white cursor-pointer"
               title="Restart from Beginning"
             >
-              <RotateCcw className="w-5 h-5" />
+              <RotateCcw className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
             </button>
 
             {/* Next Episode Button if available */}
@@ -1215,10 +1217,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     );
                   }
                 }}
-                className="p-2 rounded-full hover:bg-white/20 text-gray-300 hover:text-white transition-colors cursor-pointer"
+                className="group p-2 text-gray-300 hover:text-white cursor-pointer"
                 title={`Next Episode (S${String(nextEpInfo.season).padStart(2, '0')}E${String(nextEpInfo.episode).padStart(2, '0')})`}
               >
-                <SkipForward className="w-5 h-5" />
+                <SkipForward className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
               </button>
             )}
 
@@ -1226,9 +1228,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             <div className="flex items-center space-x-2 group">
               <button
                 onClick={toggleMute}
-                className="p-1.5 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
+                className="group p-1.5 text-white cursor-pointer"
+                title={isMuted || volume === 0 ? 'Unmute' : 'Mute'}
               >
-                {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                {isMuted || volume === 0
+                  ? <VolumeX className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
+                  : <Volume2 className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />}
               </button>
               <input
                 type="range"
@@ -1253,14 +1258,18 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-1.5 min-[1090px]:space-x-3">
             {/* Playback Speed Selector */}
-            <div className="hidden min-[1090px]:flex relative flex items-center space-x-1 text-xs">
-              <Sliders className="w-4 h-4 text-gray-400" />
+            <div
+              className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
+              title={`Playback speed: ${playbackSpeed}x`}
+            >
+              <Sliders className="w-4 h-4 text-gray-400 transition-transform group-hover:scale-110 group-hover:text-white group-focus-within:scale-110 group-focus-within:text-white" />
               <select
                 value={playbackSpeed}
                 onChange={(e) => handleSpeedChange(Number(e.target.value))}
-                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80"
+                aria-label="Playback speed"
+                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 max-[1089px]:absolute max-[1089px]:inset-0 max-[1089px]:h-full max-[1089px]:w-full max-[1089px]:opacity-0 max-[1089px]:cursor-pointer"
               >
                 <option value={0.5} className="bg-[#14161f]">0.5x</option>
                 <option value={0.75} className="bg-[#14161f]">0.75x</option>
@@ -1272,14 +1281,17 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             </div>
 
             {/* Subtitles Selector */}
-            <div className="hidden min-[1000px]:flex relative flex items-center space-x-1 text-xs" title={subtitleError || undefined}>
-              <Subtitles className="w-4 h-4 text-rose-400" />
+            <div
+              className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
+              title={subtitleError || 'Subtitle track'}
+            >
+              <Subtitles className="w-4 h-4 text-rose-400 transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
               <select
                 value={selectedSubtitleId}
                 onChange={(e) => setSelectedSubtitleId(e.target.value)}
                 aria-label="Subtitle track"
                 disabled={mkvParsing || subtitleTracks.length + embeddedSubtitleTracks.length === 0}
-                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-60"
+                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-60 max-[1089px]:absolute max-[1089px]:inset-0 max-[1089px]:h-full max-[1089px]:w-full max-[1089px]:opacity-0 max-[1089px]:cursor-pointer"
               >
                 {subtitleTracks.length + embeddedSubtitleTracks.length === 0 ? (
                   <option value="off" className="bg-[#14161f]">
@@ -1305,16 +1317,16 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
             {/* Audio Track Selector */}
             <div
-              className="hidden min-[950px]:flex relative flex items-center space-x-1 text-xs"
-              title={audioTrackSupport === false ? 'Audio track switching is not supported by this video runtime.' : undefined}
+              className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
+              title={audioTrackSupport === false ? 'Audio track switching is not supported by this video runtime.' : 'Audio track'}
             >
-              <AudioLines className="w-4 h-4 text-rose-400" />
+              <AudioLines className="w-4 h-4 text-rose-400 transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
               <select
                 value={audioTracks.length ? selectedAudioTrackId : ''}
                 onChange={(e) => setSelectedAudioTrackId(e.target.value)}
                 aria-label="Audio track"
                 disabled={audioTracks.length < 2}
-                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-60"
+                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-60 max-[1089px]:absolute max-[1089px]:inset-0 max-[1089px]:h-full max-[1089px]:w-full max-[1089px]:opacity-0 max-[1089px]:cursor-pointer"
               >
                 {audioTracks.length === 0 ? (
                   <option value="" className="bg-[#14161f]">
@@ -1337,10 +1349,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             {/* Fullscreen Toggle */}
             <button
               onClick={toggleFullscreen}
-              className="p-2 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
+              className="group p-2 text-white cursor-pointer"
               title="Fullscreen (F)"
             >
-              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+              {isFullscreen
+                ? <Minimize className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
+                : <Maximize className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />}
             </button>
           </div>
         </div>
