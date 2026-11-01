@@ -57,6 +57,14 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
             alt={media.title}
             className="hero-backdrop-img absolute inset-0 z-[1] w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 opacity-75"
           />
+          {/* Hero Backlight Glow Effect */}
+          <div className="absolute -inset-10 opacity-40 transition-opacity duration-500 blur-3xl pointer-events-none z-0">
+            <img 
+              src={media.backdrop} 
+              alt="" 
+              className="w-full h-full object-cover saturate-200" 
+            />
+          </div>
         </>
       ) : (
         <div className="absolute inset-0 z-0" style={{
