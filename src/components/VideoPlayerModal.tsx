@@ -94,6 +94,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [subtitleTracks, setSubtitleTracks] = useState<SubtitleTrack[]>([]);
   const [embeddedSubtitleTracks, setEmbeddedSubtitleTracks] = useState<EmbeddedSubtitleTrack[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string>('off');
+  const [lastSelectedSubtitleId, setLastSelectedSubtitleId] = useState(0);
   const [subtitleError, setSubtitleError] = useState<string | null>(null);
   const [activeSubtitleText, setActiveSubtitleText] = useState('');
   const [audioTracks, setAudioTracks] = useState<{ id: string; label: string }[]>([]);
@@ -170,6 +171,59 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     media.seasons
       ?.find(item => item.season_number === season)
       ?.episodes?.find(item => item.episode_number === episode);
+  
+    const cycleSubtitles = useCallback(() => {
+     // Toggle on/off between available tracks and "off"
+     const allTracks = [...subtitleTracks, ...embeddedSubtitleTracks];
+
+     if (allTracks.length === 0) return;
+
+     let currentIndex = allTracks.findIndex(track =>
+       selectedSubtitleId === `sidecar:${track.id}` || selectedSubtitleId === track.id
+     );
+
+     if (currentIndex >= 0) {
+       // If currently enabled, move to next (or off at end)
+       currentIndex = (currentIndex + 1) % (allTracks.length + 1);
+       setLastSelectedSubtitleId(currentIndex);
+     } else {
+       // Start from beginning
+       currentIndex = allTracks.length > 0 ? 0 : 0;
+     }
+
+     const targetTrack = currentIndex >= allTracks.length
+       ? 'off'
+       : `sidecar:${allTracks[currentIndex].id}`;
+
+     setSelectedSubtitleId(targetTrack);
+   }, [selectedSubtitleId, subtitleTracks, embeddedSubtitleTracks, lastSelectedSubtitleId]);
+
+   const toggleSubtitles = useCallback(() => {
+     // Toggle on/off between available tracks and "off"
+     const allTracks = [...subtitleTracks, ...embeddedSubtitleTracks];
+
+     if (allTracks.length === 0) return;
+
+     let currentIndex = allTracks.findIndex(track =>
+       selectedSubtitleId === `sidecar:${track.id}` || selectedSubtitleId === track.id
+     );
+     
+     if (currentIndex < 0) {
+      if(lastSelectedSubtitleId >= 0 && lastSelectedSubtitleId < allTracks.length)
+        currentIndex = lastSelectedSubtitleId;
+      else
+        currentIndex = 0;
+     } else {
+       setLastSelectedSubtitleId(currentIndex);
+       currentIndex = allTracks.length;
+     }
+
+     const targetTrack = currentIndex >= allTracks.length
+       ? 'off'
+       : `sidecar:${allTracks[currentIndex].id}`;
+
+     setSelectedSubtitleId(targetTrack);
+   }, [selectedSubtitleId, subtitleTracks, embeddedSubtitleTracks, setLastSelectedSubtitleId]);
 
   // Load Settings
   useEffect(() => {
@@ -680,6 +734,17 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           e.preventDefault();
           toggleMute();
           break;
+        case 'v':
+        case 'V':
+          if (e.shiftKey) {
+            e.preventDefault();
+            toggleSubtitles()
+            console.log("Shift + V pressed");
+          } else {
+            e.preventDefault();
+            cycleSubtitles();
+          }
+          break;
         case 'Escape':
           if (!document.fullscreenElement) {
             e.preventDefault();
@@ -865,11 +930,11 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           ))}
         </video>
       )}
-
+      
       {activeSubtitleText && (
         <div
           aria-live="off"
-          className="pointer-events-none absolute bottom-[18%] left-1/2 z-20 max-w-[85vw] -translate-x-1/2 whitespace-pre-line rounded bg-black/70 px-3 py-1.5 text-center text-base font-semibold leading-relaxed text-white shadow-[0_2px_6px_rgba(0,0,0,0.9)] sm:text-xl"
+          className= {`pointer-events-none absolute  ${showControls ? 'bottom-[18%]' : 'bottom-[5%]'} left-1/2 z-20 max-w-[85vw] -translate-x-1/2 whitespace-pre-line rounded bg-black/70 px-3 py-1.5 text-center text-base font-semibold leading-relaxed text-white shadow-[0_2px_6px_rgba(0,0,0,0.9)] sm:text-xl`}
         >
           {activeSubtitleText}
         </div>
