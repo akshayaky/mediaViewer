@@ -3,6 +3,7 @@ export interface SubtitleTrack {
   label: string;
   language: string;
   url: string;
+  embedded?: boolean;
 }
 
 export class SubtitleService {

@@ -488,6 +488,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         ) : (
           <div className="mdv-backdrop-fallback" />
         )}
+        {/* Hero Backlight Glow Effect */}
+          {/* <div className="absolute -inset-10 opacity-40 transition-opacity duration-500 blur-3xl pointer-events-none z-0">
+            <img 
+              src={artworkSource} 
+              alt="" 
+              className="w-full h-full object-cover saturate-200" 
+            />
+          </div> */}
         {artworkSource && (
           <DominantColorExtractor
             key={artworkSource}

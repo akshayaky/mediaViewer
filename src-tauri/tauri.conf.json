@@ -40,12 +40,24 @@
               "identifier": "opener:allow-open-path",
               "allow": [{ "path": "**" }]
             },
+            "fs:default",
+            {
+              "identifier": "fs:allow-read-file",
+              "allow": [
+                {
+                  "path": "C:\\Users\\akyma\\Videos\\**"
+                }
+              ]
+            },
             "sql:default",
             "sql:allow-load",
             "sql:allow-execute",
             "sql:allow-select",
             "sql:allow-close",
-            "android-fs:default"
+            "android-fs:default",
+            "fs:default",
+            "fs:allow-read-file"
+            
           ]
         }
       ]

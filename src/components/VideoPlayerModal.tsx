@@ -3,6 +3,7 @@ import { Media, LocalFile } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { subtitleService, SubtitleTrack } from '../services/SubtitleService';
 import { localScannerService } from '../services/LocalScannerService';
+import { extractMkvSubtitleTracks } from '../services/SubtitleExtraction';
 import {
   Play,
   Pause,
@@ -123,6 +124,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   const volumeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [mkvParsing, setMkvParsing] = useState<boolean>(false);
+
   // Find Next Episode
   const getNextEpisodeFile = useCallback((): { file: LocalFile; season: number; episode: number } | null => {
     if (media.type !== 'TV Series') return null;
@@ -190,6 +193,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     });
   }, [audioSettingsLoaded, volume, isMuted]);
 
+  useEffect(() => () => {
+    for (const track of subtitleTracks) {
+      if (track.url.startsWith('blob:')) URL.revokeObjectURL(track.url);
+    }
+  }, [subtitleTracks]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -203,6 +212,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     let objectUrl: string | undefined;
     setLoading(true);
     setError(null);
+    setStreamUrl('');
     setSubtitleTracks([]);
     setEmbeddedSubtitleTracks([]);
     setSelectedSubtitleId('off');
@@ -211,6 +221,60 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     setAudioTracks([]);
     setSelectedAudioTrackId('');
     setAudioTrackSupport(null);
+    setMkvParsing(false);
+
+    const loadSubtitleTracks = async (webFile?: File) => {
+      const discoveredTracks: SubtitleTrack[] = [];
+      try {
+        discoveredTracks.push(...await subtitleService.discoverSubtitlesForVideo(activeFile.path));
+      } catch (subtitleLoadError) {
+        const message = subtitleLoadError instanceof Error
+          ? subtitleLoadError.message
+          : String(subtitleLoadError);
+        console.error('Failed to discover subtitle tracks:', subtitleLoadError);
+        if (isMounted) setSubtitleError(message);
+      }
+
+      const isMkv = activeFile.path.toLowerCase().endsWith('.mkv');
+      if (isMkv) {
+        if (isMounted) setMkvParsing(true);
+        try {
+          let bytes: ArrayBuffer | Uint8Array;
+          if (webFile) {
+            bytes = await webFile.arrayBuffer();
+          } else if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+            const { readFile } = await import('@tauri-apps/plugin-fs');
+            bytes = await readFile(activeFile.path);
+          } else {
+            throw new Error('The MKV file is not available for embedded subtitle extraction.');
+          }
+
+          const extractedTracks = extractMkvSubtitleTracks(bytes).map(track => ({
+            id: track.id,
+            label: track.label,
+            language: track.language,
+            url: URL.createObjectURL(new Blob([track.webVtt], { type: 'text/vtt;charset=utf-8' })),
+            embedded: true
+          }));
+          discoveredTracks.push(...extractedTracks);
+        } catch (subtitleParseError) {
+          const message = subtitleParseError instanceof Error
+            ? subtitleParseError.message
+            : String(subtitleParseError);
+          console.error('Failed to extract embedded MKV subtitles:', subtitleParseError);
+          if (isMounted) setSubtitleError(message);
+        } finally {
+          if (isMounted) setMkvParsing(false);
+        }
+      }
+
+      if (isMounted) setSubtitleTracks(discoveredTracks);
+      else {
+        for (const track of discoveredTracks) {
+          if (track.url.startsWith('blob:')) URL.revokeObjectURL(track.url);
+        }
+      }
+    };
 
     const resolveStream = async () => {
       try {
@@ -218,32 +282,24 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         if (selectedFile) {
           objectUrl = URL.createObjectURL(selectedFile);
           if (isMounted) setStreamUrl(objectUrl);
+          void loadSubtitleTracks(selectedFile);
           return;
         }
+
         if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
           const { invoke } = await import('@tauri-apps/api/core');
           const url = await invoke<string>('get_video_stream_url', { filePath: activeFile.path });
           if (isMounted) setStreamUrl(url);
+          void loadSubtitleTracks();
         } else {
-          // Browser environment fallback
           setStreamUrl(activeFile.path);
+          void loadSubtitleTracks();
         }
-      } catch (err: any) {
-        if (isMounted) {
-          setError(`Failed to initialize stream for file: ${err?.message || activeFile.filename}`);
-          setLoading(false);
-        }
-        return;
-      }
-
-      try {
-        const subs = await subtitleService.discoverSubtitlesForVideo(activeFile.path);
-        if (isMounted) setSubtitleTracks(subs);
       } catch (err) {
         if (isMounted) {
           const message = err instanceof Error ? err.message : String(err);
-          setSubtitleError(message);
-          console.error('Failed to discover subtitle tracks:', err);
+          setError(`Failed to initialize stream for file: ${message || activeFile.filename}`);
+          setLoading(false);
         }
       }
     };
@@ -1149,19 +1205,19 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 value={selectedSubtitleId}
                 onChange={(e) => setSelectedSubtitleId(e.target.value)}
                 aria-label="Subtitle track"
-                disabled={subtitleTracks.length + embeddedSubtitleTracks.length === 0}
+                disabled={mkvParsing || subtitleTracks.length + embeddedSubtitleTracks.length === 0}
                 className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {subtitleTracks.length + embeddedSubtitleTracks.length === 0 ? (
                   <option value="off" className="bg-[#14161f]">
-                    {subtitleError ? 'Subtitle load failed' : loading ? 'Searching subtitles…' : 'No sidecar subtitles'}
+                    {mkvParsing ? 'Reading embedded subtitles…' : subtitleError ? 'Subtitle load failed' : loading ? 'Searching subtitles…' : 'No subtitles available'}
                   </option>
                 ) : (
                   <>
                     <option value="off" className="bg-[#14161f]">Subtitles Off</option>
                     {subtitleTracks.map(sub => (
                       <option key={sub.id} value={`sidecar:${sub.id}`} className="bg-[#14161f]">
-                        {sub.label}
+                        {sub.label}{sub.embedded ? ' (Embedded)' : ''}
                       </option>
                     ))}
                     {embeddedSubtitleTracks.map(track => (
