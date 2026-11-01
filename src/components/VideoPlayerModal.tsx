@@ -94,6 +94,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [subtitleTracks, setSubtitleTracks] = useState<SubtitleTrack[]>([]);
   const [embeddedSubtitleTracks, setEmbeddedSubtitleTracks] = useState<EmbeddedSubtitleTrack[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string>('off');
+  const [subtitleTracksLoaded, setSubtitleTracksLoaded] = useState<boolean>(false);
+  const [videoMetadataLoaded, setVideoMetadataLoaded] = useState<boolean>(false);
+  const [subtitleAutoSelectionDone, setSubtitleAutoSelectionDone] = useState<boolean>(false);
   const [lastSelectedSubtitleId, setLastSelectedSubtitleId] = useState(0);
   const [subtitleError, setSubtitleError] = useState<string | null>(null);
   const [activeSubtitleText, setActiveSubtitleText] = useState('');
@@ -270,6 +273,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     setSubtitleTracks([]);
     setEmbeddedSubtitleTracks([]);
     setSelectedSubtitleId('off');
+    setSubtitleTracksLoaded(false);
+    setVideoMetadataLoaded(false);
+    setSubtitleAutoSelectionDone(false);
     setSubtitleError(null);
     setActiveSubtitleText('');
     setAudioTracks([]);
@@ -322,7 +328,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         }
       }
 
-      if (isMounted) setSubtitleTracks(discoveredTracks);
+      if (isMounted) {
+        setSubtitleTracks(discoveredTracks);
+        setSubtitleTracksLoaded(true);
+      }
       else {
         for (const track of discoveredTracks) {
           if (track.url.startsWith('blob:')) URL.revokeObjectURL(track.url);
@@ -406,6 +415,26 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     };
   }, [streamUrl, subtitleTracks, discoverEmbeddedSubtitleTracks]);
 
+  useEffect(() => {
+    if (!subtitleTracksLoaded || !videoMetadataLoaded || subtitleAutoSelectionDone) return;
+
+    const preferredTrack = subtitleTracks.find(track => track.embedded)
+      || embeddedSubtitleTracks[0]
+      || subtitleTracks[0];
+    if (!preferredTrack) return;
+
+    setSelectedSubtitleId('track' in preferredTrack
+      ? preferredTrack.id
+      : `sidecar:${preferredTrack.id}`);
+    setSubtitleAutoSelectionDone(true);
+  }, [
+    subtitleTracksLoaded,
+    videoMetadataLoaded,
+    subtitleAutoSelectionDone,
+    subtitleTracks,
+    embeddedSubtitleTracks
+  ]);
+
   const applySubtitleSelection = useCallback((selectedId: string) => {
     setActiveSubtitleText('');
     for (const [id, element] of subtitleTrackElementsRef.current) {
@@ -486,6 +515,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     setDuration(video.duration || 0);
     setLoading(false);
     discoverEmbeddedSubtitleTracks();
+    setVideoMetadataLoaded(true);
 
     if (initialPosition > 0 && initialPosition < video.duration - 10) {
       video.currentTime = initialPosition;
