@@ -580,7 +580,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     setShowControls(true);
     if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
     hideControlsTimerRef.current = setTimeout(() => {
-      if (isPlaying) {
+      // Only hide controls and close picker when playing AND picker is NOT open
+      if (isPlaying && !isEpisodePickerOpen) {
         setShowControls(false);
         setIsEpisodePickerOpen(false);
       }
@@ -1066,7 +1067,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           </button>
 
           {isEpisodePickerOpen && (
-            <div className="absolute right-0 top-14 flex h-[18rem] max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111319]/95 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))] sidebar:h-[min(36rem,max(0px,calc(100dvh-12rem-var(--sab,0px))))] sidebar:max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] sidebar:flex-row sm:rounded-2xl">
+            <div
+              className="absolute right-0 top-14 flex h-[18rem] max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111319]/95 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))] sidebar:h-[min(36rem,max(0px,calc(100dvh-12rem-var(--sab,0px))))] sidebar:max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] sidebar:flex-row sm:rounded-2xl"
+              onMouseEnter={() => {
+                if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+              }}
+            >
               <nav aria-label="Select season" className="flex w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-contain border-b border-white/10 bg-[#111319]/80 p-1 touch-pan-x sidebar:w-24 sidebar:flex-col sidebar:gap-1 sidebar:overflow-x-hidden sidebar:overflow-y-auto sidebar:border-b-0 sidebar:border-r sidebar:p-2 sidebar:touch-pan-y">
                 {pickerSeasons.map(season => (
                   <button
