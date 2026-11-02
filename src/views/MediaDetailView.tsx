@@ -1148,7 +1148,25 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
                       {lf.exists && (
                         <button
-                          onClick={() => handlePlayFile(lf)}
+                          onClick={() =>
+                            {
+                              if (currentMedia.type === 'VideoGame' || playerModeSetting === 'os_default') {
+                                handlePlayFile(lf);
+                              } else {
+                                  const season = currentMedia.seasons?.find(s => s.season_number === lf.season);
+
+                                  const episode = season?.episodes?.find(e => e.episode_number === lf.episode);
+
+                                  const episodeName = episode?.name || lf.parsed_title || lf.filename;
+                                  setActivePlayerSession({
+                                    file: lf,
+                                    season: Number(lf.season),
+                                    episode: Number(lf.episode),
+                                    position: 0,
+                                    title: episodeName || ""
+                                  });
+                            }
+                          }}
                           className="mdv-btn mdv-btn-launch"
                         >
                           <Play className="mdv-icon-sm" fill="currentColor" />
