@@ -125,7 +125,7 @@
 }
 
 .mdv-detail-scroll-container {
-  scrollbar-color: rgba(255, 255, 255, 0.72) rgba(0, 0, 0, 0.28);
+  scrollbar-color: rgba(255, 255, 255, 0.22) rgba(0, 0, 0, 0.28);
   scrollbar-width: thin;
 }
 
