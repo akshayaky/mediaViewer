@@ -180,4 +180,14 @@ export interface AppSettings {
     volume: number;
     muted: boolean;
   };
+  player_subtitle_style?: SubtitleStyleSettings;
+}
+
+export interface SubtitleStyleSettings {
+  preset: 'default' | 'high-contrast' | 'large-text' | 'minimal' | 'custom';
+  fontSize: number;
+  fontFamily: string;
+  textColor: string;
+  background: 'none' | 'semi-transparent' | 'solid';
+  outline: boolean;
 }

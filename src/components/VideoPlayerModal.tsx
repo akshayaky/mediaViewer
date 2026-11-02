@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Media, LocalFile } from '../types/media';
+import { Media, LocalFile, SubtitleStyleSettings } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { subtitleService, SubtitleTrack } from '../services/SubtitleService';
 import { localScannerService } from '../services/LocalScannerService';
@@ -21,8 +21,85 @@ import {
   Loader2,
   ChevronRight,
   ChevronDown,
-  AudioLines
+  AudioLines,
+  Settings2,
+  Crop
 } from 'lucide-react';
+
+const DEFAULT_SUBTITLE_STYLE: SubtitleStyleSettings = {
+  preset: 'default',
+  fontSize: 20,
+  fontFamily: 'system-ui, sans-serif',
+  textColor: '#ffffff',
+  background: 'semi-transparent',
+  outline: true
+};
+
+const SUBTITLE_STYLE_PRESETS: Record<SubtitleStyleSettings['preset'], SubtitleStyleSettings> = {
+  default: DEFAULT_SUBTITLE_STYLE,
+  'high-contrast': {
+    preset: 'high-contrast',
+    fontSize: 24,
+    fontFamily: 'system-ui, sans-serif',
+    textColor: '#ffff00',
+    background: 'solid',
+    outline: true
+  },
+  'large-text': {
+    preset: 'large-text',
+    fontSize: 32,
+    fontFamily: 'system-ui, sans-serif',
+    textColor: '#ffffff',
+    background: 'semi-transparent',
+    outline: true
+  },
+  minimal: {
+    preset: 'minimal',
+    fontSize: 20,
+    fontFamily: 'system-ui, sans-serif',
+    textColor: '#ffffff',
+    background: 'none',
+    outline: false
+  },
+  custom: {
+    ...DEFAULT_SUBTITLE_STYLE,
+    preset: 'custom'
+  }
+};
+
+const SUBTITLE_FONT_FAMILIES = [
+  { label: 'System default', value: 'system-ui, sans-serif' },
+  { label: 'Arial', value: 'Arial, sans-serif' },
+  { label: 'Verdana', value: 'Verdana, sans-serif' },
+  { label: 'Trebuchet MS', value: '"Trebuchet MS", sans-serif' },
+  { label: 'Georgia', value: 'Georgia, serif' }
+];
+
+const normalizeSubtitleStyle = (value: unknown): SubtitleStyleSettings => {
+  const style = typeof value === 'object' && value !== null
+    ? value as Partial<SubtitleStyleSettings>
+    : {};
+  const presets: SubtitleStyleSettings['preset'][] = ['default', 'high-contrast', 'large-text', 'minimal', 'custom'];
+  const backgrounds: SubtitleStyleSettings['background'][] = ['none', 'semi-transparent', 'solid'];
+  const fontFamilies = SUBTITLE_FONT_FAMILIES.map(font => font.value);
+
+  return {
+    preset: style.preset && presets.includes(style.preset) ? style.preset : DEFAULT_SUBTITLE_STYLE.preset,
+    fontSize: typeof style.fontSize === 'number' && Number.isFinite(style.fontSize)
+      ? Math.min(48, Math.max(12, style.fontSize))
+      : DEFAULT_SUBTITLE_STYLE.fontSize,
+    fontFamily: style.fontFamily && fontFamilies.includes(style.fontFamily)
+      ? style.fontFamily
+      : DEFAULT_SUBTITLE_STYLE.fontFamily,
+    textColor: typeof style.textColor === 'string' && /^#[\da-f]{6}$/i.test(style.textColor)
+      ? style.textColor
+      : DEFAULT_SUBTITLE_STYLE.textColor,
+    background: style.background && backgrounds.includes(style.background)
+      ? style.background
+      : DEFAULT_SUBTITLE_STYLE.background,
+    outline: typeof style.outline === 'boolean' ? style.outline : DEFAULT_SUBTITLE_STYLE.outline
+  };
+};
 
 interface NativeAudioTrack {
   label?: string;
@@ -89,6 +166,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [audioSettingsLoaded, setAudioSettingsLoaded] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [fillVideoToScreen, setFillVideoToScreen] = useState<boolean>(false);
 
   // Subtitles & Audio Tracks
   const [subtitleTracks, setSubtitleTracks] = useState<SubtitleTrack[]>([]);
@@ -100,6 +178,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [lastSelectedSubtitleId, setLastSelectedSubtitleId] = useState(0);
   const [subtitleError, setSubtitleError] = useState<string | null>(null);
   const [activeSubtitleText, setActiveSubtitleText] = useState('');
+  const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyleSettings>(DEFAULT_SUBTITLE_STYLE);
+  const [subtitleStyleLoaded, setSubtitleStyleLoaded] = useState(false);
+  const [showSubtitleStyleEditor, setShowSubtitleStyleEditor] = useState(false);
   const [audioTracks, setAudioTracks] = useState<{ id: string; label: string }[]>([]);
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string>('');
   const [audioTrackSupport, setAudioTrackSupport] = useState<boolean | null>(null);
@@ -241,11 +322,20 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         setVolume(Math.min(1, Math.max(0, audioSettings.volume)));
         setIsMuted(audioSettings.muted === true);
       }
+      setSubtitleStyle(normalizeSubtitleStyle(s.player_subtitle_style));
+      setSubtitleStyleLoaded(true);
       setAudioSettingsLoaded(true);
     }).catch(error => {
-      console.error('Failed to load player audio settings:', error);
+      console.error('Failed to load player settings:', error);
     });
   }, []);
+
+  useEffect(() => {
+    if (!subtitleStyleLoaded) return;
+    void dbService.saveSetting('player_subtitle_style', subtitleStyle).catch(error => {
+      console.error('Failed to save subtitle style:', error);
+    });
+  }, [subtitleStyleLoaded, subtitleStyle]);
 
   useEffect(() => {
     if (!audioSettingsLoaded) return;
@@ -852,6 +942,11 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           e.preventDefault();
           toggleFullscreen();
           break;
+        case 'c':
+        case 'C':
+          e.preventDefault();
+          setFillVideoToScreen(current => !current);
+          break;
         case 'm':
         case 'M':
           e.preventDefault();
@@ -963,6 +1058,11 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     : (sidebarHideEnabled ? 'sidebar:left-4' : sideBarIsCollapsed
       ? 'sidebar:left-[6.5rem]'
       : 'sidebar:left-[17.5rem]');
+  const subtitleBackground = subtitleStyle.background === 'solid'
+    ? '#000000'
+    : subtitleStyle.background === 'semi-transparent'
+      ? 'rgba(0, 0, 0, 0.7)'
+      : 'transparent';
   
   return (
     <div
@@ -976,7 +1076,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       className={`fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black font-sans select-none ${showControls || cursorPointerOverride ? 'cursor-pointer' : 'cursor-none'}`}
     >
       {/* Centered Play Icon Wrapper */}
-      {!isPlaying && !showVolumeChange && (!countdownCancelled || showNextCountdown) ? (
+      {!isPlaying && !showVolumeChange ? (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
           <div className="animate-[ping_0.15s_cubic-bezier(0.175,0.885,0.32,1.275)_reverse] transform origin-center">
             <Play className="h-16 w-16 fill-current text-white opacity-80 drop-shadow-2xl" />
@@ -1009,7 +1109,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         <video
           ref={videoRef}
           src={streamUrl}
-          className="h-full w-full object-contain"
+          className={`h-full w-full ${fillVideoToScreen ? 'object-cover' : 'object-contain'}`}
           onClick={togglePlay}
           onLoadedMetadata={handleLoadedMetadata}
           onTimeUpdate={handleTimeUpdate}
@@ -1059,7 +1159,16 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       {activeSubtitleText && (
         <div
           aria-live="off"
-          className= {`pointer-events-none absolute  ${showControls ? 'bottom-[18%]' : 'bottom-[5%]'} left-1/2 z-20 max-w-[85vw] -translate-x-1/2 whitespace-pre-line rounded bg-black/70 px-3 py-1.5 text-center text-base font-semibold leading-relaxed text-white shadow-[0_2px_6px_rgba(0,0,0,0.9)] sm:text-xl`}
+          className={`pointer-events-none absolute ${showControls ? 'bottom-[18%]' : 'bottom-[5%]'} left-1/2 z-20 max-w-[85vw] -translate-x-1/2 whitespace-pre-line rounded px-3 py-1.5 text-center font-semibold leading-relaxed`}
+          style={{
+            backgroundColor: subtitleBackground,
+            color: subtitleStyle.textColor,
+            fontFamily: subtitleStyle.fontFamily,
+            fontSize: `${subtitleStyle.fontSize}px`,
+            textShadow: subtitleStyle.outline
+              ? '0 1px 2px #000, 1px 0 2px #000, -1px 0 2px #000, 0 -1px 2px #000'
+              : 'none'
+          }}
         >
           {activeSubtitleText}
         </div>
@@ -1112,12 +1221,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
           {isEpisodePickerOpen && (
             <div
-              className="absolute right-0 top-14 flex h-[18rem] max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111319]/95 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))] sidebar:h-[min(36rem,max(0px,calc(100dvh-12rem-var(--sab,0px))))] sidebar:max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] sidebar:flex-row sm:rounded-2xl"
+              className="absolute right-0 top-14 flex h-[18rem] max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111319]/20 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))] sidebar:h-[min(36rem,max(0px,calc(100dvh-12rem-var(--sab,0px))))] sidebar:max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] sidebar:flex-row sm:rounded-2xl"
               onMouseEnter={() => {
                 if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
               }}
             >
-              <nav aria-label="Select season" className="flex w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-contain border-b border-white/10 bg-[#111319]/80 p-1 touch-pan-x sidebar:w-24 sidebar:flex-col sidebar:gap-1 sidebar:overflow-x-hidden sidebar:overflow-y-auto sidebar:border-b-0 sidebar:border-r sidebar:p-2 sidebar:touch-pan-y">
+              <nav aria-label="Select season" className="flex w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-contain border-b border-white/10 bg-[#111319]/10 p-1 touch-pan-x sidebar:w-24 sidebar:flex-col sidebar:gap-1 sidebar:overflow-x-hidden sidebar:overflow-y-auto sidebar:border-b-0 sidebar:border-r sidebar:p-2 sidebar:touch-pan-y">
                 {pickerSeasons.map(season => (
                   <button
                     key={season}
@@ -1308,8 +1417,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
             >
               {isPlaying
-                ? <Pause className="w-6 h-6 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
-                : <Play className="w-6 h-6 fill-current transition-transform group-hover:scale-110 group-focus-visible:scale-110" />}
+                ? <Pause className="w-7 h-7 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
+                : <Play className="w-7 h-7 fill-current transition-transform group-hover:scale-110 group-focus-visible:scale-110" />}
             </button>
 
             {/* Restart From Beginning */}
@@ -1323,7 +1432,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               className="group p-2 text-gray-300 hover:text-white cursor-pointer"
               title="Restart from Beginning"
             >
-              <RotateCcw className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
+              <RotateCcw className="w-6 h-6 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
             </button>
 
             {/* Next Episode Button if available */}
@@ -1342,7 +1451,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 className="group p-2 text-gray-300 hover:text-white cursor-pointer"
                 title={`Next Episode (S${String(nextEpInfo.season).padStart(2, '0')}E${String(nextEpInfo.episode).padStart(2, '0')})`}
               >
-                <SkipForward className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
+                <SkipForward className="w-6 h-6 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
               </button>
             )}
 
@@ -1354,8 +1463,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 title={isMuted || volume === 0 ? 'Unmute' : 'Mute'}
               >
                 {isMuted || volume === 0
-                  ? <VolumeX className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
-                  : <Volume2 className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />}
+                  ? <VolumeX className="w-6 h-6 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
+                  : <Volume2 className="w-6 h-6 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />}
               </button>
               <input
                 type="range"
@@ -1373,7 +1482,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             </div>
 
             {/* Time Stamp */}
-            <div className="text-xs font-mono text-gray-300 pl-2">
+            <div className="text-lg  font-mono text-gray-300 pl-2">
               <span>{formatTime(currentTime)}</span>
               <span className="text-gray-500 mx-1">/</span>
               <span>{formatTime(duration)}</span>
@@ -1386,7 +1495,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
               title={`Playback speed: ${playbackSpeed}x`}
             >
-              <Sliders className="w-4 h-4 text-gray-400 transition-transform group-hover:scale-110 group-hover:text-white group-focus-within:scale-110 group-focus-within:text-white" />
+              <Sliders className="w-5 h-5 text-gray-400 transition-transform group-hover:scale-110 group-hover:text-white group-focus-within:scale-110 group-focus-within:text-white" />
               <select
                 value={playbackSpeed}
                 onChange={(e) => handleSpeedChange(Number(e.target.value))}
@@ -1407,7 +1516,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
               title={subtitleError || 'Subtitle track'}
             >
-              <Subtitles className="w-4 h-4 text-rose-400 transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
+              <Subtitles className="w-5 h-5 text-rose-400 transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
               <select
                 value={selectedSubtitleId}
                 onChange={(e) => setSelectedSubtitleId(e.target.value)}
@@ -1437,12 +1546,158 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               </select>
             </div>
 
+            {/* Subtitle Style Controls */}
+            <div className="relative flex shrink-0 items-center">
+              <button
+                type="button"
+                onClick={() => setShowSubtitleStyleEditor(open => !open)}
+                aria-label="Customize subtitles"
+                aria-expanded={showSubtitleStyleEditor}
+                title="Customize subtitles"
+                className="group p-2 text-gray-300 hover:text-white cursor-pointer"
+              >
+                <Settings2 className="w-5 h-5 transition-transform group-hover:rotate-45 group-focus-visible:rotate-45" />
+              </button>
+              {showSubtitleStyleEditor && (
+                <div
+                  className="absolute bottom-full right-0 z-50 mb-3 w-80 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-white/15 bg-[#151722]/95 p-4 text-white shadow-2xl backdrop-blur-xl"
+                  aria-label="Subtitle appearance settings"
+                  onClick={event => event.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-bold">Subtitle appearance</h2>
+                    <button
+                      type="button"
+                      onClick={() => setShowSubtitleStyleEditor(false)}
+                      className="text-xs text-gray-300 hover:text-white"
+                    >
+                      Done
+                    </button>
+                  </div>
+
+                  <label className="block space-y-1 text-xs text-gray-300">
+                    <span>Preset</span>
+                    <select
+                      value={subtitleStyle.preset}
+                      onChange={event => {
+                        const preset = event.target.value as SubtitleStyleSettings['preset'];
+                        setSubtitleStyle(preset === 'custom'
+                          ? style => ({ ...style, preset })
+                          : SUBTITLE_STYLE_PRESETS[preset]);
+                      }}
+                      className="w-full rounded-lg border border-white/20 bg-black/60 px-2 py-1.5 text-white"
+                    >
+                      <option value="default">Default</option>
+                      <option value="high-contrast">High contrast</option>
+                      <option value="large-text">Large text</option>
+                      <option value="minimal">Minimal</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </label>
+
+                  <label className="block space-y-1 text-xs text-gray-300">
+                    <span className="flex justify-between">
+                      <span>Font size</span>
+                      <span>{subtitleStyle.fontSize}px</span>
+                    </span>
+                    <input
+                      type="range"
+                      min={12}
+                      max={48}
+                      step={1}
+                      value={subtitleStyle.fontSize}
+                      onChange={event => setSubtitleStyle(style => ({
+                        ...style,
+                        preset: 'custom',
+                        fontSize: Number(event.target.value)
+                      }))}
+                      aria-label="Subtitle font size"
+                      className="w-full accent-rose-500"
+                    />
+                  </label>
+
+                  <label className="block space-y-1 text-xs text-gray-300">
+                    <span>Font family</span>
+                    <select
+                      value={subtitleStyle.fontFamily}
+                      onChange={event => setSubtitleStyle(style => ({
+                        ...style,
+                        preset: 'custom',
+                        fontFamily: event.target.value
+                      }))}
+                      className="w-full rounded-lg border border-white/20 bg-black/60 px-2 py-1.5 text-white"
+                    >
+                      {SUBTITLE_FONT_FAMILIES.map(font => (
+                        <option key={font.value} value={font.value}>{font.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block space-y-1 text-xs text-gray-300">
+                    <span>Text color</span>
+                    <select
+                      value={subtitleStyle.textColor === '#ffffff'
+                        ? 'white'
+                        : subtitleStyle.textColor === '#ffff00'
+                          ? 'yellow'
+                          : 'custom'}
+                      onChange={event => {
+                        const color = event.target.value === 'white'
+                          ? '#ffffff'
+                          : event.target.value === 'yellow'
+                            ? '#ffff00'
+                            : (subtitleStyle.textColor === '#ffffff' || subtitleStyle.textColor === '#ffff00')
+                              ? '#00ffff'
+                              : subtitleStyle.textColor;
+                        setSubtitleStyle(style => ({ ...style, preset: 'custom', textColor: color }));
+                      }}
+                      className="w-full rounded-lg border border-white/20 bg-black/60 px-2 py-1.5 text-white"
+                    >
+                      <option value="white">White</option>
+                      <option value="yellow">Yellow</option>
+                      <option value="custom">Custom…</option>
+                    </select>
+                    {subtitleStyle.textColor !== '#ffffff' && subtitleStyle.textColor !== '#ffff00' && (
+                      <input
+                        type="color"
+                        value={subtitleStyle.textColor}
+                        onChange={event => setSubtitleStyle(style => ({
+                          ...style,
+                          preset: 'custom',
+                          textColor: event.target.value
+                        }))}
+                        aria-label="Custom subtitle text color"
+                        className="h-8 w-full cursor-pointer rounded border border-white/20 bg-transparent"
+                      />
+                    )}
+                  </label>
+
+                  <label className="block space-y-1 text-xs text-gray-300">
+                    <span>Background</span>
+                    <select
+                      value={subtitleStyle.background}
+                      onChange={event => setSubtitleStyle(style => ({
+                        ...style,
+                        preset: 'custom',
+                        background: event.target.value as SubtitleStyleSettings['background']
+                      }))}
+                      className="w-full rounded-lg border border-white/20 bg-black/60 px-2 py-1.5 text-white"
+                    >
+                      <option value="none">None</option>
+                      <option value="semi-transparent">Semi-transparent</option>
+                      <option value="solid">Solid</option>
+                    </select>
+                  </label>
+                </div>
+              )}
+            </div>
+
             {/* Audio Track Selector */}
             <div
               className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
               title={audioTrackSupport === false ? 'Audio track switching is not supported by this video runtime.' : 'Audio track'}
             >
-              <AudioLines className="w-4 h-4 text-rose-400 transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
+              <AudioLines className="w-5 h-5 text-rose-400 transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
               <select
                 value={audioTracks.length ? selectedAudioTrackId : ''}
                 onChange={(e) => setSelectedAudioTrackId(e.target.value)}
@@ -1467,6 +1722,18 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 )}
               </select>
             </div>
+
+            {/* Fullscreen Toggle */}
+            <button
+              type="button"
+              onClick={() => setFillVideoToScreen(current => !current)}
+              aria-label={fillVideoToScreen ? 'Fit video to screen' : 'Fill screen with video'}
+              aria-pressed={fillVideoToScreen}
+              className={`group p-2 cursor-pointer ${fillVideoToScreen ? 'text-rose-400' : 'text-white'}`}
+              title={`Fill to screen (C)${fillVideoToScreen ? ' — on' : ''}`}
+            >
+              <Crop className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />
+            </button>
 
             {/* Fullscreen Toggle */}
             <button
