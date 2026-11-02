@@ -497,9 +497,19 @@ export function App() {
         </div>
         {hasUnderlyingGrid && (
           <div
-            className="absolute inset-0 z-10 overflow-y-auto"
+            className="mdv-detail-scroll-container absolute inset-0 z-10 overflow-y-auto"
+            onScroll={() => {
+              if (cardTransition?.phase !== 'commit') return;
+
+              clearTransitionTimer();
+              if (transitionFrame.current !== null) {
+                cancelAnimationFrame(transitionFrame.current);
+                transitionFrame.current = null;
+              }
+              setCardTransition(current => current?.phase === 'commit' ? null : current);
+            }}
             style={{
-              backgroundColor: '#0c0d10',
+              backgroundColor: pageAccentColor || selectedMedia.accent_color || '#423e3f',
               ...(detailReturnTransition ? {
                 clipPath: `circle(${detailReturnTransition.closing ? 0 : detailReturnTransition.radius}px at ${detailReturnTransition.centerX}px ${detailReturnTransition.centerY}px)`,
                 transition: 'clip-path 600ms cubic-bezier(0.2, 0.8, 0.2, 1)',

@@ -124,6 +124,42 @@
   transition: background-color 0.5s;
 }
 
+.mdv-detail-scroll-container {
+  scrollbar-color: rgba(255, 255, 255, 0.72) rgba(0, 0, 0, 0.28);
+  scrollbar-width: thin;
+}
+
+.mdv-detail-scroll-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.mdv-detail-scroll-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.mdv-detail-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(0, 0, 0, 0.28);
+  border-radius: 4px;
+}
+
+.mdv-detail-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.mdv-detail-scroll-container:has(.mdv-page[data-tone="light"]) {
+  scrollbar-color: rgba(0, 0, 0, 0.58) rgba(0, 0, 0, 0.28);
+}
+
+.mdv-detail-scroll-container:has(.mdv-page[data-tone="light"])::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.58);
+  border-color: rgba(255, 255, 255, 0.38);
+}
+
+.mdv-detail-scroll-container:has(.mdv-page[data-tone="light"])::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.76);
+}
+
 /* ---- Pinned backdrop ---- */
 .mdv-backdrop {
   position: sticky;
@@ -1067,4 +1103,3 @@ body:not(.sidebar-hide-enabled) .mdv-sidebar-detail-hidden {
   opacity: 1 !important;
   pointer-events: auto !important;
 }
-
