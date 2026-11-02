@@ -3,7 +3,7 @@ import { Media, LocalFile } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { subtitleService, SubtitleTrack } from '../services/SubtitleService';
 import { localScannerService } from '../services/LocalScannerService';
-import { extractMkvSubtitleTracks } from '../services/SubtitleExtraction';
+import { createMkvSubtitleExtractor, extractMkvSubtitleTracks } from '../services/SubtitleExtraction';
 import {
   Play,
   Pause,
@@ -300,16 +300,30 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         if (isMounted) setMkvParsing(true);
         try {
           let bytes: ArrayBuffer | Uint8Array;
+          let extractedSubtitles;
           if (webFile) {
             bytes = await webFile.arrayBuffer();
+            extractedSubtitles = extractMkvSubtitleTracks(bytes);
           } else if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
-            const { readFile } = await import('@tauri-apps/plugin-fs');
-            bytes = await readFile(activeFile.path);
+            const { open } = await import('@tauri-apps/plugin-fs');
+            const file = await open(activeFile.path);
+            const extractor = createMkvSubtitleExtractor();
+            const chunk = new Uint8Array(4 * 1024 * 1024);
+            try {
+              while (true) {
+                const bytesRead = await file.read(chunk);
+                if (bytesRead === null || bytesRead === 0) break;
+                extractor.push(chunk.subarray(0, bytesRead));
+              }
+              extractedSubtitles = extractor.finish();
+            } finally {
+              await file.close();
+            }
           } else {
             throw new Error('The MKV file is not available for embedded subtitle extraction.');
           }
 
-          const extractedTracks = extractMkvSubtitleTracks(bytes).map(track => ({
+          const extractedTracks = extractedSubtitles.map(track => ({
             id: track.id,
             label: track.label,
             language: track.language,
@@ -351,6 +365,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
         if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
           const { invoke } = await import('@tauri-apps/api/core');
+          await invoke('grant_video_files_access', { videoPath: activeFile.path });
           const url = await invoke<string>('get_video_stream_url', { filePath: activeFile.path });
           if (isMounted) setStreamUrl(url);
           void loadSubtitleTracks();

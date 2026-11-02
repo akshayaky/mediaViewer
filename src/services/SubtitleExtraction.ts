@@ -235,10 +235,14 @@ function getBinaryValue(element: EBMLElementDetail): Uint8Array | null {
   return 'value' in element && element.value instanceof Uint8Array ? element.value : null;
 }
 
-export function extractMkvSubtitleTracks(source: ArrayBuffer | Uint8Array): ExtractedMkvSubtitle[] {
+export interface MkvSubtitleExtractor {
+  push(chunk: Uint8Array): void;
+  finish(): ExtractedMkvSubtitle[];
+}
+
+export function createMkvSubtitleExtractor(): MkvSubtitleExtractor {
   ensureBufferPolyfill();
   const decoder = new Decoder();
-  const bytes = source instanceof ArrayBuffer ? new Uint8Array(source) : source;
   const tracks = new Map<number, MkvTrack>();
   const cues = new Map<number, SubtitleCue[]>();
   let currentTrack: MkvTrack | null = null;
@@ -362,41 +366,51 @@ export function extractMkvSubtitleTracks(source: ArrayBuffer | Uint8Array): Extr
     }
   };
 
-  for (let offset = 0; offset < bytes.byteLength; offset += DECODE_CHUNK_SIZE) {
-    const chunk = bytes.subarray(offset, Math.min(offset + DECODE_CHUNK_SIZE, bytes.byteLength));
+  const push = (chunk: Uint8Array) => {
     const chunkBuffer = new ArrayBuffer(chunk.byteLength);
     new Uint8Array(chunkBuffer).set(chunk);
     for (const element of decoder.decode(chunkBuffer)) {
       processElement(element);
     }
-  }
+  };
 
-  return Array.from(tracks.entries())
-    .filter(([trackNumber]) => (cues.get(trackNumber)?.length ?? 0) > 0)
-    .map(([trackNumber, track]) => {
-      const trackCues = cues.get(trackNumber)!;
-      trackCues.sort((left, right) => left.startMs - right.startMs);
-      const vttCues = trackCues.map((cue, index) => {
-        const nextStart = trackCues
-          .slice(index + 1)
-          .find(nextCue => nextCue.startMs > cue.startMs)?.startMs;
-        const duration = cue.durationMs && cue.durationMs > 0
-          ? cue.durationMs
-          : nextStart === undefined
-            ? DEFAULT_CUE_DURATION_MS
-            : nextStart - cue.startMs;
-        const endMs = cue.startMs + Math.max(1, duration);
-        return `${formatTimestamp(cue.startMs)} --> ${formatTimestamp(endMs)}\n${cue.text}`;
+  const finish = (): ExtractedMkvSubtitle[] => Array.from(tracks.entries())
+      .filter(([trackNumber]) => (cues.get(trackNumber)?.length ?? 0) > 0)
+      .map(([trackNumber, track]) => {
+        const trackCues = cues.get(trackNumber)!;
+        trackCues.sort((left, right) => left.startMs - right.startMs);
+        const vttCues = trackCues.map((cue, index) => {
+          const nextStart = trackCues
+            .slice(index + 1)
+            .find(nextCue => nextCue.startMs > cue.startMs)?.startMs;
+          const duration = cue.durationMs && cue.durationMs > 0
+            ? cue.durationMs
+            : nextStart === undefined
+              ? DEFAULT_CUE_DURATION_MS
+              : nextStart - cue.startMs;
+          const endMs = cue.startMs + Math.max(1, duration);
+          return `${formatTimestamp(cue.startMs)} --> ${formatTimestamp(endMs)}\n${cue.text}`;
+        });
+
+        const language = track.language || 'und';
+        const codec = track.codec ?? 'subtitle';
+        const trackName = track.name ? `${track.name} · ` : '';
+        return {
+          id: `mkv:${trackNumber}`,
+          label: `${trackName}${language} · ${codec}`,
+          language,
+          webVtt: `WEBVTT\n\n${vttCues.join('\n\n')}\n`
+        };
       });
 
-      const language = track.language || 'und';
-      const codec = track.codec ?? 'subtitle';
-      const trackName = track.name ? `${track.name} · ` : '';
-      return {
-        id: `mkv:${trackNumber}`,
-        label: `${trackName}${language} · ${codec}`,
-        language,
-        webVtt: `WEBVTT\n\n${vttCues.join('\n\n')}\n`
-      };
-    });
+  return { push, finish };
+}
+
+export function extractMkvSubtitleTracks(source: ArrayBuffer | Uint8Array): ExtractedMkvSubtitle[] {
+  const extractor = createMkvSubtitleExtractor();
+  const bytes = source instanceof ArrayBuffer ? new Uint8Array(source) : source;
+  for (let offset = 0; offset < bytes.byteLength; offset += DECODE_CHUNK_SIZE) {
+    extractor.push(bytes.subarray(offset, Math.min(offset + DECODE_CHUNK_SIZE, bytes.byteLength)));
+  }
+  return extractor.finish();
 }

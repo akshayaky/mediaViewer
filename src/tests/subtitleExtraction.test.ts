@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractMkvSubtitleTracks } from '../services/SubtitleExtraction';
+import { createMkvSubtitleExtractor, extractMkvSubtitleTracks } from '../services/SubtitleExtraction';
 
 function concatenate(...parts: Uint8Array[]): Uint8Array {
   const result = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
@@ -111,6 +111,16 @@ describe('MKV subtitle extraction', () => {
     expect(tracks[0].webVtt).toContain('Hello &lt;world&gt;');
     expect(tracks[1].webVtt).toContain('00:00:01.000 --> 00:00:02.500');
     expect(tracks[1].webVtt).toContain('<i>Hi</i><br>there');
+  });
+
+  it('extracts tracks from incrementally supplied file chunks', () => {
+    const bytes = new Uint8Array(makeMkv());
+    const extractor = createMkvSubtitleExtractor();
+    for (let offset = 0; offset < bytes.length; offset += 3) {
+      extractor.push(bytes.subarray(offset, offset + 3));
+    }
+
+    expect(extractor.finish()).toEqual(extractMkvSubtitleTracks(bytes));
   });
 
   it('derives the final frame size for Xiph-laced subtitle packets', () => {

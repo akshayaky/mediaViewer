@@ -5,6 +5,7 @@ use std::path::Path;
 use tauri::AppHandle;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_fs::FsExt;
 use walkdir::WalkDir;
 
 #[tauri::command]
@@ -78,19 +79,28 @@ fn get_subtitle_url(app: tauri::AppHandle, file_path: String) -> Result<String, 
     stream_server::init_app_handle(app);
     let port = stream_server::ensure_stream_server_running();
     let encoded = urlencoding::encode(&file_path);
-    Ok(format!("http://127.0.0.1:{}/subtitle?path={}", port, encoded))
+    Ok(format!(
+        "http://127.0.0.1:{}/subtitle?path={}",
+        port, encoded
+    ))
 }
 
-#[tauri::command]
-fn list_subtitle_files(video_path: String) -> Result<Vec<String>, String> {
-    let video = Path::new(&video_path);
-    let parent = video
-        .parent()
-        .ok_or_else(|| format!("Could not determine the video directory: {video_path}"))?;
+fn find_subtitle_files(video: &Path) -> Result<Vec<std::path::PathBuf>, String> {
+    let parent = video.parent().ok_or_else(|| {
+        format!(
+            "Could not determine the video directory: {}",
+            video.display()
+        )
+    })?;
     let video_stem = video
         .file_stem()
         .and_then(|stem| stem.to_str())
-        .ok_or_else(|| format!("Could not determine the video filename: {video_path}"))?;
+        .ok_or_else(|| {
+            format!(
+                "Could not determine the video filename: {}",
+                video.display()
+            )
+        })?;
     let lower_video_stem = video_stem.to_lowercase();
     let prefix = format!("{lower_video_stem}.");
 
@@ -119,12 +129,42 @@ fn list_subtitle_files(video_path: String) -> Result<Vec<String>, String> {
             .unwrap_or_default()
             .to_lowercase();
         if stem == lower_video_stem || stem.starts_with(&prefix) {
-            subtitle_paths.push(path.to_string_lossy().into_owned());
+            subtitle_paths.push(path);
         }
     }
 
     subtitle_paths.sort();
     Ok(subtitle_paths)
+}
+
+#[tauri::command]
+fn list_subtitle_files(video_path: String) -> Result<Vec<String>, String> {
+    find_subtitle_files(Path::new(&video_path)).map(|paths| {
+        paths
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect()
+    })
+}
+
+#[tauri::command]
+fn grant_video_files_access(app: tauri::AppHandle, video_path: String) -> Result<(), String> {
+    let video = Path::new(&video_path);
+    if !video.is_file() {
+        return Err(format!("The video file does not exist: {video_path}"));
+    }
+
+    let scope = app.fs_scope();
+    scope
+        .allow_file(video)
+        .map_err(|error| format!("Could not grant access to the video file: {error}"))?;
+    for subtitle_path in find_subtitle_files(video)? {
+        scope
+            .allow_file(subtitle_path)
+            .map_err(|error| format!("Could not grant access to a subtitle file: {error}"))?;
+    }
+
+    Ok(())
 }
 
 mod urlencoding {
@@ -159,7 +199,8 @@ pub fn run() {
             scan_directory,
             get_video_stream_url,
             get_subtitle_url,
-            list_subtitle_files
+            list_subtitle_files,
+            grant_video_files_access
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

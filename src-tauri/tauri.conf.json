@@ -26,38 +26,30 @@
           "permissions": [
             "core:default",
             "opener:default",
-            {
-              "identifier": "http:default",
-              "allow": [
-                { "url": "https://image.tmdb.org/**" },
-                { "url": "https://images.igdb.com/**" },
-                { "url": "https://api.notion.com/*" },
-                { "url": "https://api.igdb.com/v4/**"},
-                { "url": "https://id.twitch.tv/oauth2/token"}
-              ]
-            },
-            {
-              "identifier": "opener:allow-open-path",
-              "allow": [{ "path": "**" }]
-            },
             "fs:default",
-            {
-              "identifier": "fs:allow-read-file",
-              "allow": [
-                {
-                  "path": "C:\\Users\\akyma\\Videos\\**"
-                }
-              ]
-            },
+            "fs:allow-read-file",
+            "fs:allow-open",
+            "fs:allow-read",
             "sql:default",
             "sql:allow-load",
             "sql:allow-execute",
             "sql:allow-select",
             "sql:allow-close",
             "android-fs:default",
-            "fs:default",
-            "fs:allow-read-file"
-            
+            {
+              "identifier": "http:default",
+              "allow": [
+                { "url": "https://image.tmdb.org/**" },
+                { "url": "https://images.igdb.com/**" },
+                { "url": "https://api.notion.com/*" },
+                { "url": "https://api.igdb.com/v4/**" },
+                { "url": "https://id.twitch.tv/oauth2/token" }
+              ]
+            },
+            {
+              "identifier": "opener:allow-open-path",
+              "allow": [{ "path": "**" }]
+            }
           ]
         }
       ]
