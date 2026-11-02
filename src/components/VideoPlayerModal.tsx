@@ -602,34 +602,61 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         setShowNextCountdown(true);
         setCountdownSeconds(5);
       }
-    } else if (video.duration > 0 && video.currentTime / video.duration < 0.95 && showNextCountdown) {
+    } else if (video.duration > 0 && video.currentTime / video.duration < 0.95) {
       // If user seeks back, hide the countdown and reset cancellation
       setShowNextCountdown(false);
       setCountdownCancelled(false);
     }
   };
 
-  // Countdown Interval
+  // Countdown Interval - Always count down regardless of play/pause
   useEffect(() => {
+    // Always set new interval to ensure it fires at right time (next render)
     if (showNextCountdown && countdownSeconds > 0) {
-      countdownIntervalRef.current = setTimeout(() => {
-        setCountdownSeconds(prev => prev - 1);
-      }, 1000);
-    } else if (showNextCountdown && countdownSeconds === 0) {
+      
+       if (isPlaying) {
+        countdownIntervalRef.current = setTimeout(() => {
+          setCountdownSeconds(prev => prev - 1);
+        }, 1000);
+      } else {
+        // If paused, clear any active running timeouts
+        if (countdownIntervalRef.current) {
+          clearTimeout(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
+        }
+      }
+      
+      return () => {
+        if (countdownIntervalRef.current) clearTimeout(countdownIntervalRef.current);
+      };
+    }
+    else if (showNextCountdown && countdownSeconds === 0) {
+      // Countdown finished - transition to next episode
       setShowNextCountdown(false);
       if (nextEpInfo && onEpisodeChange) {
+        setCountdownCancelled(false);
         onEpisodeChange(
           nextEpInfo.file,
           nextEpInfo.season,
           nextEpInfo.episode,
           getEpisodeTitle(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode)
         );
+      
+
+      }
+      if (countdownIntervalRef.current) clearTimeout(countdownIntervalRef.current);
+    } else {
+      // Cancelled
+      if (countdownIntervalRef.current) {
+        clearTimeout(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
       }
     }
+    
     return () => {
       if (countdownIntervalRef.current) clearTimeout(countdownIntervalRef.current);
     };
-  }, [showNextCountdown, countdownSeconds, nextEpInfo, onEpisodeChange, getEpisodeTitle]);
+  }, [showNextCountdown, countdownSeconds, isPlaying]);
 
   // Play / Pause Toggle
   const togglePlay = () => {
