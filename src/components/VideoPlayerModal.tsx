@@ -107,11 +107,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   // UI Control visibility state
   const [showControls, setShowControls] = useState<boolean>(true);
+  const [cursorPointerOverride, setCursorPointerOverride] = useState(false);
   const [showSeekLeft, setShowSeekLeft] = useState(false);
   const [showSeekRight, setShowSeekRight] = useState(false);
   const [showVolumeChange, setShowVolumeChange] = useState(false);
-  const hideControlsTimerRef = useRef<any>(null);
+  const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cursorOverrideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isEpisodePickerOpen, setIsEpisodePickerOpen] = useState(false);
+  const isEpisodePickerOpenRef = useRef(false);
+  isEpisodePickerOpenRef.current = isEpisodePickerOpen;
   const [selectedPickerSeason, setSelectedPickerSeason] = useState(seasonNumber);
 
   // Next Episode Countdown state
@@ -575,18 +579,53 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     return () => clearInterval(interval);
   }, [saveProgress]);
 
-  // Auto Controls Hiding
-  const handleMouseMove = () => {
-    setShowControls(true);
+  const scheduleControlsHide = () => {
     if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    if (isEpisodePickerOpenRef.current) return;
+
     hideControlsTimerRef.current = setTimeout(() => {
-      // Only hide controls and close picker when playing AND picker is NOT open
-      if (isPlaying && !isEpisodePickerOpen) {
-        setShowControls(false);
-        setIsEpisodePickerOpen(false);
-      }
+      if (!isEpisodePickerOpenRef.current) setShowControls(false);
+      hideControlsTimerRef.current = null;
     }, 3000);
   };
+
+  const revealControls = () => {
+    setShowControls(true);
+    scheduleControlsHide();
+  };
+
+  const preservePointerDuringTransition = () => {
+    setShowControls(false);
+    setCursorPointerOverride(true);
+    if (cursorOverrideTimerRef.current) clearTimeout(cursorOverrideTimerRef.current);
+    cursorOverrideTimerRef.current = setTimeout(() => {
+      setCursorPointerOverride(false);
+      cursorOverrideTimerRef.current = null;
+    }, 3000);
+  };
+
+  useEffect(() => () => {
+    if (cursorOverrideTimerRef.current) clearTimeout(cursorOverrideTimerRef.current);
+  }, []);
+
+  // Keep the episode picker usable and hide controls after three idle seconds in either playback state.
+  useEffect(() => {
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    hideControlsTimerRef.current = null;
+
+    if (isEpisodePickerOpen) {
+      setShowControls(true);
+      return;
+    }
+
+    if (showControls) scheduleControlsHide();
+    return () => {
+      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+      hideControlsTimerRef.current = null;
+    };
+  }, [isEpisodePickerOpen, showControls]);
+
+  const handleMouseMove = () => revealControls();
 
   // Video Time Update & Completion Logic
   const handleTimeUpdate = () => {
@@ -634,6 +673,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     else if (showNextCountdown && countdownSeconds === 0) {
       // Countdown finished - transition to next episode
       setShowNextCountdown(false);
+      preservePointerDuringTransition();
       if (nextEpInfo && onEpisodeChange) {
         setCountdownCancelled(false);
         onEpisodeChange(
@@ -741,6 +781,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           break;
         case 'ArrowLeft':
           e.preventDefault();
+          revealControls();
           setShowSeekLeft(true);
           setShowSeekRight(false);
           setTimeout(() => setShowSeekLeft(false), 800);
@@ -753,9 +794,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           break;
         case 'ArrowRight':
           e.preventDefault();
-          setShowSeekLeft(true);
-          setShowSeekRight(false);
-          setTimeout(() => setShowSeekLeft(false), 800);
+          revealControls();
+          setShowSeekLeft(false);
+          setShowSeekRight(true);
+          setTimeout(() => setShowSeekRight(false), 800);
           if (e.shiftKey) {
             video.currentTime = Math.max(0, video.currentTime + 5);
           } else {
@@ -878,6 +920,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   };
 
   const handleDoubleTapLeft = () => {
+    revealControls();
     setShowSeekLeft(true);
     setTimeout(() => setShowSeekLeft(false), 800);
     if (videoRef.current) {
@@ -886,6 +929,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   };
 
   const handleDoubleTapRight = () => {
+    revealControls();
     setShowSeekRight(true);
     setTimeout(() => setShowSeekRight(false), 800);
     if (videoRef.current) {
@@ -925,20 +969,20 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       ref={containerRef}
       onTouchStart={handleVideoTouch} 
       onMouseMove={handleMouseMove}
-      onClick={() => setIsEpisodePickerOpen(false)}
-      className="fixed inset-0 z-50 bg-black flex items-center justify-center overflow-hidden select-none font-sans"
+      onClick={() => {
+        setIsEpisodePickerOpen(false);
+        revealControls();
+      }}
+      className={`fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black font-sans select-none ${showControls || cursorPointerOverride ? 'cursor-pointer' : 'cursor-none'}`}
     >
       {/* Centered Play Icon Wrapper */}
-      {!isPlaying && !showVolumeChange && (
+      {!isPlaying && !showVolumeChange && (!countdownCancelled || showNextCountdown) ? (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
           <div className="animate-[ping_0.15s_cubic-bezier(0.175,0.885,0.32,1.275)_reverse] transform origin-center">
             <Play className="h-16 w-16 fill-current text-white opacity-80 drop-shadow-2xl" />
           </div>
         </div>
-      )}
-
-      {/* Centered Play Icon Wrapper */}
-      {showVolumeChange && (
+      ) : showVolumeChange && (
         
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
           <div className="animate-[ping_0.15s_ease-in_reverse] transform origin-center">
@@ -965,7 +1009,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         <video
           ref={videoRef}
           src={streamUrl}
-          className="w-full h-full object-contain cursor-pointer"
+          className="h-full w-full object-contain"
           onClick={togglePlay}
           onLoadedMetadata={handleLoadedMetadata}
           onTimeUpdate={handleTimeUpdate}
@@ -1050,7 +1094,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         <div
           onClick={event => event.stopPropagation()}
           className={`absolute top-4 right-4 z-30 transition-opacity duration-300 ${
-            showControls || !isPlaying ? 'opacity-100' : 'pointer-events-none opacity-0'
+            showControls || isEpisodePickerOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         >
           <button
@@ -1153,7 +1197,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         onClick={handleExitPlayer}
         title="Back to Library"
         className={`mdv-btn mdv-btn-glass absolute left-4 top-[calc(1rem+var(--sat,0px))] z-30 h-10 cursor-pointer group flex items-center gap-2 w-10 hover:w-36 transition-[width,opacity] duration-300 ease-in-out overflow-hidden whitespace-nowrap px-0 hover:px-2 hover:backdrop-blur-md ${
-          showControls || !isPlaying ? 'opacity-100' : 'pointer-events-none opacity-0'
+          showControls ? 'opacity-100' : 'pointer-events-none opacity-0'
         } ${backButtonLeftOffset}`}
       >
         <ArrowLeft className="mdv-icon-md shrink-0 transition-[margin] duration-300 ease-in-out" />
@@ -1169,7 +1213,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
            
           p-6 flex items-center justify-between transition-opacity duration-300 z-10 
           
-          ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}
+          ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}
         max-sidebar:left-0 max-sidebar:bottom-35 sidebar: ${controlsLeftOffset} sidebar:bottom-20
         `}
       >
@@ -1235,7 +1279,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       {/* Bottom Control Bar Overlay */}
       <div
       className={`absolute bottom-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 space-y-3 transition-opacity duration-300 z-10 ${
-        showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
       } max-sidebar:left-0 max-sidebar:bottom-15 sidebar: ${controlsLeftOffset} sidebar:bottom-0`}
 >
         {/* Seekbar Progress Slider */}
