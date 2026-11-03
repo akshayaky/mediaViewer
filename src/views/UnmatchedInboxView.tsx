@@ -165,6 +165,9 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
       console.error('Failed to fetch candidate details:', err);
     }
 
+    // Extract language with fallback: details > candidate > undefined
+    const newLanguage = details.language || candidate.language || undefined;
+
     const newMediaId = `media_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
     const newMedia: Media = {
@@ -183,6 +186,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
       developer: details.developer,
       cast: details.cast,
       seasons: details.seasons,
+      language: newLanguage,
       metadata_source: details.metadata_source || candidate.provider,
       metadata_refreshed_at: now,
       created_at: now,

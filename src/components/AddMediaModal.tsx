@@ -122,6 +122,9 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
       const now = new Date().toISOString();
       const mediaId = `media_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
+      // Extract language with fallback: details > candidate > undefined
+      const newLanguage = details.language || candidate.language || undefined;
+
       const newMedia: Media = {
         id: mediaId,
         type: candidate.type,
@@ -138,6 +141,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
         developer: details.developer,
         cast: details.cast,
         seasons: details.seasons,
+        language: newLanguage,
         metadata_source: details.metadata_source || candidate.provider,
         metadata_refreshed_at: now,
         created_at: now,
