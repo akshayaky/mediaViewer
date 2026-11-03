@@ -544,7 +544,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                   disabled={isRefreshingMetadata}
                   className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.06] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
                 >
-                  <RefreshCw className="w-4 h-4 text-rose-400 shrink-0" />
+                  <RefreshCw className="w-4 h-4 text-[#E27D12] shrink-0" />
                   <span>{isRefreshingMetadata ? 'Re-syncing Provider...' : 'Refresh Metadata'}</span>
                 </button>
 
@@ -577,7 +577,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                     void handleDeleteMedia();
                   }}
                   disabled={isDeletingMedia}
-                  className="w-full text-left px-4 py-2.5 text-xs text-rose-300 hover:bg-rose-950/50 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736] disabled:opacity-50"
+                  className="w-full text-left px-4 py-2.5 text-xs text-[#E27D12] hover:bg-[#7A4509]/50 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736] disabled:opacity-50"
                 >
                   <Trash2 className="w-4 h-4 shrink-0" />
                   <span>{isDeletingMedia ? 'Deleting...' : 'Delete from Library'}</span>
@@ -765,7 +765,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 <span className="bg-purple-900/80 text-purple-200 border border-purple-400/30 px-2.5 py-1 rounded-lg font-semibold">
                   Total Watches/Plays: {state.total_watch_play_count}
                 </span>
-                <span className="bg-rose-900/80 text-rose-200 border border-rose-400/30 px-2.5 py-1 rounded-lg font-semibold">
+                <span className="bg-[#B3620D]/80 text-[#E27D12] border border-[#E27D12]/30 px-2.5 py-1 rounded-lg font-semibold">
                   Rewatches / Replays: {state.rewatch_count}
                 </span>
                 {state.abandoned_count > 0 && (
@@ -911,7 +911,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
                                       {epProg && !epProg.is_completed && epPct > 0 && (
                                         <div className="w-full bg-[#232736] h-1.5 rounded-full overflow-hidden my-1.5">
-                                          <div className="bg-rose-500 h-full rounded-full" style={{ width: `${epPct}%` }} />
+                                          <div className="bg-[#E27D12] h-full rounded-full" style={{ width: `${epPct}%` }} />
                                         </div>
                                       )}
 
@@ -922,7 +922,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                                             <>
                                               <button
                                                 onClick={() => handleTriggerPlay(activeEpFile, false, ep.name)}
-                                                className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3 py-1 rounded-lg flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer"
+                                                className="bg-[#E27D12] hover:bg-[#E27D12] text-white font-bold text-xs px-3 py-1 rounded-lg flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer"
                                               >
                                                 <Play className="w-3.5 h-3.5" fill="currentColor" />
                                                 <span>{epProg && !epProg.is_completed && epPct > 0 ? `Resume (${epPct}%)` : 'Play Episode'}</span>
@@ -978,7 +978,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                                                   setActiveEpMenu(null);
                                                   toggleEpisodeWatchStatus(season.season_number, ep.episode_number, epWatched);
                                                 }}
-                                                className="w-full text-left px-3 py-2 text-gray-200 hover:bg-rose-950/50 hover:text-rose-300 flex items-center space-x-2 transition-colors cursor-pointer"
+                                                className="w-full text-left px-3 py-2 text-gray-200 hover:bg-[#7A4509]/50 hover:text-[#E27D12] flex items-center space-x-2 transition-colors cursor-pointer"
                                               >
                                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                                                 <span>{epWatched ? 'Mark as Unwatched' : 'Mark as Watched'}</span>
@@ -989,7 +989,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                                                   setActiveEpMenu(null);
                                                   setLinkEpTarget({ season: season.season_number, episode: ep.episode_number });
                                                 }}
-                                                className="w-full text-left px-3 py-2 text-gray-200 hover:bg-rose-950/50 hover:text-rose-300 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736]"
+                                                className="w-full text-left px-3 py-2 text-gray-200 hover:bg-[#7A4509]/50 hover:text-[#E27D12] flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736]"
                                               >
                                                 <LinkIcon className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                                                 <span>Link / Reassign File</span>
@@ -1229,7 +1229,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
           {isLoadingRelated ? (
             <div className="flex items-center space-x-2 py-6 text-gray-400 text-xs">
-              <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+              <Loader2 className="w-4 h-4 animate-spin text-[#E27D12]" />
               <span>Loading related media relationships from provider...</span>
             </div>
           ) : relatedMedia.length === 0 ? (
@@ -1242,7 +1242,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 return (
                   <div
                     key={`${item.external_id}_${idx}`}
-                    className="group relative bg-[#1b1d2a] border border-[#2d3145] hover:border-rose-500 rounded-xl overflow-hidden shadow-lg transition-all flex flex-col justify-between"
+                    className="group relative bg-[#1b1d2a] border border-[#2d3145] hover:border-[#E27D12] rounded-xl overflow-hidden shadow-lg transition-all flex flex-col justify-between"
                   >
                     <div
                       onClick={async () => {
@@ -1297,7 +1297,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                         className={`absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-md shadow-lg transition-all cursor-pointer z-10 ${
                           isAdded
                             ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/50 cursor-default'
-                            : 'bg-rose-600/90 hover:bg-rose-500 text-white border border-rose-400/30 hover:scale-110'
+                            : 'bg-[#E27D12]/90 hover:bg-[#E27D12] text-white border border-[#E27D12]/30 hover:scale-110'
                         }`}
                       >
                         {isAdded ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
@@ -1327,7 +1327,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           <div className="bg-[#14161f] border border-[#2d3145] rounded-2xl w-full max-w-2xl flex flex-col max-h-[85vh] shadow-2xl overflow-hidden animate-fadeIn">
             <div className="p-5 border-b border-[#232736] flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Sparkles className="w-5 h-5 text-rose-400" />
+                <Sparkles className="w-5 h-5 text-[#E27D12]" />
                 <h3 className="text-lg font-bold text-white">Related Item Preview</h3>
               </div>
               <button
@@ -1344,7 +1344,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               {isLoadingPreview ? (
                 <div className="flex items-center space-x-2 py-8 text-gray-400 text-xs justify-center">
-                  <Loader2 className="w-5 h-5 animate-spin text-rose-400" />
+                  <Loader2 className="w-5 h-5 animate-spin text-[#E27D12]" />
                   <span>Loading full entry details...</span>
                 </div>
               ) : (
@@ -1359,7 +1359,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
                   <div className="space-y-2 text-xs text-gray-300 flex-1">
                     <h2 className="text-xl font-black text-white">{previewDetails?.title || previewRelatedItem.title}</h2>
-                    <div className="flex items-center space-x-3 text-rose-300 font-semibold">
+                    <div className="flex items-center space-x-3 text-[#E27D12] font-semibold">
                       <span>{previewDetails?.release_year || previewRelatedItem.release_year}</span>
                       <span>•</span>
                       <span>{previewRelatedItem.type}</span>
@@ -1410,7 +1410,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                       setPreviewRelatedItem(null);
                       setPreviewDetails(null);
                     }}
-                    className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
+                    className="px-5 py-2 rounded-xl bg-[#E27D12] hover:bg-[#E27D12] text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Add to Library (Planned)</span>

@@ -32,7 +32,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia, isColla
   const getTypeIcon = (type?: string) => {
     switch (type) {
       case 'Film':
-        return <Film className="w-3.5 h-3.5 text-rose-400" />;
+        return <Film className="w-3.5 h-3.5 text-[#E27D12]" />;
       case 'TV Series':
         return <Tv className="w-3.5 h-3.5 text-sky-400" />;
       case 'VideoGame':
@@ -53,10 +53,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia, isColla
       {/* Header Bar */}
       <div className="border-b border-[#1f222e] pb-6">
         <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center space-x-3">
-          <History className="w-8 h-8 text-rose-500" />
+          <History className="w-8 h-8 text-[#E27D12]" />
           <span>Complete History Journal</span>
         </h1>
-        <p className="text-sm text-rose-400/80 font-medium mt-1">
+        <p className="text-sm text-[#E27D12]/80 font-medium mt-1">
           Chronological timeline of all recorded watches, plays, rewatches, and restarts
         </p>
       </div>
@@ -74,7 +74,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia, isColla
               <div
                 key={h.id}
                 onClick={() => onSelectMedia(media)}
-                className="group cursor-pointer bg-[#14161f] hover:bg-[#1a1d29] p-5 rounded-2xl border border-[#232736] hover:border-rose-500/50 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"
+                className="group cursor-pointer bg-[#14161f] hover:bg-[#1a1d29] p-5 rounded-2xl border border-[#232736] hover:border-[#E27D12]/50 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"
               >
                 <div className="flex items-center space-x-4">
                   {/* Poster Thumbnail */}
@@ -91,7 +91,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia, isColla
                   {/* Media Details */}
                   <div className="space-y-1.5">
                     <div className="flex items-center space-x-2">
-                      <span className="bg-rose-950/80 text-rose-400 border border-rose-500/30 text-xs font-bold px-2 py-0.5 rounded flex items-center space-x-1">
+                      <span className="bg-[#7A4509]/80 text-[#E27D12] border border-[#E27D12]/30 text-xs font-bold px-2 py-0.5 rounded flex items-center space-x-1">
                         {getTypeIcon(media.type)}
                         <span className="ml-1">{media.type}</span>
                       </span>
@@ -107,7 +107,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectMedia, isColla
                       )}
                     </div>
 
-                    <h3 className="font-bold text-lg text-white group-hover:text-rose-400 transition-colors">
+                    <h3 className="font-bold text-lg text-white group-hover:text-[#E27D12] transition-colors">
                       {media.title}
                     </h3>
 

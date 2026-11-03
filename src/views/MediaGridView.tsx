@@ -448,7 +448,7 @@ useEffect(() => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1f222e] pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">{title}</h1>
-          <p className="text-xs sm:text-sm text-rose-400/80 font-medium mt-1">{subtitle}</p>
+          <p className="text-xs sm:text-sm text-[#E27D12]/80 font-medium mt-1">{subtitle}</p>
         </div>
 
         {(onAddNewMedia || typeFilter) && (
@@ -459,7 +459,7 @@ useEffect(() => {
             }
 
             }
-            className="flex items-center justify-center space-x-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-rose-950/30 transition-all cursor-pointer touch-target w-full sm:w-auto"
+            className="flex items-center justify-center space-x-2 bg-[#E27D12] hover:bg-[#E27D12] text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-rose-950/30 transition-all cursor-pointer touch-target w-full sm:w-auto"
           >
             <Plus className="w-4 h-4" />
             <span>Add Entry</span>
@@ -479,7 +479,7 @@ useEffect(() => {
             placeholder="Search by title, publisher..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg pl-10 pr-4 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-rose-500"
+            className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg pl-10 pr-4 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-[#E27D12]"
           />
         </div>
 
@@ -488,10 +488,10 @@ useEffect(() => {
           onClick={() => setIsFilterSheetOpen(true)}
           className="md:hidden flex items-center space-x-2 bg-[#1b1d2a] hover:bg-[#252839] border border-[#2d3145] text-gray-200 px-3 py-2 rounded-lg text-sm font-medium touch-target cursor-pointer relative"
         >
-          <Filter className="w-4 h-4 text-rose-400" />
+          <Filter className="w-4 h-4 text-[#E27D12]" />
           <span>Sort &amp; filters</span>
           {activeFilterCount > 0 && (
-            <span className="bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+            <span className="bg-[#E27D12] text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
               {activeFilterCount}
             </span>
           )}
@@ -505,7 +505,7 @@ useEffect(() => {
             <select
               value={selectedGenre}
               onChange={e => setSelectedGenre(e.target.value)}
-              className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-rose-500"
+              className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#E27D12]"
             >
               {availableGenres.map(g => (
                 <option key={g} value={g}>
@@ -519,7 +519,7 @@ useEffect(() => {
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-rose-500"
+            className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#E27D12]"
           >
             <option value="All">Status: All</option>
             <option value="Finished">Status: Finished</option>
@@ -533,7 +533,7 @@ useEffect(() => {
             <select
               value={languageFilter}
               onChange={e => setLanguageFilter(e.target.value)}
-              className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-rose-500"
+              className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#E27D12]"
             >
               {availableLanguages.map(g => (
                 <option key={g} value={g}>
@@ -556,7 +556,7 @@ useEffect(() => {
       </div>
 
       {preferenceError && (
-        <p role="status" className="text-xs text-rose-300">{preferenceError}</p>
+        <p role="status" className="text-xs text-[#E27D12]">{preferenceError}</p>
       )}
 
       <div className="hidden md:flex flex-wrap items-center gap-3 rounded-xl border border-[#232736] bg-[#14161f]/80 p-3">
@@ -565,7 +565,7 @@ useEffect(() => {
           <select
             value={gridPreferences.sortBy}
             onChange={event => updateGridPreferences(current => ({ ...current, sortBy: event.target.value as MediaGridSortField }))}
-            className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-rose-500"
+            className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#E27D12]"
           >
             {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
@@ -575,9 +575,9 @@ useEffect(() => {
           onClick={() => updateGridPreferences(current => ({ ...current, sortDescending: !current.sortDescending }))}
           aria-label={`Reverse sort order, currently ${gridPreferences.sortDescending ? 'descending' : 'ascending'}`}
           title={`Reverse sort order (${gridPreferences.sortDescending ? 'descending' : 'ascending'})`}
-          className="flex items-center gap-2 rounded-lg border border-[#2d3145] bg-[#1b1d2a] px-3 py-2 text-sm text-gray-200 hover:border-rose-500"
+          className="flex items-center gap-2 rounded-lg border border-[#2d3145] bg-[#1b1d2a] px-3 py-2 text-sm text-gray-200 hover:border-[#E27D12]"
         >
-          <ArrowDownUp className="h-4 w-4 text-rose-400" />
+          <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
           {gridPreferences.sortDescending ? 'Descending' : 'Ascending'}
         </button>
         <label className="flex items-center gap-2 text-xs font-medium text-gray-400">
@@ -585,7 +585,7 @@ useEffect(() => {
           <select
             value={gridPreferences.groupBy}
             onChange={event => updateGridPreferences(current => ({ ...current, groupBy: event.target.value as MediaGridGroupField }))}
-            className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-rose-500"
+            className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#E27D12]"
           >
             {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
@@ -646,10 +646,10 @@ useEffect(() => {
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center space-x-2">
-                <Filter className="w-5 h-5 text-rose-500" />
+                <Filter className="w-5 h-5 text-[#E27D12]" />
                 <h3 className="text-base font-bold text-white">Library View</h3>
                 {activeFilterCount > 0 && (
-                  <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                  <span className="bg-[#E27D12] text-white text-xs font-bold px-2 py-0.5 rounded-full">
                     {activeFilterCount} active
                   </span>
                 )}
@@ -669,7 +669,7 @@ useEffect(() => {
                   <select
                     value={gridPreferences.sortBy}
                     onChange={event => updateGridPreferences(current => ({ ...current, sortBy: event.target.value as MediaGridSortField }))}
-                    className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3 py-3 text-sm text-gray-100 focus:outline-none focus:border-rose-500"
+                    className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3 py-3 text-sm text-gray-100 focus:outline-none focus:border-[#E27D12]"
                   >
                     {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
@@ -679,7 +679,7 @@ useEffect(() => {
                   <select
                     value={gridPreferences.groupBy}
                     onChange={event => updateGridPreferences(current => ({ ...current, groupBy: event.target.value as MediaGridGroupField }))}
-                    className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3 py-3 text-sm text-gray-100 focus:outline-none focus:border-rose-500"
+                    className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3 py-3 text-sm text-gray-100 focus:outline-none focus:border-[#E27D12]"
                   >
                     {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
@@ -690,7 +690,7 @@ useEffect(() => {
                 onClick={() => updateGridPreferences(current => ({ ...current, sortDescending: !current.sortDescending }))}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#2d3145] bg-[#1c1f2e] px-3 py-3 text-sm text-gray-200"
               >
-                <ArrowDownUp className="h-4 w-4 text-rose-400" />
+                <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
                 {gridPreferences.sortDescending ? 'Descending order' : 'Ascending order'}
               </button>
 
@@ -700,7 +700,7 @@ useEffect(() => {
                 <select
                   value={selectedGenre}
                   onChange={e => setSelectedGenre(e.target.value)}
-                  className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3.5 py-3 text-sm text-gray-100 focus:outline-none focus:border-rose-500"
+                  className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3.5 py-3 text-sm text-gray-100 focus:outline-none focus:border-[#E27D12]"
                 >
                   {availableGenres.map(g => (
                     <option key={g} value={g}>
@@ -716,7 +716,7 @@ useEffect(() => {
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value)}
-                  className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3.5 py-3 text-sm text-gray-100 focus:outline-none focus:border-rose-500"
+                  className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3.5 py-3 text-sm text-gray-100 focus:outline-none focus:border-[#E27D12]"
                 >
                   <option value="All">Status: All</option>
                   <option value="Finished">Status: Finished</option>
@@ -733,7 +733,7 @@ useEffect(() => {
                   <select
                     value={languageFilter}
                     onChange={e => setLanguageFilter(e.target.value)}
-                    className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3.5 py-3 text-sm text-gray-100 focus:outline-none focus:border-rose-500"
+                    className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3.5 py-3 text-sm text-gray-100 focus:outline-none focus:border-[#E27D12]"
                   >
                     {availableLanguages.map(g => (
                       <option key={g} value={g}>
@@ -756,7 +756,7 @@ useEffect(() => {
               </button>
               <button
                 onClick={() => setIsFilterSheetOpen(false)}
-                className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer touch-target"
+                className="flex-1 bg-[#E27D12] hover:bg-[#E27D12] text-white font-semibold text-sm py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer touch-target"
               >
                 Apply Filters
               </button>

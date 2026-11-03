@@ -234,7 +234,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
   const getTypeIcon = (type: MediaType) => {
     switch (type) {
       case 'Film':
-        return <Film className="w-3.5 h-3.5 text-rose-400" />;
+        return <Film className="w-3.5 h-3.5 text-[#E27D12]" />;
       case 'TV Series':
         return <Tv className="w-3.5 h-3.5 text-sky-400" />;
       case 'VideoGame':
@@ -254,10 +254,10 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
       <div className="border-b border-[#1f222e] pb-6 flex flex-wrap items-center gap-3">
         <div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center space-x-3">
-            <Inbox className="w-8 h-8 text-rose-500" />
+            <Inbox className="w-8 h-8 text-[#E27D12]" />
             <span>Unmatched Items Inbox</span>
           </h1>
-          <p className="text-sm text-rose-400/80 font-medium mt-1">
+          <p className="text-sm text-[#E27D12]/80 font-medium mt-1">
             Review ambiguous local files, search external metadata providers (TMDB / IGDB), and confirm candidate matches
           </p>
         </div>
@@ -276,7 +276,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
               <button
                 type="button"
                 onClick={() => void handleClearUnmatchedFiles()}
-                className="bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors cursor-pointer"
+                className="bg-[#E27D12]/90 hover:bg-[#E27D12] text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Clear Unmatched Items</span>
@@ -291,7 +291,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
           )}
         </div>
       </div>
-      {clearError && <p role="alert" className="text-xs text-rose-300">{clearError}</p>}
+      {clearError && <p role="alert" className="text-xs text-[#E27D12]">{clearError}</p>}
 
       {/* List of Unmatched Local Files */}
       {unmatchedFiles.length === 0 ? (
@@ -346,14 +346,14 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
                       {file.filename}
                     </h3>
                     <p className="text-xs text-gray-400 font-mono flex items-center space-x-1">
-                      <Folder className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <Folder className="w-3.5 h-3.5 text-[#E27D12] shrink-0" />
                       <span className="truncate">{file.path}</span>
                     </p>
                   </div>
 
                   <button
                     onClick={() => handleCreateNewMedia(file)}
-                    className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-md transition-all shrink-0 self-start md:self-center cursor-pointer"
+                    className="flex items-center space-x-2 bg-[#E27D12] hover:bg-[#E27D12] text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-md transition-all shrink-0 self-start md:self-center cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Create Basic Entry</span>
@@ -387,7 +387,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
                 <div className="space-y-3 pt-1 bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145]">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-white font-bold flex items-center space-x-1.5">
-                      <Globe className="w-4 h-4 text-rose-400" />
+                      <Globe className="w-4 h-4 text-[#E27D12]" />
                       <span>External Metadata Search ({mediaType === 'VideoGame' ? 'IGDB / RAWG' : 'TMDB'})</span>
                     </span>
                   </div>
@@ -426,7 +426,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
                     <button
                       onClick={() => handleSearchExternalProviders(file)}
                       disabled={isSearching}
-                      className="bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer shrink-0"
+                      className="bg-[#E27D12] hover:bg-[#E27D12] disabled:opacity-50 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer shrink-0"
                     >
                       {isSearching ? (
                         <>
@@ -453,7 +453,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
                         {candidates.map((cand, idx) => (
                           <div
                             key={`${cand.external_id}_${idx}`}
-                            className="bg-[#13151f] p-3 rounded-xl border border-[#2f3448] flex flex-col justify-between space-y-2 hover:border-rose-500/50 transition-all"
+                            className="bg-[#13151f] p-3 rounded-xl border border-[#2f3448] flex flex-col justify-between space-y-2 hover:border-[#E27D12]/50 transition-all"
                           >
                             <div className="flex space-x-3">
                               {cand.poster ? (
@@ -473,7 +473,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
                                   {cand.title}
                                 </h4>
                                 <div className="flex items-center space-x-1 text-[10px]">
-                                  <span className="bg-rose-950/80 text-rose-300 border border-rose-500/30 px-1.5 py-0.2 rounded font-semibold">
+                                  <span className="bg-[#7A4509]/80 text-[#E27D12] border border-[#E27D12]/30 px-1.5 py-0.2 rounded font-semibold">
                                     {cand.provider}
                                   </span>
                                   {cand.release_year && (
@@ -513,7 +513,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
                       <button
                         key={media.id}
                         onClick={() => handleLinkToMedia(file.id, media.id)}
-                        className="bg-[#1e212d] hover:bg-rose-950/60 hover:border-rose-500/50 border border-[#2f3448] text-gray-200 text-xs px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer"
+                        className="bg-[#1e212d] hover:bg-[#7A4509]/60 hover:border-[#E27D12]/50 border border-[#2f3448] text-gray-200 text-xs px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer"
                       >
                         <span className="font-semibold">{media.title}</span>
                         <span className="text-[10px] text-gray-400">({media.type})</span>

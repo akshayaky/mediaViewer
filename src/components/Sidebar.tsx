@@ -139,10 +139,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
  'space-x-3 p-6'}`}>
              <div
                className={`w-10 h-10 min-w-10 rounded-xl flex items-center justify-center shadow-lg ring-1 ring-white/20 transition-transform
- duration-300 ${accentColors ? '' : 'bg-gradient-to-tr from-rose-600 to-rose-400 shadow-rose-900/20'}`}
-               style={accentColors ? { backgroundColor: accentColors.activeBackground } : undefined}
+ duration-300 ${accentColors ? '' : ''}`}
              >
-               <Tv2 className="w-5 h-5 text-white" />
+               <img src = "src-tauri\icons\Square310x310Logo.png" />
+
              </div>
 
              {!isCollapsed && (
@@ -194,7 +194,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
                     <Icon
                       className={`w-5 h-5 min-w-5 transition-colors duration-300 ${
                         isActive
-                          ? (accentColors ? 'text-white' : 'text-rose-400')
+                          ? (accentColors ? 'text-white' : 'text-[#E27D12]')
                           : 'text-white/40 group-hover:text-white'
                       }`}
                       style={accentColors
@@ -205,7 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
                     {/* Collapsed Badge (Overlays the top-right of the icon) */}
                     {isCollapsed && hasBadge && item.badge != undefined && (
                       <span 
-                        className={`absolute -top-1.5 -right-1.5 z-10 text-white text-[9px] font-bold h-4 min-w-4 px-1 flex items-center justify-center rounded-full shadow-sm ring-1 ring-white/20 ${accentColors ? '' : 'bg-rose-500'}`}
+                        className={`absolute -top-1.5 -right-1.5 z-10 text-white text-[9px] font-bold h-4 min-w-4 px-1 flex items-center justify-center rounded-full shadow-sm ring-1 ring-white/20 ${accentColors ? '' : 'bg-[#E27D12]'}`}
                         style={accentColors ? { backgroundColor: accentColors.activeBackground } : undefined}
                       >
                         {item.badge > 99 ? '99+' : item.badge}
@@ -217,7 +217,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
 
                   {/* Expanded Badge (Right-aligned layout) */}
                   {!isCollapsed && item.badge != undefined && hasBadge &&  (
-                    <span className={`text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ring-1 ring-white/20 ${accentColors ? '' : 'bg-rose-500'}`}
+                    <span className={`text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ring-1 ring-white/20 ${accentColors ? '' : 'bg-[#E27D12]'}`}
                           style={accentColors ? { backgroundColor: accentColors.activeBackground } : undefined}>
                       {item.badge > 99 ? '99+' : item.badge}
                     </span>
@@ -283,7 +283,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
               key={item.id}
               onClick={() => handleMobileTabSelect(item.id)}
               className={`flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all touch-target cursor-pointer ${
-                isActive ? 'text-rose-400 font-semibold' : 'text-gray-400 hover:text-white'
+                isActive ? 'text-[#E27D12] font-semibold' : 'text-gray-400 hover:text-white'
               }`}
               style={isActive ? {
                     backgroundColor: accentColors ? accentColors.activeBackground : 'rgba(255, 255, 255, 0.08)',
@@ -292,7 +292,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
                     color: accentColors?.inactiveForeground,
                   }}
             >
-              <Icon className={`w-5 h-5 mb-1 ${isActive ? 'text-rose-500 scale-110' : 'text-gray-400'}`}
+              <Icon className={`w-5 h-5 mb-1 ${isActive ? 'text-[#E27D12] scale-110' : 'text-gray-400'}`}
                 style={accentColors
                   ? { color: isActive ? '#FFFFFF' : accentColors.inactiveForeground }
                   : undefined}
@@ -313,21 +313,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
         <button
           onClick={() => setIsMoreSheetOpen(true)}
           className={`relative flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all touch-target cursor-pointer ${
-            isSecondaryActive || isMoreSheetOpen ? 'text-rose-400 font-semibold' : 'text-gray-400 hover:text-white'
+            isSecondaryActive || isMoreSheetOpen ? 'text-[#E27D12] font-semibold' : 'text-gray-400 hover:text-white'
           }`}
           style={accentColors
                   ? { color: accentColors.inactiveForeground }
                   : undefined}
         >
           <div className="relative">
-            <MoreHorizontal className={`w-5 h-5 mb-1 ${isSecondaryActive || isMoreSheetOpen ? 'text-rose-500 scale-110' : 'text-gray-400'}`} 
+            <MoreHorizontal className={`w-5 h-5 mb-1 ${isSecondaryActive || isMoreSheetOpen ? 'text-[#E27D12] scale-110' : 'text-gray-400'}`} 
             style={
                     accentColors
                     ? { color: accentColors.inactiveForeground }
                     : undefined}
               />
             {unmatchedCount > 0 && (
-              <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ring-2 ring-[#111319]"
+              <span className="absolute -top-1 -right-2 bg-[#E27D12] text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ring-2 ring-[#111319]"
               style={accentColors
                   ? { 
                     color: '#ffffff',
@@ -368,7 +368,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center space-x-2">
-                <Tv2 className={`w-5 h-5 ${accentColors ? 'text-white' : 'text-rose-500'}`} />
+                <Tv2 className={`w-5 h-5 ${accentColors ? 'text-white' : 'text-[#E27D12]'}`} />
                 <h3 className="text-base font-bold text-white tracking-tight">More Destinations</h3>
               </div>
               <button
@@ -389,17 +389,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
                     onClick={() => handleMobileTabSelect(item.id)}
                     className={`w-full flex items-center justify-between p-3.5 rounded-xl font-medium text-sm transition-all cursor-pointer ${
                       isActive
-                        ? (accentColors ? 'bg-white/10 border border-white/20 text-white' : 'bg-rose-600/20 border border-rose-500/40 text-rose-300')
+                        ? (accentColors ? 'bg-white/10 border border-white/20 text-white' : 'bg-[#E27D12]/20 border border-[#E27D12]/40 text-[#E27D12]')
                         : (accentColors ? 'bg-white/5 hover:bg-white/10 text-white/70' : 'bg-[#1f2230] hover:bg-[#282c3f] text-gray-200')
                     }`}
                   >
                     <div className="flex items-center space-x-3.5">
-                      <Icon className={`w-5 h-5 ${isActive ? (accentColors ? 'text-white' : 'text-rose-400') : 'text-gray-400'}`} />
+                      <Icon className={`w-5 h-5 ${isActive ? (accentColors ? 'text-white' : 'text-[#E27D12]') : 'text-gray-400'}`} />
                       <span>{item.label}</span>
                     </div>
 
                     {item.badge !== undefined && item.badge > 0 && (
-                      <span className={`text-white text-xs font-bold px-2 py-0.5 rounded-full ring-1 ring-white/20 ${accentColors ? '' : 'bg-rose-500'}`}
+                      <span className={`text-white text-xs font-bold px-2 py-0.5 rounded-full ring-1 ring-white/20 ${accentColors ? '' : 'bg-[#E27D12]'}`}
                             style={accentColors ? { backgroundColor: accentColors.activeBackground } : undefined}>
                         {item.badge}
                       </span>

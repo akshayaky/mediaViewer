@@ -40,7 +40,7 @@ export const MediaRail: React.FC<MediaRailProps> = ({ title, subtitle, items, on
     <section className="space-y-3 my-6">
       <div className="flex items-baseline space-x-3 px-1">
         <h2 className="text-xl font-bold tracking-tight text-white">{title}</h2>
-        {subtitle && <span className="text-xs text-rose-400/80 font-medium">{subtitle}</span>}
+        {subtitle && <span className="text-xs text-[#E27D12]/80 font-medium">{subtitle}</span>}
       </div>
 
       <div className="flex space-x-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none">

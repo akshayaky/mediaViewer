@@ -317,8 +317,8 @@ export function App() {
     return (
       <div className="min-h-screen bg-[#0c0d10] flex items-center justify-center text-white font-sans">
         <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-semibold tracking-wider text-rose-400 uppercase">
+          <div className="w-12 h-12 border-4 border-[#E27D12] border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-semibold tracking-wider text-[#E27D12] uppercase">
             Initializing Media Library...
           </p>
         </div>

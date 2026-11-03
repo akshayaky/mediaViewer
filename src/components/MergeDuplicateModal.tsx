@@ -102,7 +102,7 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'Film':
-        return <Film className="w-4 h-4 text-rose-400" />;
+        return <Film className="w-4 h-4 text-[#E27D12]" />;
       case 'TV Series':
         return <Tv className="w-4 h-4 text-sky-400" />;
       default:
@@ -148,7 +148,7 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
                   onClick={() => handleSelectSurviving(m.id)}
                   className={`relative p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                     isChosen
-                      ? 'bg-rose-950/30 border-rose-500 shadow-lg shadow-rose-950/40'
+                      ? 'bg-[#E27D12]/30 border-[#E27D12] shadow-lg shadow-[#E27D12]/40'
                       : 'bg-[#1b1d2a] border-[#2d3145] hover:border-gray-500'
                   }`}
                 >
@@ -169,7 +169,7 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
                         </div>
                         <h3 className="font-bold text-white text-base truncate">{m.title}</h3>
                         {m.release_year && (
-                          <p className="text-xs text-rose-300 font-medium">Year: {m.release_year}</p>
+                          <p className="text-xs text-[#E27D12] font-medium">Year: {m.release_year}</p>
                         )}
                       </div>
                     </div>
@@ -201,7 +201,7 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
                       {isChosen ? 'Selected Canonical Target' : 'Will be merged & deleted'}
                     </span>
                     <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                      isChosen ? 'bg-rose-500 border-rose-400 text-white' : 'border-gray-500'
+                      isChosen ? 'bg-[#E27D12] border-[#E27D12] text-white' : 'border-gray-500'
                     }`}>
                       {isChosen && <Check className="w-3.5 h-3.5" />}
                     </div>
@@ -214,7 +214,7 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
           {/* Edit attributes before confirming */}
           <div className="bg-[#1b1d2a] border border-[#2d3145] p-4 rounded-xl space-y-3">
             <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center space-x-2">
-              <FileText className="w-4 h-4 text-rose-400" />
+              <FileText className="w-4 h-4 text-[#E27D12]" />
               <span>Edit Surviving Canonical Entity Details Before Confirming</span>
             </h4>
 
@@ -225,7 +225,7 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
                   type="text"
                   value={editableTitle}
                   onChange={e => setEditableTitle(e.target.value)}
-                  className="w-full bg-[#14161f] border border-[#2d3145] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-rose-500"
+                  className="w-full bg-[#14161f] border border-[#2d3145] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#E27D12]"
                 />
               </div>
 
@@ -235,7 +235,7 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
                   type="number"
                   value={editableYear}
                   onChange={e => setEditableYear(e.target.value)}
-                  className="w-full bg-[#14161f] border border-[#2d3145] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-rose-500"
+                  className="w-full bg-[#14161f] border border-[#2d3145] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#E27D12]"
                 />
               </div>
             </div>
@@ -246,7 +246,7 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
                 rows={2}
                 value={editableDescription}
                 onChange={e => setEditableDescription(e.target.value)}
-                className="w-full bg-[#14161f] border border-[#2d3145] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-rose-500"
+                className="w-full bg-[#14161f] border border-[#2d3145] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#E27D12]"
               />
             </div>
           </div>
@@ -262,7 +262,7 @@ export const MergeDuplicateModal: React.FC<MergeDuplicateModalProps> = ({
           </button>
           <button
             onClick={handleConfirmMerge}
-            className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
+            className="px-5 py-2 rounded-xl bg-[#E27D12] hover:bg-[#E27D12] text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
           >
             <Check className="w-4 h-4" />
             <span>Confirm & Safe Merge Records</span>

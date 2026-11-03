@@ -57,17 +57,17 @@ export const WishlistView: React.FC<WishlistViewProps> = ({ isCollapsed }) => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1f222e] pb-6">
         <div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center space-x-3">
-            <Heart className="w-8 h-8 text-rose-500 fill-rose-500/20" />
+            <Heart className="w-8 h-8 text-[#E27D12] fill-rose-500/20" />
             <span>Wishlist & Wanted</span>
           </h1>
-          <p className="text-sm text-rose-400/80 font-medium mt-1">
+          <p className="text-sm text-[#E27D12]/80 font-medium mt-1">
             Media items flagged from Google, Notion, or manual additions
           </p>
         </div>
 
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-rose-950/30 transition-all self-start md:self-auto"
+          className="flex items-center space-x-2 bg-[#E27D12] hover:bg-[#E27D12] text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-rose-950/30 transition-all self-start md:self-auto"
         >
           <Plus className="w-4 h-4" />
           <span>Add Wishlist Item</span>
@@ -84,7 +84,7 @@ export const WishlistView: React.FC<WishlistViewProps> = ({ isCollapsed }) => {
           {wishlistItems.map(item => (
             <div
               key={item.id}
-              className="bg-[#14161f] rounded-2xl overflow-hidden border border-[#232736] hover:border-rose-500/50 transition-all flex flex-col justify-between"
+              className="bg-[#14161f] rounded-2xl overflow-hidden border border-[#232736] hover:border-[#E27D12]/50 transition-all flex flex-col justify-between"
             >
               {/* Optional Poster Header */}
               {item.poster && (
@@ -96,7 +96,7 @@ export const WishlistView: React.FC<WishlistViewProps> = ({ isCollapsed }) => {
               <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="bg-rose-950/80 text-rose-400 border border-rose-500/30 font-bold px-2 py-0.5 rounded">
+                    <span className="bg-[#7A4509]/80 text-[#E27D12] border border-[#E27D12]/30 font-bold px-2 py-0.5 rounded">
                       {item.type}
                     </span>
                     <span className="bg-[#1e212d] text-gray-400 px-2 py-0.5 rounded font-medium text-[11px] flex items-center space-x-1">
@@ -112,7 +112,7 @@ export const WishlistView: React.FC<WishlistViewProps> = ({ isCollapsed }) => {
 
                 <div className="pt-3 border-t border-[#1f222e] flex items-center justify-between text-[11px] text-gray-400">
                   <span className="flex items-center space-x-1">
-                    <Calendar className="w-3 h-3 text-rose-500" />
+                    <Calendar className="w-3 h-3 text-[#E27D12]" />
                     <span>Added {item.added_at.split('T')[0]}</span>
                   </span>
                   {item.external_url && (
@@ -120,7 +120,7 @@ export const WishlistView: React.FC<WishlistViewProps> = ({ isCollapsed }) => {
                       href={item.external_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-rose-400 hover:underline flex items-center space-x-1"
+                      className="text-[#E27D12] hover:underline flex items-center space-x-1"
                     >
                       <span>Link</span>
                       <ExternalLink className="w-3 h-3" />
@@ -207,7 +207,7 @@ export const WishlistView: React.FC<WishlistViewProps> = ({ isCollapsed }) => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow-md"
+                  className="px-4 py-2 text-xs font-semibold bg-[#E27D12] hover:bg-[#E27D12] text-white rounded-lg shadow-md"
                 >
                   Save Item
                 </button>

@@ -180,7 +180,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   const getTypeIcon = () => {
     switch (type) {
       case 'Film':
-        return <Film className="w-5 h-5 text-rose-400" />;
+        return <Film className="w-5 h-5 text-[#E27D12]" />;
       case 'TV Series':
         return <Tv className="w-5 h-5 text-sky-400" />;
       case 'VideoGame':
@@ -225,7 +225,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
                 placeholder={`Search ${type === 'VideoGame' ? 'games' : type === 'Film' ? 'movies' : 'TV series'}...`}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-rose-500"
+                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-[#E27D12]"
                 autoFocus
               />
             </div>
@@ -233,7 +233,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
             <button
               type="submit"
               disabled={isSearching || !searchQuery.trim()}
-              className="bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold text-xs px-5 py-2.5 rounded-xl transition-all flex items-center space-x-2 cursor-pointer shrink-0"
+              className="bg-[#E27D12] hover:bg-[#E27D12] disabled:opacity-50 text-white font-semibold text-xs px-5 py-2.5 rounded-xl transition-all flex items-center space-x-2 cursor-pointer shrink-0"
             >
               {isSearching ? (
                 <>
@@ -259,7 +259,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
                 return (
                   <div
                     key={`${res.external_id}_${idx}`}
-                    className="bg-[#1b1d2a] border border-[#2d3145] hover:border-rose-500/50 rounded-xl p-3 flex space-x-3 transition-all"
+                    className="bg-[#1b1d2a] border border-[#2d3145] hover:border-[#E27D12]/50 rounded-xl p-3 flex space-x-3 transition-all"
                   >
                     {res.poster ? (
                       <img
@@ -284,7 +284,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
                           )}
                         </div>
 
-                        <span className="inline-block bg-rose-950/80 text-rose-300 border border-rose-500/30 text-[10px] font-bold px-1.5 py-0.2 rounded">
+                        <span className="inline-block bg-[#E27D12]/80 text-[#E27D12]-300 border border-[#E27D12]/30 text-[10px] font-bold px-1.5 py-0.2 rounded">
                           {res.provider}
                         </span>
 
@@ -301,7 +301,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
                         className={`w-full text-xs font-bold py-1.5 px-3 rounded-lg flex items-center justify-center space-x-1.5 transition-all mt-2 cursor-pointer ${
                           isAdded
                             ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/40'
-                            : 'bg-rose-600 hover:bg-rose-500 text-white shadow-md'
+                            : 'bg-[#E27D12] hover:bg-[#E27D12] text-white shadow-md'
                         }`}
                       >
                         {isImporting ? (

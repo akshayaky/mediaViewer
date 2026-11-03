@@ -381,10 +381,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       <div className="border-b border-[#1f222e] pb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-extrabold text-[#ffffff] tracking-tight flex items-center space-x-3">
-            <Settings className="w-8 h-8 text-rose-500" />
+            <Settings className="w-8 h-8 text-[#E27D12]" />
             <span>Settings & Notion Hub</span>
           </h1>
-          <p className="text-sm text-rose-400/80 font-medium mt-1">
+          <p className="text-sm text-[#E27D12]/80 font-medium mt-1">
             Configure local folders, API integration keys, Notion database sync, and conflict resolution
           </p>
         </div>
@@ -548,7 +548,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
         {notionToken && selectedDbId && (
           <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-4">
             <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-rose-400" />
+              <Sparkles className="w-4 h-4 text-[#E27D12]" />
               <span>3. Configure Field Mapping & Execute Sync</span>
             </h3>
 
@@ -753,7 +753,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
         )}
 
         {syncErrors.length > 0 && (
-          <div className="bg-[#2a1719] border border-rose-500/40 p-4 rounded-xl text-xs text-rose-300 space-y-1">
+          <div className="bg-[#2a1719] border border-[#E27D12]/40 p-4 rounded-xl text-xs text-[#E27D12] space-y-1">
             <h4 className="font-bold flex items-center space-x-1">
               <AlertCircle className="w-4 h-4" />
               <span>Sync Errors Encountered:</span>
@@ -825,7 +825,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       {/* Local Folder Architecture & Directory Scanner Section */}
       <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
         <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-          <Folder className="w-5 h-5 text-rose-500" />
+          <Folder className="w-5 h-5 text-[#E27D12]" />
           <span>Local Library Folders & Directory Scanner</span>
         </h2>
         <p className="text-xs text-gray-400">
@@ -861,7 +861,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                 type="button"
                 onClick={(e) => handleScanDirectory(e, moviesFolder, 'Film')}
                 disabled={scanningType !== null}
-                className="w-full bg-rose-600/90 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4 cursor-pointer"
+                className="w-full bg-[#E27D12]/90 hover:bg-[#E27D12] disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-sm transition-all mt-4 cursor-pointer"
               >
                 {scanningType === 'Film' ? (
                   <>
@@ -965,7 +965,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
           <div className="flex justify-end pt-1">
             <button
               type="submit"
-              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+              className="bg-[#E27D12] hover:bg-[#E27D12] text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
             >
               Save Folder Settings
             </button>
@@ -998,20 +998,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
           </div>
         )}
         {scanError && !scanningType && (
-          <div role="alert" className="bg-[#2a1719] border border-rose-500/40 p-4 rounded-xl text-xs flex items-start space-x-2">
-            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          <div role="alert" className="bg-[#2a1719] border border-[#E27D12]/40 p-4 rounded-xl text-xs flex items-start space-x-2">
+            <AlertCircle className="w-4 h-4 text-[#E27D12] flex-shrink-0" />
             <div>
-              <h4 className="font-bold text-rose-300">Library Scan Failed</h4>
+              <h4 className="font-bold text-[#E27D12]">Library Scan Failed</h4>
               <p className="text-gray-300 mt-0.5">{scanError}</p>
             </div>
           </div>
         )}
       </section>
 
-      <section className="bg-[#14161f] p-6 rounded-2xl border border-rose-500/20 space-y-4">
+      <section className="bg-[#14161f] p-6 rounded-2xl border border-[#E27D12]/20 space-y-4">
         <div>
           <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-            <Trash2 className="w-5 h-5 text-rose-400" />
+            <Trash2 className="w-5 h-5 text-[#E27D12]" />
             <span>Clear Library Sections</span>
           </h2>
           <p className="text-xs text-gray-400 mt-1">
@@ -1028,19 +1028,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
               key={section.type}
               type="button"
               onClick={() => void handleClearMediaType(section.type, section.label)}
-              className="bg-[#1a1d29] hover:bg-rose-950/40 text-gray-200 hover:text-rose-300 border border-[#2d3145] hover:border-rose-500/40 rounded-xl px-4 py-3 text-sm font-semibold transition-colors cursor-pointer"
+              className="bg-[#1a1d29] hover:bg-[#7A4509]/40 text-gray-200 hover:text-[#E27D12] border border-[#2d3145] hover:border-[#E27D12]/40 rounded-xl px-4 py-3 text-sm font-semibold transition-colors cursor-pointer"
             >
               Clear {section.label}
             </button>
           ))}
         </div>
-        {deleteError && <p role="alert" className="text-xs text-rose-300">{deleteError}</p>}
+        {deleteError && <p role="alert" className="text-xs text-[#E27D12]">{deleteError}</p>}
       </section>
 
       {/* Playback Preferences Section */}
       <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
         <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-          <Sparkles className="w-5 h-5 text-rose-500" />
+          <Sparkles className="w-5 h-5 text-[#E27D12]" />
           <span>Playback Preferences</span>
         </h2>
         <p className="text-xs text-gray-400">
@@ -1061,7 +1061,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                     setPlayerMode('builtin');
                     dbService.saveSetting('player_mode', 'builtin');
                   }}
-                  className="text-rose-500 focus:ring-rose-500"
+                  className="text-[#E27D12] focus:ring-[#E27D12]"
                 />
                 <span>Built-in HTML5 Video Player (with resume, progress bars & subtitles)</span>
               </label>
@@ -1076,7 +1076,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                     setPlayerMode('os_default');
                     dbService.saveSetting('player_mode', 'os_default');
                   }}
-                  className="text-rose-500 focus:ring-rose-500"
+                  className="text-[#E27D12] focus:ring-[#E27D12]"
                 />
                 <span>OS System Default Application (VLC, MPC-HC, etc.)</span>
               </label>
@@ -1094,7 +1094,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                   setAutoplayNext(val);
                   dbService.saveSetting('autoplay_next_episode', val);
                 }}
-                className="rounded text-rose-500 focus:ring-rose-500"
+                className="rounded text-[#E27D12] focus:ring-[#E27D12]"
               />
               <span>Automatically play next episode on completion with countdown</span>
             </label>
@@ -1111,7 +1111,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                   setSidebarHideEnabled(val);
                   dbService.saveSetting('sidebar_hide_enabled', val);
                 }}
-                className="rounded text-rose-500 focus:ring-rose-500"
+                className="rounded text-[#E27D12] focus:ring-[#E27D12]"
               />
               <span>Hide sidebar in Detail View (show on left edge hover)</span>
             </label>
@@ -1124,7 +1124,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
         <div className="flex items-center justify-between border-b border-[#232736] pb-3">
           <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-            <Key className="w-5 h-5 text-rose-500" />
+            <Key className="w-5 h-5 text-[#E27D12]" />
             <span>Metadata API Keys & Providers</span>
           </h2>
           <span className="text-xs text-gray-400 flex items-center space-x-1">
@@ -1187,7 +1187,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
             <div>
               <label className="text-xs text-gray-300 font-bold block mb-1">Country / Streaming Region</label>
               <div className="flex items-center space-x-2">
-                <Globe className="w-4 h-4 text-rose-400 shrink-0" />
+                <Globe className="w-4 h-4 text-[#E27D12] shrink-0" />
                 <input
                   type="text"
                   value={region}
@@ -1257,7 +1257,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
           <div className="flex justify-end pt-1">
             <button
               type="submit"
-              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+              className="bg-[#E27D12] hover:bg-[#E27D12] text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
             >
               Save API Settings
             </button>
@@ -1268,7 +1268,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       {/* Notion CSV Import Fallback Wizard */}
       <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
         <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-          <FileSpreadsheet className="w-5 h-5 text-rose-500" />
+          <FileSpreadsheet className="w-5 h-5 text-[#E27D12]" />
           <span>Notion Database CSV Export Import Wizard</span>
         </h2>
         <p className="text-xs text-gray-400">
@@ -1277,7 +1277,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
 
         <div className="space-y-4 pt-2">
           <div className="flex items-center space-x-4">
-            <label className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-4 py-2.5 rounded-xl cursor-pointer transition-all shadow-md">
+            <label className="flex items-center space-x-2 bg-[#E27D12] hover:bg-[#E27D12] text-white font-semibold text-xs px-4 py-2.5 rounded-xl cursor-pointer transition-all shadow-md">
               <Upload className="w-4 h-4" />
               <span>Select Notion CSV File</span>
               <input type="file" accept=".csv" onChange={handleCsvFileUpload} className="hidden" />
@@ -1294,7 +1294,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
           {csvHeaders.length > 0 && (
             <div className="bg-[#1a1d29] p-5 rounded-xl border border-[#2d3145] space-y-4">
               <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                <Sparkles className="w-4 h-4 text-rose-400" />
+                <Sparkles className="w-4 h-4 text-[#E27D12]" />
                 <span>Configure Column Mapping</span>
               </h3>
 

@@ -203,7 +203,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   const getTypeIcon = () => {
     switch (media.type) {
       case 'Film':
-        return <Film className="w-5 h-5 text-rose-400" />;
+        return <Film className="w-5 h-5 text-[#E27D12]" />;
       case 'TV Series':
         return <Tv className="w-5 h-5 text-sky-400" />;
       default:
@@ -248,7 +248,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
                 placeholder={`Search correct ${media.type === 'VideoGame' ? 'game' : media.type === 'Film' ? 'movie' : 'TV series'}...`}
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-rose-500"
+                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-[#E27D12]"
                 autoFocus
               />
             </div>
@@ -256,7 +256,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
             <button
               type="submit"
               disabled={isSearching || !query.trim()}
-              className="bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold text-xs px-5 py-2.5 rounded-xl transition-all flex items-center space-x-2 cursor-pointer shrink-0"
+              className="bg-[#E27D12] hover:bg-[#E27D12] disabled:opacity-50 text-white font-semibold text-xs px-5 py-2.5 rounded-xl transition-all flex items-center space-x-2 cursor-pointer shrink-0"
             >
               {(
                 <>
@@ -294,7 +294,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
                         onClick={() => handleSelectCandidate(res)}
                         className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                           isSelected
-                            ? 'bg-rose-950/40 border-rose-500'
+                            ? 'bg-[#7A4509]/40 border-[#E27D12]'
                             : 'bg-[#1b1d2a] border-[#2d3145] hover:border-gray-500'
                         }`}
                       >
@@ -313,7 +313,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
                         </div>
 
                         <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          isSelected ? 'bg-rose-500 border-rose-400 text-white' : 'border-gray-500'
+                          isSelected ? 'bg-[#E27D12] border-[#E27D12] text-white' : 'border-gray-500'
                         }`}>
                           {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
                         </div>
@@ -328,14 +328,14 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
           {/* Preview selected candidate */}
           {selectedResult && (
             <div className="bg-[#1b1d2a] border border-[#2d3145] p-4 rounded-xl space-y-3">
-              <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center space-x-2">
+              <h4 className="text-xs font-bold text-[#E27D12] uppercase tracking-wider flex items-center space-x-2">
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Selected Candidate Metadata Preview</span>
               </h4>
 
               {isPreviewing ? (
                 <div className="flex items-center space-x-2 text-xs text-gray-400 py-4">
-                  <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+                  <Loader2 className="w-4 h-4 animate-spin text-[#E27D12]" />
                   <span>Loading full metadata preview...</span>
                 </div>
               ) : (
@@ -351,7 +351,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
                   <div className="space-y-1 text-xs text-gray-300 flex-1">
                     <h3 className="font-bold text-white text-base">{previewDetails?.title || selectedResult.title}</h3>
                     {(previewDetails?.release_year || selectedResult.release_year) && (
-                      <p className="text-rose-300">Release Year: {previewDetails?.release_year || selectedResult.release_year}</p>
+                      <p className="text-[#E27D12]">Release Year: {previewDetails?.release_year || selectedResult.release_year}</p>
                     )}
                     {previewDetails?.genres && previewDetails.genres.length > 0 && (
                       <p className="text-gray-400">Genres: {previewDetails.genres.join(', ')}</p>
@@ -380,7 +380,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
           <button
             onClick={handleConfirmReassignment}
             disabled={!selectedResult || isSaving}
-            className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
+            className="px-5 py-2 rounded-xl bg-[#E27D12] hover:bg-[#E27D12] disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
           >
             {isSaving ? (
               <>

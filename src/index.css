@@ -14,7 +14,7 @@
 
 @layer base {
   body {
-    @apply bg-[#0c0d10] text-gray-100 antialiased font-sans selection:bg-[var(--hero-accent,theme(colors.rose.600))] selection:text-white overflow-hidden;
+    @apply bg-[#0c0d10] text-gray-100 antialiased font-sans selection:bg-[var(--hero-accent,#E27D12)] selection:text-white overflow-hidden;
     padding-right: var(--sar);
     padding-bottom: var(--sab);
     padding-left: var(--sal);
@@ -103,7 +103,7 @@
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--hero-accent-light, color-mix(in srgb, var(--hero-accent, #e11d48), white 20%));
+  background: var(--hero-accent-light, color-mix(in srgb, var(--hero-accent, #E27D12), white 20%));
 }
 
 @media (max-width: 767px) {

@@ -1177,7 +1177,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       {/* Loading Spinner */}
       {loading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm space-y-3 z-10 pointer-events-none">
-          <Loader2 className="w-12 h-12 text-rose-500 animate-spin" />
+          <Loader2 className="w-12 h-12 text-[#E27D12] animate-spin" />
           <p className="text-sm font-semibold text-gray-200">Buffering Media Stream...</p>
         </div>
       )}
@@ -1185,13 +1185,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       {/* Error Overlay */}
       {error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-6 text-center space-y-4 z-20">
-          <AlertTriangle className="w-16 h-16 text-rose-500" />
+          <AlertTriangle className="w-16 h-16 text-[#E27D12]" />
           <h3 className="text-xl font-bold text-white">Playback Error Encountered</h3>
           <p className="text-sm text-gray-300 max-w-lg leading-relaxed">{error}</p>
           <div className="flex space-x-3 pt-2">
             <button
               onClick={handleExitPlayer}
-              className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-lg transition-all cursor-pointer"
+              className="bg-[#E27D12] hover:bg-[#E27D12] text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-lg transition-all cursor-pointer"
             >
               Return to Details
             </button>
@@ -1235,7 +1235,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     aria-pressed={selectedPickerSeason === season}
                     className={`whitespace-nowrap rounded-lg px-1.5 py-1.5 text-[10px] font-semibold transition-colors min-[380px]:px-2 min-[380px]:text-[11px] sm:py-2 sm:text-xs ${
                       selectedPickerSeason === season
-                        ? 'bg-rose-500/20 text-rose-300'
+                        ? 'bg-[#E27D12]/20 text-[#E27D12]'
                         : 'text-gray-400 hover:bg-white/[0.06] hover:text-white'
                     }`}
                   >
@@ -1279,7 +1279,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                         </span>
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[10px] font-semibold text-rose-300 sidebar:text-xs">
+                        <span className="block truncate text-[10px] font-semibold text-[#E27D12] sidebar:text-xs">
                           S{String(season).padStart(2, '0')}E{String(episode).padStart(2, '0')}
                         </span>
                         <span className="block truncate text-[10px] font-bold text-white sidebar:mt-1 sidebar:text-sm">
@@ -1341,8 +1341,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
       {/* Next Episode Countdown Overlay */}
       {showNextCountdown && nextEpInfo && (
-        <div className="absolute bottom-24 right-8 bg-[#151722]/90 border border-rose-500/50 backdrop-blur-md p-5 rounded-2xl shadow-2xl space-y-3 z-30 animate-fadeIn max-w-sm">
-          <div className="flex items-center space-x-2 text-rose-400 font-bold text-xs">
+        <div className="absolute bottom-24 right-8 bg-[#151722]/90 border border-[#E27D12]/50 backdrop-blur-md p-5 rounded-2xl shadow-2xl space-y-3 z-30 animate-fadeIn max-w-sm">
+          <div className="flex items-center space-x-2 text-[#E27D12] font-bold text-xs">
             <SkipForward className="w-4 h-4" />
             <span>Up Next in {countdownSeconds}s</span>
           </div>
@@ -1376,7 +1376,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   );
                 }
               }}
-              className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md cursor-pointer flex items-center space-x-1"
+              className="px-4 py-1.5 rounded-xl bg-[#E27D12] hover:bg-[#E27D12] text-white text-xs font-bold shadow-md cursor-pointer flex items-center space-x-1"
             >
               <span>Play Now</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -1400,10 +1400,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             value={currentTime}
             onChange={handleSeek}
             style={{
-                  background: `linear-gradient(to right, #f43f5e 0%, #f43f5e ${(currentTime/ duration) * 100 }%, 
+                  background: `linear-gradient(to right, #E27D12  0%, #E27D12  ${(currentTime/ duration) * 100 }%, 
                   rgba(255, 255, 255, 0.3) ${((currentTime/ duration)* 100)}%, rgba(255, 255, 255, 0.3) 100%)`
                 }}
-            className="w-full h-1.5 bg-white/20 hover:h-2.5 rounded-lg appearance-none cursor-pointer accent-rose-500 transition-all"
+            className="w-full h-1.5 bg-white/20 hover:h-2.5 rounded-lg appearance-none cursor-pointer accent-[#E27D12] transition-all"
           />
         </div>
 
@@ -1474,10 +1474,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
                 style={{
-                  background: `linear-gradient(to right, #f43f5e 0%, #f43f5e ${(isMuted ? 0 : volume) * 100}%, 
+                  background: `linear-gradient(to right, #E27D12  0%, #E27D12  ${(isMuted ? 0 : volume) * 100}%, 
                   rgba(255, 255, 255, 0.3) ${(isMuted ? 0 : volume) * 100}%, rgba(255, 255, 255, 0.3) 100%)`
                 }}
-                className="w-16 h-1 bg-white/30 rounded appearance-none cursor-pointer accent-rose-500 opacity-80 group-hover:opacity-100 transition-opacity"
+                className="w-16 h-1 bg-white/30 rounded appearance-none cursor-pointer accent-[#E27D12] opacity-80 group-hover:opacity-100 transition-opacity"
               />
             </div>
 
@@ -1516,7 +1516,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
               title={subtitleError || 'Subtitle track'}
             >
-              <Subtitles className="w-5 h-5 text-rose-400 transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
+              <Subtitles className="w-5 h-5 text-[#E27D12] transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
               <select
                 value={selectedSubtitleId}
                 onChange={(e) => setSelectedSubtitleId(e.target.value)}
@@ -1612,7 +1612,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                         fontSize: Number(event.target.value)
                       }))}
                       aria-label="Subtitle font size"
-                      className="w-full accent-rose-500"
+                      className="w-full accent-[#E27D12]"
                     />
                   </label>
 
@@ -1697,7 +1697,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
               title={audioTrackSupport === false ? 'Audio track switching is not supported by this video runtime.' : 'Audio track'}
             >
-              <AudioLines className="w-5 h-5 text-rose-400 transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
+              <AudioLines className="w-5 h-5 text-[#E27D12] transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
               <select
                 value={audioTracks.length ? selectedAudioTrackId : ''}
                 onChange={(e) => setSelectedAudioTrackId(e.target.value)}
@@ -1729,7 +1729,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               onClick={() => setFillVideoToScreen(current => !current)}
               aria-label={fillVideoToScreen ? 'Fit video to screen' : 'Fill screen with video'}
               aria-pressed={fillVideoToScreen}
-              className={`group p-2 cursor-pointer ${fillVideoToScreen ? 'text-rose-400' : 'text-white'}`}
+              className={`group p-2 cursor-pointer ${fillVideoToScreen ? 'text-[#E27D12]' : 'text-white'}`}
               title={`Fill to screen (C)${fillVideoToScreen ? ' — on' : ''}`}
             >
               <Crop className="w-5 h-5 transition-transform group-hover:scale-110 group-focus-visible:scale-110" />

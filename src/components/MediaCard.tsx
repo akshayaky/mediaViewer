@@ -72,7 +72,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onP
   const getTypeIcon = () => {
     switch (media.type) {
       case 'Film':
-        return <Film className="w-3.5 h-3.5 text-rose-400" />;
+        return <Film className="w-3.5 h-3.5 text-[#E27D12]" />;
       case 'TV Series':
         return <Tv className="w-3.5 h-3.5 text-sky-400" />;
       case 'VideoGame':
@@ -94,7 +94,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onP
     }
     if (state.rewatch_count > 0) {
       return (
-        <span className="absolute top-2 left-2 bg-rose-600/90 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-md">
+        <span className="absolute top-2 left-2 bg-[#E27D12]/90 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-md">
           <RefreshCw className="w-3 h-3" />
           <span>{state.rewatch_count > 1 ? `${state.rewatch_count}x Rewatched` : 'Rewatched'}</span>
         </span>
@@ -168,7 +168,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onP
           {progressPct > 0 && (
             <div className="absolute bottom-0 inset-x-0 bg-black/60 h-1.5 z-10">
               <div
-                className="bg-rose-500 h-full transition-all duration-300 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
+                className="bg-[#E27D12] h-full transition-all duration-300 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
@@ -199,7 +199,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onP
 
       {/* Card Info */}
       {/* <div className="p-3.5 flex flex-col justify-between flex-1">
-        <h3 className="font-semibold text-sm text-gray-100 group-hover:text-rose-400 transition-colors line-clamp-1">
+        <h3 className="font-semibold text-sm text-gray-100 group-hover:text-[#E27D12] transition-colors line-clamp-1">
           {media.title}
         </h3>
         <p className="text-xs text-gray-400 mt-1 line-clamp-1">
