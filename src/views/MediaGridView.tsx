@@ -3,13 +3,14 @@ import { MediaCard } from '../components/MediaCard';
 import { AddMediaModal } from '../components/AddMediaModal';
 import { Media, MediaGridGroupField, MediaGridPreferences, MediaGridSortField, MediaType } from '../types/media';
 import { dbService } from '../services/DatabaseService';
-import { ArrowDownUp, Search, Filter, Plus, X, RotateCcw } from 'lucide-react';
+import { ArrowDownUp, Search, Filter, Plus, X, RotateCcw, ChevronRight} from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
 const DEFAULT_GRID_PREFERENCES: MediaGridPreferences = {
   sortBy: 'created_at',
   sortDescending: true,
-  groupBy: 'none'
+  groupBy: 'none',
+  groupDescending: false // Add default state
 };
 
 const SORT_OPTIONS: { value: MediaGridSortField; label: string }[] = [
@@ -133,7 +134,10 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
             : DEFAULT_GRID_PREFERENCES.sortDescending,
           groupBy: typeof saved.groupBy === 'string' && GROUP_FIELDS.has(saved.groupBy as MediaGridGroupField)
             ? saved.groupBy as MediaGridGroupField
-            : DEFAULT_GRID_PREFERENCES.groupBy
+            : DEFAULT_GRID_PREFERENCES.groupBy,
+          groupDescending: typeof saved.groupDescending === 'boolean'
+            ? saved.groupDescending
+            : DEFAULT_GRID_PREFERENCES.groupDescending,
         });
       }
       preferencesLoadedRef.current = true;
@@ -418,7 +422,10 @@ useEffect(() => {
     });
 
     return Array.from(groups.entries())
-      .sort(([, a], [, b]) => compareValues(a.value, b.value))
+      .sort(([, a], [, b]) => {
+       const comparison = compareValues(a.value, b.value);
+       return (gridPreferences.groupDescending ? -1 : 1) * comparison;
+      })
       .map(([key, group]) => ({ key, label: group.label, items: group.items }));
   })();
 
@@ -590,6 +597,17 @@ useEffect(() => {
             {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
+
+        {gridPreferences.groupBy !== 'none' && (
+        <button
+          type="button"
+          onClick={() => updateGridPreferences(current => ({ ...current, groupDescending: !current.groupDescending }))}
+          className="flex items-center gap-2 rounded-lg border border-[#2d3145] bg-[#1b1d2a] px-3 py-2 text-sm text-gray-200 hover:border-[#E27D12]"
+        >
+          <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
+          Groups: {gridPreferences.groupDescending ? 'Descending' : 'Ascending'}
+        </button>
+        )}
       </div>
 
       {/* Grid */}
@@ -605,29 +623,35 @@ useEffect(() => {
           transition: pullOffset === 0 ? 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)' : 'none'
         }}
       >
-        {groupedItems.map(group => (
-          <section key={group.key} aria-label={group.label || 'Media'}>
-            {group.label && (
-              <h2 className="mb-3 text-sm font-semibold text-gray-300">
-                {group.label}
-                <span className="ml-2 text-xs font-normal text-gray-500">{group.items.length}</span>
-              </h2>
-            )}
-            <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5">
-              {group.items.map(media => (
-                <MediaCard
-                  key={`${group.key}:${media.id}`}
-                  media={media}
-                  state={stateByMediaId[media.id]}
-                  score={scoreByMediaId[media.id]}
-                  onClick={onSelectMedia}
-                  onPreviewStart={onPreviewStart}
-                  onPreviewEnd={onPreviewEnd}
+      {groupedItems.map(group => (
+        <details key={group.key} className="group/details mb-6" open>
+          {group.label && (
+            <summary className="flex items-center justify-between cursor-pointer list-none mb-3 text-sm font-semibold text-gray-300 select-none hover:text-white transition-colors">
+              <div className="flex items-center gap-2">
+                <ChevronRight 
+                  className="w-4 h-4 text-gray-500 transition-transform duration-200 group-open/details:rotate-90" 
                 />
-              ))}
-            </div>
-          </section>
-        ))}
+                <span>{group.label}</span>
+                <span className="text-xs font-normal text-gray-500">{group.items.length}</span>
+              </div>
+            </summary>
+          )}
+          
+          <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5 mt-2">
+            {group.items.map(media => (
+              <MediaCard
+                key={`${group.key}:${media.id}`}
+                media={media}
+                state={stateByMediaId[media.id]}
+                score={scoreByMediaId[media.id]}
+                onClick={onSelectMedia}
+                onPreviewStart={onPreviewStart}
+                onPreviewEnd={onPreviewEnd}
+              />
+            ))}
+          </div>
+        </details>
+      ))}
       </div>
       )}
 
@@ -693,6 +717,18 @@ useEffect(() => {
                 <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
                 {gridPreferences.sortDescending ? 'Descending order' : 'Ascending order'}
               </button>
+
+              {/* NEW: Mobile Group Order Toggle */}
+              {gridPreferences.groupBy !== 'none' && (
+                <button
+                  type="button"
+                  onClick={() => updateGridPreferences(current => ({ ...current, groupDescending: !current.groupDescending }))}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#2d3145] bg-[#1c1f2e] px-3 py-3 text-sm text-gray-200 mt-2"
+                >
+                  <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
+                  {gridPreferences.groupDescending ? 'Groups: Descending' : 'Groups: Ascending'}
+                </button>
+              )}
 
               {/* Genre Filter */}
               <div className="space-y-1.5">

@@ -187,6 +187,7 @@ export interface MediaGridPreferences {
   sortBy: MediaGridSortField;
   sortDescending: boolean;
   groupBy: MediaGridGroupField;
+  groupDescending: boolean;
 }
 
 export interface AppSettings {
