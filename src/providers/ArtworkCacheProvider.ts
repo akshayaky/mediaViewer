@@ -3,6 +3,7 @@ import { ArtworkProvider } from './interfaces';
 import { tmdbProvider } from './TMDBProvider';
 import { igdbProvider, fetchIGDBLogo } from './IGDBProvider';
 import { STORAGE_KEYS } from '../constants/appConstants';
+import { searchMediaMetadata } from '../services/MediaSearchService';
 
 /**
  * Caches artwork results in memory and persists them to LocalStorage.
@@ -158,7 +159,7 @@ export class ArtworkCacheProvider implements ArtworkProvider {
     type: MediaType
   ): Promise<{ poster?: string; backdrop?: string; logo?: string }> {
     if (type === 'VideoGame') {
-      const searchRes = await igdbProvider.searchMedia(mediaTitle, 'VideoGame');
+      const searchRes = await searchMediaMetadata(mediaTitle, 'VideoGame');
       if (searchRes.length > 0) {
         const match = searchRes[0];
         const details = await igdbProvider.getMediaDetails(match.external_id);
@@ -171,7 +172,7 @@ export class ArtworkCacheProvider implements ArtworkProvider {
       const logo = await fetchIGDBLogo(mediaTitle);
       return { logo };
     } else {
-      const searchRes = await tmdbProvider.searchMedia(mediaTitle, type);
+      const searchRes = await searchMediaMetadata(mediaTitle, type);
       if (searchRes.length > 0) {
         const match = searchRes[0];
         const details = await tmdbProvider.getMediaDetails(match.external_id);

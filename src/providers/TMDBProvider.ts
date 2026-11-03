@@ -1,27 +1,57 @@
 import { Media, MediaType, CastMember, Season, Episode } from '../types/media';
-import { MetadataProvider, MetadataSearchResult } from './interfaces';
+import { MetadataProvider, MetadataSearchOptions, MetadataSearchResult } from './interfaces';
 import { dbService } from '../services/DatabaseService';
+import { searchWithProgressiveTrim } from './searchUtils';
+
+export interface TMDBLanguage {
+  iso_639_1: string;
+  english_name: string;
+  name: string;
+}
 
 export class TMDBProvider implements MetadataProvider {
   public name = 'TMDB';
   private baseUrl = 'https://api.themoviedb.org/3';
   private imageBaseUrl = 'https://image.tmdb.org/t/p';
   private languageMap: Record<string, string> = {};
+  private languages: TMDBLanguage[] | null = null;
+  private languagesRequest: Promise<TMDBLanguage[]> | null = null;
 
   private async initLanguages(): Promise<void> {
-    if (Object.keys(this.languageMap).length > 0) return;
-    
+    if (this.languages) return;
+
     try {
-      const { url, headers } = await this.getFetchConfig('/configuration/languages');
-      const res = await fetch(url, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        data.forEach((lang: any) => {
-          this.languageMap[lang.iso_639_1] = lang.english_name;
-        });
-      }
+      await this.getLanguages();
     } catch (err) {
       console.warn('TMDB failed to load language configuration:', err);
+    }
+  }
+
+  public async getLanguages(): Promise<TMDBLanguage[]> {
+    if (this.languages) return this.languages;
+    if (this.languagesRequest) return this.languagesRequest;
+
+    this.languagesRequest = (async () => {
+      const { url, headers } = await this.getFetchConfig('/configuration/languages');
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        throw new Error(`TMDB language configuration returned ${response.status}`);
+      }
+
+      const languages = await response.json() as TMDBLanguage[];
+      this.languages = languages
+        .filter(language => language.iso_639_1 && language.english_name)
+        .sort((a, b) => a.english_name.localeCompare(b.english_name));
+      this.languageMap = Object.fromEntries(
+        this.languages.map(language => [language.iso_639_1.toLowerCase(), language.english_name])
+      );
+      return this.languages;
+    })();
+
+    try {
+      return await this.languagesRequest;
+    } finally {
+      this.languagesRequest = null;
     }
   }
 
@@ -70,20 +100,27 @@ export class TMDBProvider implements MetadataProvider {
   private async searchSingleTypeWithProgressiveTrim(
     rawQuery: string,
     endpoint: '/search/movie' | '/search/tv',
-    mediaType: 'Film' | 'TV Series'
+    mediaType: 'Film' | 'TV Series',
+    options: MetadataSearchOptions
   ): Promise<MetadataSearchResult[]> {
     const initialClean = this.cleanQueryString(rawQuery);
     if (!initialClean) return [];
 
-    const words = initialClean.split(/\s+/).filter(Boolean);
+    const languageCode = options.language?.split('-')[0].toLowerCase();
+    const locale = options.language;
+    const releaseYear = options.releaseYear;
 
-    // Progressive search: start with full cleaned query, then progressively strip trailing words if 0 results returned
-    for (let len = words.length; len >= 1; len--) {
-      const currentQuery = words.slice(0, len).join(' ');
-      const { url, headers } = await this.getFetchConfig(endpoint, {
+    return searchWithProgressiveTrim(rawQuery, initialClean, async currentQuery => {
+      const params: Record<string, string> = {
         query: currentQuery,
         include_adult: 'false'
-      });
+      };
+      if (locale) params.language = locale;
+      if (releaseYear) {
+        params[endpoint === '/search/movie' ? 'year' : 'first_air_date_year'] = String(releaseYear);
+      }
+
+      const { url, headers } = await this.getFetchConfig(endpoint, params);
 
       try {
         const res = await fetch(url, { headers });
@@ -91,32 +128,38 @@ export class TMDBProvider implements MetadataProvider {
           const data = await res.json();
           const items = data.results || [];
           if (items.length > 0) {
-            return items.slice(0, 8).map((item: any) => {
-              const yearStr = endpoint === '/search/movie' ? item.release_date : item.first_air_date;
-              const yearNum = yearStr ? parseInt(yearStr.split('-')[0], 10) : undefined;
-              return {
-                title: endpoint === '/search/movie' ? item.title : item.name,
-                original_title: endpoint === '/search/movie' ? item.original_title : item.original_name,
-                release_year: yearNum && !isNaN(yearNum) ? yearNum : undefined,
-                type: mediaType,
-                description: item.overview,
-                poster: item.poster_path ? `${this.imageBaseUrl}/w500${item.poster_path}` : undefined,
-                backdrop: item.backdrop_path ? `${this.imageBaseUrl}/w1280${item.backdrop_path}` : undefined,
-                external_id: `${endpoint === '/search/movie' ? 'movie' : 'tv'}:${item.id}`,
-                provider: this.name
-              };
-            });
+            return items
+              .filter((item: any) => !languageCode || item.original_language === languageCode)
+              .slice(0, 8)
+              .map((item: any) => {
+                const yearStr = endpoint === '/search/movie' ? item.release_date : item.first_air_date;
+                const yearNum = yearStr ? parseInt(yearStr.split('-')[0], 10) : undefined;
+                return {
+                  title: endpoint === '/search/movie' ? item.title : item.name,
+                  original_title: endpoint === '/search/movie' ? item.original_title : item.original_name,
+                  release_year: yearNum && !isNaN(yearNum) ? yearNum : undefined,
+                  type: mediaType,
+                  description: item.overview,
+                  poster: item.poster_path ? `${this.imageBaseUrl}/w500${item.poster_path}` : undefined,
+                  backdrop: item.backdrop_path ? `${this.imageBaseUrl}/w1280${item.backdrop_path}` : undefined,
+                  external_id: `${endpoint === '/search/movie' ? 'movie' : 'tv'}:${item.id}`,
+                  provider: this.name
+                };
+              });
           }
         }
       } catch (err) {
         console.warn(`TMDB progressive search failed for query '${currentQuery}':`, err);
       }
-    }
-
-    return [];
+      return [];
+    });
   }
 
-  public async searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]> {
+  public async searchMedia(
+    query: string,
+    type?: MediaType,
+    options: MetadataSearchOptions = {}
+  ): Promise<MetadataSearchResult[]> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return [];
 
@@ -124,12 +167,12 @@ export class TMDBProvider implements MetadataProvider {
 
     try {
       if (!type || type === 'Film') {
-        const movieResults = await this.searchSingleTypeWithProgressiveTrim(query, '/search/movie', 'Film');
+        const movieResults = await this.searchSingleTypeWithProgressiveTrim(query, '/search/movie', 'Film', options);
         results.push(...movieResults);
       }
 
       if (!type || type === 'TV Series') {
-        const tvResults = await this.searchSingleTypeWithProgressiveTrim(query, '/search/tv', 'TV Series');
+        const tvResults = await this.searchSingleTypeWithProgressiveTrim(query, '/search/tv', 'TV Series', options);
         results.push(...tvResults);
       }
     } catch (err) {

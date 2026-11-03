@@ -1,6 +1,7 @@
 import { Media, MediaType } from '../types/media';
-import { MetadataProvider, MetadataSearchResult } from './interfaces';
+import { MetadataProvider, MetadataSearchOptions, MetadataSearchResult } from './interfaces';
 import { dbService } from '../services/DatabaseService';
+import { searchWithProgressiveTrim } from './searchUtils';
 
 export async function fetchIGDBLogo(gameTitle: string): Promise<string | undefined> {
   try {
@@ -95,21 +96,29 @@ export class IGDBProvider implements MetadataProvider {
     return q;
   }
 
-  public async searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]> {
+  public async searchMedia(
+    query: string,
+    type?: MediaType,
+    options: MetadataSearchOptions = {}
+  ): Promise<MetadataSearchResult[]> {
     if (type && type !== 'VideoGame') return [];
 
     const { clientId, clientSecret, rawgApiKey } = await this.getTwitchCredentials();
     const cleanQuery = this.cleanQueryString(query);
-    const words = (cleanQuery || query).split(/\s+/).filter(Boolean);
+    const releaseYear = options.releaseYear;
+    const startOfYear = releaseYear ? Math.floor(Date.UTC(releaseYear, 0, 1) / 1000) : undefined;
+    const startOfNextYear = releaseYear ? Math.floor(Date.UTC(releaseYear + 1, 0, 1) / 1000) : undefined;
 
     // 1. Try IGDB API with progressive word trimming
     if (clientId && clientSecret) {
       const token = await this.getTwitchAccessToken(clientId, clientSecret);
       if (token) {
-        for (let len = words.length; len >= 1; len--) {
-          const searchStr = words.slice(0, len).join(' ');
+        const igdbResults = await searchWithProgressiveTrim<MetadataSearchResult>(query, cleanQuery, async searchStr => {
           try {
-            const body = `search "${searchStr.replace(/"/g, '')}"; fields name, summary, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher; limit 8;`;
+            const dateFilter = startOfYear !== undefined && startOfNextYear !== undefined
+              ? ` where first_release_date >= ${startOfYear} & first_release_date < ${startOfNextYear};`
+              : '';
+            const body = `search "${searchStr.replace(/"/g, '')}"; fields name, summary, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher;${dateFilter} limit 8;`;
             const res = await smartFetch(`${this.igdbBaseUrl}/games`, {
               method: 'POST',
               headers: {
@@ -154,7 +163,9 @@ export class IGDBProvider implements MetadataProvider {
           } catch (err) {
             console.error('IGDB search failed:', err);
           }
-        }
+          return [];
+        });
+        if (igdbResults.length > 0) return igdbResults;
       }
     } else {
       console.info('Twitch Client ID / Secret not set in Settings. To search live IGDB data, configure Twitch Client ID & Secret in Settings.');
@@ -162,10 +173,15 @@ export class IGDBProvider implements MetadataProvider {
 
     // 2. Try RAWG API fallback if RAWG key is set with progressive word trimming
     if (rawgApiKey) {
-      for (let len = words.length; len >= 1; len--) {
-        const searchStr = words.slice(0, len).join(' ');
+      return searchWithProgressiveTrim<MetadataSearchResult>(query, cleanQuery, async searchStr => {
         try {
-          const res = await smartFetch(`${this.rawgBaseUrl}/games?key=${rawgApiKey}&search=${encodeURIComponent(searchStr)}&page_size=8`);
+          const params = new URLSearchParams({
+            key: rawgApiKey,
+            search: searchStr,
+            page_size: '8'
+          });
+          if (releaseYear) params.set('dates', `${releaseYear}-01-01,${releaseYear}-12-31`);
+          const res = await smartFetch(`${this.rawgBaseUrl}/games?${params.toString()}`);
           if (res.ok) {
             const data = await res.json();
             if (data.results && data.results.length > 0) {
@@ -184,7 +200,8 @@ export class IGDBProvider implements MetadataProvider {
         } catch (err) {
           console.error('RAWG search failed:', err);
         }
-      }
+        return [];
+      });
     }
 
     return [];

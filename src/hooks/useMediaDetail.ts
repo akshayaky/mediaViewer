@@ -6,6 +6,7 @@ import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { MetadataSearchResult } from '../providers/interfaces';
+import { searchMediaMetadata } from '../services/MediaSearchService';
 
 export function useMediaDetail(initialMedia: Media) {
   const [currentMedia, setCurrentMedia] = useState<Media>(initialMedia);
@@ -243,7 +244,7 @@ export function useMediaDetail(initialMedia: Media) {
 
       if (currentMedia.type === 'VideoGame') {
         if (!extId || (!extId.startsWith('igdb:') && !extId.startsWith('rawg:'))) {
-          const searchRes = await igdbProvider.searchMedia(currentMedia.title, 'VideoGame');
+          const searchRes = await searchMediaMetadata(currentMedia.title, 'VideoGame');
           if (searchRes.length > 0) {
             matchedProviderResult = searchRes[0];
             extId = matchedProviderResult.external_id;
@@ -256,7 +257,7 @@ export function useMediaDetail(initialMedia: Media) {
         }
       } else {
         if (!extId || (!extId.startsWith('movie:') && !extId.startsWith('tv:'))) {
-          const searchRes = await tmdbProvider.searchMedia(currentMedia.title, currentMedia.type);
+          const searchRes = await searchMediaMetadata(currentMedia.title, currentMedia.type);
           if (searchRes.length > 0) {
             matchedProviderResult = searchRes[0];
             extId = matchedProviderResult.external_id;

@@ -6,6 +6,7 @@ import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { Image as ImageIcon, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { dbService } from '../services/DatabaseService';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
+import { searchMediaMetadata } from '../services/MediaSearchService';
 
 interface BackdropPickerModalProps {
   media: Media;
@@ -100,11 +101,10 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
     if (!isOpen) return;
 
     const findAndLinkProviderMatch = async (
-      provider: typeof tmdbProvider | typeof igdbProvider,
       providerName: 'TMDB' | 'IGDB'
     ): Promise<string | undefined> => {
       try {
-        const candidates = await provider.searchMedia(media.title, media.type);
+        const candidates = await searchMediaMetadata(media.title, media.type);
         const normalizedTitle = media.title.trim().toLocaleLowerCase();
         const providerMatches = Array.from(new Map(
           candidates
@@ -148,10 +148,10 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
         let igdbExtId = externalIds.find(ext => ext.provider === 'IGDB')?.external_id;
 
         if (!tmdbExtId && media.type !== 'VideoGame') {
-          tmdbExtId = await findAndLinkProviderMatch(tmdbProvider, 'TMDB');
+          tmdbExtId = await findAndLinkProviderMatch('TMDB');
         }
         if (!igdbExtId && media.type === 'VideoGame') {
-          igdbExtId = await findAndLinkProviderMatch(igdbProvider, 'IGDB');
+          igdbExtId = await findAndLinkProviderMatch('IGDB');
         }
 
         const [tmdbResults, igdbResults] = await Promise.all([

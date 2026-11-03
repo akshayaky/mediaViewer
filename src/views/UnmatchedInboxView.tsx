@@ -4,7 +4,9 @@ import { dbService } from '../services/DatabaseService';
 import { localScannerService } from '../services/LocalScannerService';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
-import { MetadataSearchResult } from '../providers/interfaces';
+import { MetadataSearchOptions, MetadataSearchResult } from '../providers/interfaces';
+import { searchMediaMetadata, getMetadataSearchKey } from '../services/MediaSearchService';
+import { MetadataSearchFilters } from '../components/MetadataSearchFilters';
 import {
   Inbox,
   CheckCircle2,
@@ -32,9 +34,10 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
   const [unmatchedFiles, setUnmatchedFiles] = useState<LocalFile[]>([]);
   const [allMedia, setAllMedia] = useState<Media[]>([]);
   const [searchQueries, setSearchQueryMap] = useState<Record<string, string>>({});
+  const [searchOptions, setSearchOptions] = useState<Record<string, MetadataSearchOptions>>({});
   const [externalCandidates, setExternalCandidates] = useState<Record<string, MetadataSearchResult[]>>({});
   const [isSearchingExternal, setIsSearchingExternal] = useState<Record<string, boolean>>({});
-  const [lastSearchedQueries, setLastSearchedQueries] = useState<Record<string, string>>({});
+  const [lastSearchedKeys, setLastSearchedKeys] = useState<Record<string, string>>({});
   const [searchTimeouts, setSearchTimeouts] = useState<Record<string, NodeJS.Timeout>>({});
   const [successMessage, setSavedMessage] = useState('');
   const [clearError, setClearError] = useState('');
@@ -108,25 +111,26 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
     }
   };
 
-  const handleSearchExternalProviders = async (file: LocalFile, queryOverride?: string) => {
+  const handleSearchExternalProviders = async (
+    file: LocalFile,
+    queryOverride?: string,
+    optionsOverride?: MetadataSearchOptions
+  ) => {
     const mediaType: MediaType =
       file.file_type === 'game_executable' ? 'VideoGame' : file.file_type === 'tv_episode' ? 'TV Series' : 'Film';
 
     const parsed = localScannerService.parseFilePath(file.path, mediaType);
     const query = queryOverride || searchQueries[file.id] || parsed.cleanTitle || file.filename;
+    const options = optionsOverride || searchOptions[file.id] || { releaseYear: parsed.year };
+    const searchKey = getMetadataSearchKey(query, options);
 
-    if (!query || query.trim() === lastSearchedQueries[file.id]?.trim()) return;
+    if (!query || searchKey === lastSearchedKeys[file.id]) return;
 
-    setLastSearchedQueries(prev => ({ ...prev, [file.id]: query }));
+    setLastSearchedKeys(prev => ({ ...prev, [file.id]: searchKey }));
     setIsSearchingExternal(prev => ({ ...prev, [file.id]: true }));
 
     try {
-      let results: MetadataSearchResult[] = [];
-      if (mediaType === 'VideoGame') {
-        results = await igdbProvider.searchMedia(query, 'VideoGame');
-      } else {
-        results = await tmdbProvider.searchMedia(query, mediaType);
-      }
+      const results = await searchMediaMetadata(query, mediaType, options);
       setExternalCandidates(prev => ({ ...prev, [file.id]: results }));
     } catch (err) {
       console.error('Failed to search external provider:', err);
@@ -316,6 +320,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
             );
 
             const searchQuery = searchQueries[file.id] !== undefined ? searchQueries[file.id] : parsed.cleanTitle;
+            const filters = searchOptions[file.id] || { releaseYear: parsed.year };
             const candidates = externalCandidates[file.id] || [];
             const isSearching = isSearchingExternal[file.id] || false;
 
@@ -408,7 +413,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
                           }
                           
                           const timeout = setTimeout(() => {
-                            handleSearchExternalProviders(file, newValue);
+                            handleSearchExternalProviders(file, newValue, filters);
                           }, 800);
                           
                           setSearchTimeouts(prev => ({ ...prev, [file.id]: timeout }));
@@ -441,6 +446,19 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
                       )}
                     </button>
                   </div>
+
+                  <MetadataSearchFilters
+                    type={mediaType}
+                    options={filters}
+                    onChange={options => {
+                    setSearchOptions(prev => ({ ...prev, [file.id]: options }));
+                    if (searchTimeouts[file.id]) clearTimeout(searchTimeouts[file.id]);
+                    const timeout = setTimeout(() => {
+                      handleSearchExternalProviders(file, undefined, options);
+                    }, 800);
+                    setSearchTimeouts(prev => ({ ...prev, [file.id]: timeout }));
+                    }}
+                  />
 
                   {/* External Search Results Grid */}
                   {candidates.length > 0 && (

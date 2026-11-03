@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Media, MediaType } from '../types/media';
-import { MetadataSearchResult } from '../providers/interfaces';
+import { MetadataSearchOptions, MetadataSearchResult } from '../providers/interfaces';
 import { igdbProvider } from '../providers/IGDBProvider';
 import { tmdbProvider } from '../providers/TMDBProvider';
+import { searchMediaMetadata, getMetadataSearchKey } from '../services/MediaSearchService';
+import { MetadataSearchFilters } from './MetadataSearchFilters';
 import { dbService } from '../services/DatabaseService';
 import { Search, Loader2, X, Plus, CheckCircle2, Film, Tv, Gamepad2 } from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
@@ -28,23 +30,19 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   const [importingId, setImportingId] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
-  const [lastSearchedQuery, setLastSearchedQuery] = useState('');
+  const [lastSearchedKey, setLastSearchedKey] = useState('');
+  const [searchOptions, setSearchOptions] = useState<MetadataSearchOptions>({});
   // const [mediaType, setMediaType] = useState(type);
 
   const { pagePadding } = useSidebarPadding(isCollapsed);
-  const handleSearch = async (searchQuery: string) => {
+  const handleSearch = async (searchQuery: string, options: MetadataSearchOptions = searchOptions) => {
     if (!searchQuery.trim()) return;
 
-    setLastSearchedQuery(searchQuery);
+    setLastSearchedKey(getMetadataSearchKey(searchQuery, options));
     setIsSearching(true);
 
     try {
-      let searchResults: MetadataSearchResult[] = [];
-      if (type === 'VideoGame') {
-        searchResults = await igdbProvider.searchMedia(searchQuery, 'VideoGame');
-      } else {
-        searchResults = await tmdbProvider.searchMedia(searchQuery, type);
-      }
+      const searchResults = await searchMediaMetadata(searchQuery, type, options);
       setResults(prev => ({ ...prev, [type]: searchResults }));
     } catch (err) {
       console.error('Failed to search external provider:', err);
@@ -55,8 +53,8 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (debouncedQuery.trim() !== lastSearchedQuery.trim()) {
-      handleSearch(searchQuery);
+    if (getMetadataSearchKey(searchQuery, searchOptions) !== lastSearchedKey) {
+      handleSearch(searchQuery, searchOptions);
     }
   };
 
@@ -69,7 +67,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
 
   useEffect(() => {
     if (searchQuery.trim() && (!results[type] || results[type].length === 0)) {
-      handleSearch(searchQuery);
+      handleSearch(searchQuery, searchOptions);
     }
   }, [type])
 
@@ -96,15 +94,15 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   }, [searchQuery]);
 
   useEffect(() => {
-    if (debouncedQuery.trim() && debouncedQuery.trim() !== lastSearchedQuery.trim()) {
-      // When the query changes, we should probably clear cached results 
-      // or trigger a search for the current type.
-      // To ensure other types also refresh when they are eventually selected,
-      // we clear the results cache for all types when the query changes.
-      setResults({} as Record<MediaType, MetadataSearchResult[]>); 
-      handleSearch(debouncedQuery);
-    }
-  }, [debouncedQuery]);
+    if (!debouncedQuery.trim() || debouncedQuery.trim() !== searchQuery.trim()) return;
+    if (getMetadataSearchKey(debouncedQuery, searchOptions) === lastSearchedKey) return;
+
+    const handler = setTimeout(() => {
+      setResults({} as Record<MediaType, MetadataSearchResult[]>);
+      handleSearch(debouncedQuery, searchOptions);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [debouncedQuery, searchQuery, searchOptions.releaseYear, searchOptions.language]);
 
   if (!isOpen) return null;
 
@@ -248,6 +246,8 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
               )}
             </button>
           </form>
+
+          <MetadataSearchFilters type={type} options={searchOptions} onChange={setSearchOptions} />
 
           {/* Results Grid */}
           {results[type] && results[type].length > 0 ? (

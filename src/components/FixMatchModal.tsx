@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Media } from '../types/media';
-import { MetadataSearchResult } from '../providers/interfaces';
+import { MetadataSearchOptions, MetadataSearchResult } from '../providers/interfaces';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
+import { searchMediaMetadata, getMetadataSearchKey } from '../services/MediaSearchService';
 import { dbService } from '../services/DatabaseService';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { Search, Loader2, X, RefreshCw, CheckCircle2, Film, Tv, Gamepad2 } from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
+import { MetadataSearchFilters } from './MetadataSearchFilters';
 
 
 interface FixMatchModalProps {
@@ -27,6 +29,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   isCollapsed
 }) => {
   const [query, setQuery] = useState(media.title);
+  const [searchOptions, setSearchOptions] = useState<MetadataSearchOptions>({});
   const [results, setResults] = useState<MetadataSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedResult, setSelectedResult] = useState<MetadataSearchResult | null>(null);
@@ -34,7 +37,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   const [previewDetails, setPreviewDetails] = useState<Partial<Media> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState(query);
-  const [lastSearchedQuery, setLastSearchedQuery] = useState('');
+  const [lastSearchedKey, setLastSearchedKey] = useState('');
   const { isDesktop, pagePadding} = useSidebarPadding(isCollapsed);
   const bottomPaddingForMobile = `5rem`;
 
@@ -67,29 +70,26 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
     }, [query]);
   
     useEffect(() => {
-      if (debouncedQuery.trim() && debouncedQuery.trim() !== lastSearchedQuery.trim()) { 
-        handleSearch(debouncedQuery);
-      }
-    }, [debouncedQuery]);
+      if (!debouncedQuery.trim() || debouncedQuery.trim() !== query.trim()) return;
+      if (getMetadataSearchKey(debouncedQuery, searchOptions) === lastSearchedKey) return;
+
+      const handler = setTimeout(() => handleSearch(debouncedQuery, searchOptions), 400);
+      return () => clearTimeout(handler);
+    }, [debouncedQuery, query, searchOptions.releaseYear, searchOptions.language]);
 
   if (!isOpen) return null;
 
-  const handleSearch = async (searchQuery: string) => {
+  const handleSearch = async (searchQuery: string, options: MetadataSearchOptions = searchOptions) => {
       if (!searchQuery.trim()) return;
 
-      setLastSearchedQuery(searchQuery);
+      setLastSearchedKey(getMetadataSearchKey(searchQuery, options));
       setIsSearching(true);
       setResults([]);
       setSelectedResult(null);
       setPreviewDetails(null);
 
       try {
-        let searchResults: MetadataSearchResult[] = [];
-        if (media.type === 'VideoGame') {
-          searchResults = await igdbProvider.searchMedia(searchQuery, 'VideoGame');
-        } else {
-          searchResults = await tmdbProvider.searchMedia(searchQuery, media.type);
-        }
+        const searchResults = await searchMediaMetadata(searchQuery, media.type, options);
         setResults(searchResults);
       } catch (err) {
         console.error('Failed to search external provider for match correction:', err);
@@ -100,8 +100,9 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if(debouncedQuery.trim()!==lastSearchedQuery.trim())
-      handleSearch(query)
+    if (getMetadataSearchKey(query, searchOptions) !== lastSearchedKey) {
+      handleSearch(query, searchOptions);
+    }
   };
 
   const handleSelectCandidate = async (candidate: MetadataSearchResult) => {
@@ -266,6 +267,8 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
               )}
             </button>
           </form>
+
+          <MetadataSearchFilters type={media.type} options={searchOptions} onChange={setSearchOptions} />
 
           {/* Results list */}
           {(results.length > 0 || isSearching) && (

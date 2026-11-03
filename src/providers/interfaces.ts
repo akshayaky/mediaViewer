@@ -12,9 +12,14 @@ export interface MetadataSearchResult {
   provider: string;
 }
 
+export interface MetadataSearchOptions {
+  releaseYear?: number;
+  language?: string;
+}
+
 export interface MetadataProvider {
   name: string;
-  searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]>;
+  searchMedia(query: string, type?: MediaType, options?: MetadataSearchOptions): Promise<MetadataSearchResult[]>;
   getMediaDetails(externalId: string): Promise<Partial<Media>>;
   getRelatedMedia?(externalId: string): Promise<MetadataSearchResult[]>;
 }
