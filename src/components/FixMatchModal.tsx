@@ -38,9 +38,16 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [lastSearchedKey, setLastSearchedKey] = useState('');
-  const { isDesktop, pagePadding} = useSidebarPadding(isCollapsed);
   const bottomPaddingForMobile = `5rem`;
+  const [sidebarHideEnabled, setSidebarHideEnabled] = useState(false);
+  const { isDesktop, pagePadding} = useSidebarPadding(isCollapsed, sidebarHideEnabled);
+  
 
+  useEffect(() => {
+      dbService.getSettings().then(s => {
+        setSidebarHideEnabled(s.sidebar_hide_enabled !== false);
+      });
+    }, []);
   useEffect(() => {``
     if (isOpen) {
       window.history.pushState({ isModalOpen: true }, '');
@@ -274,7 +281,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
           {(results.length > 0 || isSearching) && (
             <div className="space-y-2">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Search Candidates</h4>
-              <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 gap-2 max-h-100 overflow-y-auto pr-1">
                 {isSearching && results.length === 0 ? (
                   <div className="space-y-2">
                     {[1, 2, 3].map((i) => (
