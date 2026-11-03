@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MediaType } from '../types/media';
 import { MetadataSearchOptions } from '../providers/interfaces';
 import { TMDBLanguage, tmdbProvider } from '../providers/TMDBProvider';
@@ -20,6 +21,12 @@ export const MetadataSearchFilters: React.FC<MetadataSearchFiltersProps> = ({
   const [languages, setLanguages] = useState<TMDBLanguage[]>([]);
   const [isLoadingLanguages, setIsLoadingLanguages] = useState(false);
   const [languageLoadError, setLanguageLoadError] = useState('');
+  const languageButtonRef = useRef<HTMLButtonElement>(null);
+  const [languageMenuPosition, setLanguageMenuPosition] = useState<{
+    left: number;
+    top: number;
+    maxHeight: number;
+  } | null>(null);
 
   const filteredLanguages = useMemo(() => {
     const search = languageSearch.trim().toLocaleLowerCase();
@@ -31,6 +38,36 @@ export const MetadataSearchFilters: React.FC<MetadataSearchFiltersProps> = ({
     );
   }, [languages, languageSearch]);
   const selectedLanguage = languages.find(language => language.iso_639_1 === options.language);
+
+  useLayoutEffect(() => {
+    if (!languageMenuOpen || !languageButtonRef.current) return;
+
+    const updatePosition = () => {
+      const bounds = languageButtonRef.current?.getBoundingClientRect();
+      if (!bounds) return;
+
+      const menuHeight = Math.min(300, window.innerHeight - 16);
+      const spaceBelow = window.innerHeight - bounds.bottom - 8;
+      const top = spaceBelow >= menuHeight || spaceBelow >= bounds.top
+        ? bounds.bottom + 4
+        : Math.max(8, bounds.top - menuHeight - 4);
+      const left = Math.max(8, Math.min(bounds.left, window.innerWidth - 264));
+
+      setLanguageMenuPosition({
+        left,
+        top,
+        maxHeight: Math.max(120, Math.min(menuHeight, window.innerHeight - top - 8))
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [languageMenuOpen]);
 
   const openLanguageMenu = async () => {
     setLanguageMenuOpen(open => !open);
@@ -79,6 +116,7 @@ export const MetadataSearchFilters: React.FC<MetadataSearchFiltersProps> = ({
         <div className="relative flex items-center gap-2 text-[11px] text-gray-400">
           <span>Language</span>
           <button
+            ref={languageButtonRef}
             type="button"
             aria-haspopup="listbox"
             aria-expanded={languageMenuOpen}
@@ -102,8 +140,15 @@ export const MetadataSearchFilters: React.FC<MetadataSearchFiltersProps> = ({
             </button>
           )}
 
-          {languageMenuOpen && (
-            <div className="absolute left-12 top-full z-30 mt-1 w-64 overflow-hidden rounded-xl border border-[#2d3145] bg-[#14161f] shadow-xl">
+          {languageMenuOpen && languageMenuPosition && createPortal(
+            <div
+              className="fixed z-[100] w-64 overflow-hidden rounded-xl border border-[#2d3145] bg-[#14161f] shadow-xl"
+              style={{
+                left: languageMenuPosition.left,
+                top: languageMenuPosition.top,
+                maxHeight: languageMenuPosition.maxHeight
+              }}
+            >
               <div className="relative border-b border-[#2d3145] p-2">
                 <Search className="absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500" />
                 <input
@@ -116,7 +161,12 @@ export const MetadataSearchFilters: React.FC<MetadataSearchFiltersProps> = ({
                   className="w-full rounded-lg bg-[#1b1d2a] py-2 pl-8 pr-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#E27D12]"
                 />
               </div>
-              <div role="listbox" aria-label="TMDB languages" className="max-h-60 overflow-y-auto p-1">
+              <div
+                role="listbox"
+                aria-label="TMDB languages"
+                className="overflow-y-auto p-1"
+                style={{ maxHeight: Math.max(72, languageMenuPosition.maxHeight - 48) }}
+              >
                 {isLoadingLanguages ? (
                   <div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-400">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -148,7 +198,8 @@ export const MetadataSearchFilters: React.FC<MetadataSearchFiltersProps> = ({
                   <p className="px-3 py-3 text-xs text-gray-500">No matching languages.</p>
                 )}
               </div>
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       )}
