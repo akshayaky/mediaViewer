@@ -155,6 +155,40 @@ export interface PlaybackProgress {
   is_completed: boolean;
 }
 
+export type MediaGridSortField =
+  | 'title'
+  | 'release_year'
+  | 'created_at'
+  | 'last_watched'
+  | 'completion_date'
+  | 'rating'
+  | 'type'
+  | 'genre'
+  | 'language'
+  | 'status'
+  | 'publisher'
+  | 'developer'
+  | 'runtime';
+
+export type MediaGridGroupField =
+  | 'none'
+  | 'type'
+  | 'release_year'
+  | 'genre'
+  | 'language'
+  | 'status'
+  | 'rating'
+  | 'last_watched'
+  | 'completion_date'
+  | 'publisher'
+  | 'developer';
+
+export interface MediaGridPreferences {
+  sortBy: MediaGridSortField;
+  sortDescending: boolean;
+  groupBy: MediaGridGroupField;
+}
+
 export interface AppSettings {
   movies_folder?: string;
   tv_folder?: string;
@@ -176,6 +210,7 @@ export interface AppSettings {
   player_mode?: 'builtin' | 'os_default';
   autoplay_next_episode?: boolean;
   sidebar_hide_enabled?: boolean;
+  media_grid_preferences?: MediaGridPreferences;
   player_audio_settings?: {
     volume: number;
     muted: boolean;
