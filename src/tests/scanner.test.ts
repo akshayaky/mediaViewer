@@ -21,6 +21,13 @@ describe('LocalScannerService', () => {
       expect(parsed.fileType).toBe('tv_episode');
     });
 
+    it('parses anime season and episode numbers without an E separator', () => {
+      const parsed = service.parseFilePath('C:\\Media\\Hajime no Ippo S1 - 01 [480p] [Dual] @Anim.mkv', 'TV Series');
+      expect(parsed.season).toBe(1);
+      expect(parsed.episode).toBe(1);
+      expect(parsed.fileType).toBe('tv_episode');
+    });
+
     it('identifies game executable file type', () => {
       const parsed = service.parseFilePath('D:\\Games\\Assassin\'s Creed IV Black Flag.lnk', 'VideoGame');
       expect(parsed.cleanTitle).toBe("Assassin's Creed IV Black Flag");

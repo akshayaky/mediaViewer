@@ -111,39 +111,54 @@ export class LocalScannerService {
       }
       clean = clean.replace(sxxexxRegex, ' ');
     } else {
-      // Pattern 2: 1x03, 01x03, 1x03-04, 1x03-E04
-      const nxnRegex = /\b(\d{1,2})[xX](\d{1,2})(?:[-_~]?[Ee]?(\d{1,2}))?\b/;
-      const nxnMatch = nxnRegex.exec(clean);
-      if (nxnMatch) {
-        extractedSeason = parseInt(nxnMatch[1], 10);
-        extractedEpisode = parseInt(nxnMatch[2], 10);
-        if (nxnMatch[3]) {
-          const endEp = parseInt(nxnMatch[3], 10);
+      // Anime releases often use S1 - 01 instead of the usual S01E01 format.
+      const seasonEpisodeRegex = /(?:\b|_)[Ss](\d{1,2})[._ -]+(\d{1,2})(?:[-_~][Ee]?(\d{1,2}))?/;
+      const seasonEpisodeMatch = seasonEpisodeRegex.exec(clean);
+      if (seasonEpisodeMatch) {
+        extractedSeason = parseInt(seasonEpisodeMatch[1], 10);
+        extractedEpisode = parseInt(seasonEpisodeMatch[2], 10);
+        if (seasonEpisodeMatch[3]) {
+          const endEp = parseInt(seasonEpisodeMatch[3], 10);
           if (endEp > extractedEpisode) {
             extractedEndEpisode = endEp;
           }
         }
-        clean = clean.replace(nxnRegex, ' ');
+        clean = clean.replace(seasonEpisodeRegex, ' ');
       } else {
-        // Fallback: check season folder in path
-        const seasonDirMatch = /\b[Ss]eason\s*(\d{1,2})\b/i.exec(normalized);
-        if (seasonDirMatch) {
-          extractedSeason = parseInt(seasonDirMatch[1], 10);
-
-          const epOnlyRegex = /\b(?:[Ee]|ep|episode)\.?\s*(\d{1,2})(?:[-_~]?[Ee]?(\d{1,2}))?\b/i;
-          const epMatch = epOnlyRegex.exec(clean);
-          if (epMatch) {
-            extractedEpisode = parseInt(epMatch[1], 10);
-            if (epMatch[2]) {
-              const endEp = parseInt(epMatch[2], 10);
-              if (endEp > extractedEpisode) extractedEndEpisode = endEp;
+        // Pattern 2: 1x03, 01x03, 1x03-04, 1x03-E04
+        const nxnRegex = /\b(\d{1,2})[xX](\d{1,2})(?:[-_~]?[Ee]?(\d{1,2}))?\b/;
+        const nxnMatch = nxnRegex.exec(clean);
+        if (nxnMatch) {
+          extractedSeason = parseInt(nxnMatch[1], 10);
+          extractedEpisode = parseInt(nxnMatch[2], 10);
+          if (nxnMatch[3]) {
+            const endEp = parseInt(nxnMatch[3], 10);
+            if (endEp > extractedEpisode) {
+              extractedEndEpisode = endEp;
             }
-            clean = clean.replace(epOnlyRegex, ' ');
-          } else {
-            const numPrefixMatch = /^\s*(\d{1,2})\s*[-_\.]\s*/.exec(clean);
-            if (numPrefixMatch) {
-              extractedEpisode = parseInt(numPrefixMatch[1], 10);
-              clean = clean.replace(/^\s*\d{1,2}\s*[-_\.]\s*/, ' ');
+          }
+          clean = clean.replace(nxnRegex, ' ');
+        } else {
+          // Fallback: check season folder in path
+          const seasonDirMatch = /\b[Ss]eason\s*(\d{1,2})\b/i.exec(normalized);
+          if (seasonDirMatch) {
+            extractedSeason = parseInt(seasonDirMatch[1], 10);
+
+            const epOnlyRegex = /\b(?:[Ee]|ep|episode)\.?\s*(\d{1,2})(?:[-_~]?[Ee]?(\d{1,2}))?\b/i;
+            const epMatch = epOnlyRegex.exec(clean);
+            if (epMatch) {
+              extractedEpisode = parseInt(epMatch[1], 10);
+              if (epMatch[2]) {
+                const endEp = parseInt(epMatch[2], 10);
+                if (endEp > extractedEpisode) extractedEndEpisode = endEp;
+              }
+              clean = clean.replace(epOnlyRegex, ' ');
+            } else {
+              const numPrefixMatch = /^\s*(\d{1,2})\s*[-_\.]\s*/.exec(clean);
+              if (numPrefixMatch) {
+                extractedEpisode = parseInt(numPrefixMatch[1], 10);
+                clean = clean.replace(/^\s*\d{1,2}\s*[-_\.]\s*/, ' ');
+              }
             }
           }
         }

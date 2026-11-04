@@ -577,7 +577,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                     void handleDeleteMedia();
                   }}
                   disabled={isDeletingMedia}
-                  className="w-full text-left px-4 py-2.5 text-xs text-[#E27D12] hover:bg-[#7A4509]/50 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736] disabled:opacity-50"
+                  className="w-full text-left px-4 py-2.5 text-xs text-[#ff3D12] hover:bg-[#ff3D12]/50 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736] disabled:opacity-50"
                 >
                   <Trash2 className="w-4 h-4 shrink-0" />
                   <span>{isDeletingMedia ? 'Deleting...' : 'Delete from Library'}</span>
@@ -714,7 +714,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             <span>{resumeTarget ? resumeTarget.label.toUpperCase() : `PLAY ${currentMedia.type === 'VideoGame' ? 'GAME' : 'MEDIA'}`}</span>
           </button>
 
-          {/* {resumeTarget?.hasSavedProgress && currentMedia.type !== 'VideoGame' && (
+          {/* Only show Start from Beginning when there's saved progress */}
+          {resumeTarget?.hasSavedProgress && currentMedia.type !== 'VideoGame' && (
             <button
               onClick={() => handleTriggerPlay(undefined, true)}
               className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 backdrop-blur-md transition-all cursor-pointer shadow-md"
@@ -722,7 +723,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             >
               Start from Beginning
             </button>
-          )} */}
+          )}
         </div>
       )}
       {/* Main Content Layout */}
@@ -921,7 +922,22 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                                           {sortedFiles.length > 0 ? (
                                             <>
                                               <button
-                                                onClick={() => handleTriggerPlay(activeEpFile, false, ep.name)}
+                                                onClick={() => 
+                                                  {
+                                                    // handleTriggerPlay(activeEpFile, false, ep.name)
+                                                    if (currentMedia.type === 'VideoGame' || playerModeSetting === 'os_default') {
+                                                      handlePlayFile(activeEpFile);
+                                                    } else {
+                                                      setActivePlayerSession({
+                                                        file: activeEpFile,
+                                                        season: season.season_number,
+                                                        episode: ep.episode_number,
+                                                        position: epProg? epProg?.position_seconds: 0,
+                                                        title: ep.name || ""
+                                                      });
+                                                    }
+                                                  }
+                                                }
                                                 className="bg-[#E27D12] hover:bg-[#E27D12] text-white font-bold text-xs px-3 py-1 rounded-lg flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer"
                                               >
                                                 <Play className="w-3.5 h-3.5" fill="currentColor" />
@@ -1148,23 +1164,28 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
                       {lf.exists && (
                         <button
-                          onClick={() =>
-                            {
-                              if (currentMedia.type === 'VideoGame' || playerModeSetting === 'os_default') {
-                                handlePlayFile(lf);
-                              } else {
-                                  const season = currentMedia.seasons?.find(s => s.season_number === lf.season);
-
-                                  const episode = season?.episodes?.find(e => e.episode_number === lf.episode);
-
-                                  const episodeName = episode?.name || lf.parsed_title || lf.filename;
-                                  setActivePlayerSession({
-                                    file: lf,
-                                    season: Number(lf.season),
-                                    episode: Number(lf.episode),
-                                    position: 0,
-                                    title: episodeName || ""
-                                  });
+                          onClick={() => {
+                            const season = currentMedia.seasons?.find(s => s.season_number === lf.season);
+                            const episode = season?.episodes?.find(e => e.episode_number === lf.episode);
+                            const episodeName = episode?.name || lf.parsed_title || lf.filename;
+                            
+                            // Get saved progress for this file/episode if available
+                            const epProg = allProgress.find(p => 
+                              // p.id === lf.id &&
+                              p.season === Number(lf.season) &&
+                              p.episode === Number(lf.episode)
+                            );
+                            const position = epProg?epProg?.position_seconds > 0 ? epProg.position_seconds : 0 : 0;
+                            if (currentMedia.type === 'VideoGame' || playerModeSetting === 'os_default') {
+                              handlePlayFile(lf);
+                            } else {
+                              setActivePlayerSession({
+                                file: lf,
+                                season: Number(lf.season),
+                                episode: Number(lf.episode),
+                                position: position,
+                                title: episodeName || ""
+                              });
                             }
                           }}
                           className="mdv-btn mdv-btn-launch"
