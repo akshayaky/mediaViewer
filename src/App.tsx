@@ -53,7 +53,8 @@ export function App() {
   const [cardTransition, setCardTransition] = useState<CardTransitionState | null>(null);
   const [detailReturnTransition, setDetailReturnTransition] = useState<DetailReturnTransition | null>(null);
   const mainViewRef = useRef<HTMLElement>(null);
-  const gridScrollTop = useRef(0);
+  const gridScrollRef = useRef<HTMLDivElement>(null);
+  const homeScrollTop = useRef(0);
   const detailOrigin = useRef<{ centerX: number; centerY: number; radius: number } | null>(null);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const returnTransitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,7 +75,7 @@ export function App() {
     }
   };
 
-  const handlePreviewStart = (media: Media, rect: DOMRect) => {
+  const handlePreviewStart = () => {
     if (detailReturnTransition) return;
 
     clearTransitionTimer();
@@ -163,9 +164,6 @@ export function App() {
     }
     setDetailReturnTransition(null);
 
-    if (['movies', 'tv', 'games'].includes(activeTab) && !selectedMedia) {
-      gridScrollTop.current = mainViewRef.current?.scrollTop || 0;
-    }
     if (startsFromClickedCard && clickedCardRect) {
       const centerX = clickedCardRect.left + clickedCardRect.width / 2;
       const centerY = clickedCardRect.top + clickedCardRect.height / 2;
@@ -192,9 +190,13 @@ export function App() {
       detailOrigin.current = null;
     }
 
+    if (activeTab === 'home' && !selectedMedia && mainViewRef.current) {
+      homeScrollTop.current = mainViewRef.current.scrollTop;
+      mainViewRef.current.scrollTop = 0;
+    }
+
     setSelectedMedia(media);
     setSelectedAccentColor(media.accent_color);
-    mainViewRef.current?.scrollTo({ top: 0, behavior: 'instant' });
     if (!continuesCardTransition) {
       clearPreviewStartTimer();
       if (transitionFrame.current !== null) {
@@ -241,7 +243,6 @@ export function App() {
         returnTransitionTimer.current = null;
       }
 
-      if (mainViewRef.current) mainViewRef.current.scrollTop = 0;
       const mainRect = mainViewRef.current?.getBoundingClientRect();
       setCardTransition(null);
       setDetailReturnTransition({
@@ -259,14 +260,14 @@ export function App() {
         setDetailReturnTransition(null);
         detailOrigin.current = null;
         window.dispatchEvent(new CustomEvent('library-scanned'));
-        requestAnimationFrame(() => {
-          if (mainViewRef.current) mainViewRef.current.scrollTop = gridScrollTop.current;
-        });
         returnTransitionTimer.current = null;
       }, 400);
       return;
     }
 
+    if (activeTab === 'home' && mainViewRef.current) {
+      mainViewRef.current.scrollTop = homeScrollTop.current;
+    }
     setSelectedMedia(null);
     setSelectedAccentColor(undefined);
   };
@@ -439,6 +440,7 @@ export function App() {
   const hasUnderlyingGrid = Boolean(
     selectedMedia && ['movies', 'tv', 'games'].includes(activeTab)
   );
+  const isGridTab = ['movies', 'tv', 'games'].includes(activeTab);
 
   const pageAccentColor = selectedMedia
     ? selectedAccentColor || selectedMedia.accent_color
@@ -463,7 +465,7 @@ export function App() {
       <main
         ref={mainViewRef}
         className={`relative isolate flex-1 transition-colors duration-350 ${
-          hasUnderlyingGrid ? 'overflow-hidden' : 'overflow-y-auto'
+          isGridTab ? 'overflow-hidden' : 'overflow-y-auto'
         }`}
         style={{
           backgroundColor: !selectedMedia && activeTab === 'home'
@@ -492,9 +494,13 @@ export function App() {
             }}
           />
         )}
-        <div className="relative z-0">
-          {hasUnderlyingGrid ? renderGridView() : renderActiveView()}
-        </div>
+        {isGridTab ? (
+          <div ref={gridScrollRef} className="absolute inset-0 z-0 overflow-y-auto">
+            {hasUnderlyingGrid ? renderGridView() : renderActiveView()}
+          </div>
+        ) : (
+          <div className="relative z-0">{renderActiveView()}</div>
+        )}
         {hasUnderlyingGrid && (
           <div
             className="mdv-detail-scroll-container absolute inset-0 z-10 overflow-y-auto"
@@ -509,12 +515,15 @@ export function App() {
               setCardTransition(current => current?.phase === 'commit' ? null : current);
             }}
             style={{
-              backgroundColor: pageAccentColor || selectedMedia.accent_color || '#423e3f',
+              backgroundColor: pageAccentColor || selectedMedia?.accent_color || '#423e3f',
               ...(detailReturnTransition ? {
                 clipPath: `circle(${detailReturnTransition.closing ? 0 : detailReturnTransition.radius}px at ${detailReturnTransition.centerX}px ${detailReturnTransition.centerY}px)`,
                 transition: 'clip-path 600ms cubic-bezier(0.2, 0.8, 0.2, 1)',
                 pointerEvents: 'none' as const
-              } : {})
+              } : cardTransition?.phase === 'commit' ? {
+                clipPath: `circle(${cardTransition.entered ? cardTransition.radius : 0}px at ${cardTransition.detailCenterX}px ${cardTransition.detailCenterY}px)`,
+                transition: 'clip-path 710ms cubic-bezier(0.2, 0.8, 0.2, 1)'
+              } : {}),
             }}
           >
             {renderDetailView()}
