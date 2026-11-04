@@ -21,9 +21,13 @@ interface MkvTrack {
   codec: string | null;
   language: string;
   name: string;
+  channels: number | null;
+  samplingFrequency: number | null;
+  bitDepth: number | null;
   timestampScale: number;
   timestampOffset: number;
   defaultDuration: number | null;
+  defaultTrack: boolean;
 }
 
 interface SubtitleCue {
@@ -240,6 +244,24 @@ export interface MkvSubtitleExtractor {
   finish(): ExtractedMkvSubtitle[];
 }
 
+export interface ExtractedMkvAudioTrack {
+  id: string;
+  label: string;
+  language: string;
+  codec: string;
+  name: string;
+  channels: number | null;
+  samplingFrequency: number | null;
+  bitDepth: number | null;
+}
+
+export type MkvAudioTrack = ExtractedMkvAudioTrack;
+
+export interface MkvAudioTrackExtractor {
+  push(chunk: Uint8Array): void;
+  finish(): ExtractedMkvAudioTrack[];
+}
+
 export function createMkvSubtitleExtractor(): MkvSubtitleExtractor {
   ensureBufferPolyfill();
   const decoder = new Decoder();
@@ -304,9 +326,13 @@ export function createMkvSubtitleExtractor(): MkvSubtitleExtractor {
           codec: null,
           language: 'und',
           name: '',
+          channels: null,
+          samplingFrequency: null,
+          bitDepth: null,
           timestampScale: 1,
           timestampOffset: 0,
-          defaultDuration: null
+          defaultDuration: null,
+          defaultTrack: false
         };
       }
       return;
@@ -351,11 +377,15 @@ export function createMkvSubtitleExtractor(): MkvSubtitleExtractor {
     } else if (currentTrack && value !== null) {
       if (element.name === 'TrackNumber') currentTrack.number = value;
       else if (element.name === 'TrackType') currentTrack.type = value;
+      else if (element.name === 'AudioChannels' || element.name === 'Channels') currentTrack.channels = value;
+      else if (element.name === 'SamplingFrequency' || element.name === 'SampleRate') currentTrack.samplingFrequency = value;
+      else if (element.name === 'BitDepth') currentTrack.bitDepth = value;
       else if (element.name === 'TrackTimestampScale') currentTrack.timestampScale = value;
       else if (element.name === 'TrackOffset' || element.name === 'TrackTimestampOffset') {
         currentTrack.timestampOffset = value;
       }
       else if (element.name === 'DefaultDuration') currentTrack.defaultDuration = value;
+      else if (element.name === 'FlagDefault') currentTrack.defaultTrack = value > 0;
     }
 
     const stringValue = getStringValue(element);
@@ -414,3 +444,96 @@ export function extractMkvSubtitleTracks(source: ArrayBuffer | Uint8Array): Extr
   }
   return extractor.finish();
 }
+
+export function createMkvAudioTrackExtractor(): MkvAudioTrackExtractor {
+  ensureBufferPolyfill();
+  const decoder = new Decoder();
+  const tracks = new Map<number, MkvTrack>();
+  let currentTrack: MkvTrack | null = null;
+
+  const processElement = (element: EBMLElementDetail) => {
+    const isEnd = 'isEnd' in element && element.isEnd;
+    if (element.name === 'TrackEntry') {
+      if (isEnd) {
+        if (currentTrack?.number !== null && currentTrack?.number !== undefined && currentTrack.type === 2) {
+          tracks.set(currentTrack.number, currentTrack);
+        }
+        currentTrack = null;
+      } else {
+        currentTrack = {
+          number: null,
+          type: null,
+          codec: null,
+          language: 'und',
+          name: '',
+          channels: null,
+          samplingFrequency: null,
+          bitDepth: null,
+          timestampScale: 1,
+          timestampOffset: 0,
+          defaultDuration: null,
+          defaultTrack: false
+        };
+      }
+      return;
+    }
+
+    const value = getNumberValue(element);
+    if (currentTrack && value !== null) {
+      if (element.name === 'TrackNumber') currentTrack.number = value;
+      else if (element.name === 'TrackType') currentTrack.type = value;
+      else if (element.name === 'AudioChannels' || element.name === 'Channels') currentTrack.channels = value;
+      else if (element.name === 'SamplingFrequency' || element.name === 'SampleRate') currentTrack.samplingFrequency = value;
+      else if (element.name === 'BitDepth') currentTrack.bitDepth = value;
+      else if (element.name === 'FlagDefault') currentTrack.defaultTrack = value > 0;
+    }
+
+    const stringValue = getStringValue(element);
+    if (currentTrack && stringValue !== null) {
+      if (element.name === 'CodecID') currentTrack.codec = stringValue;
+      else if (element.name === 'Language' || element.name === 'LanguageBCP47') currentTrack.language = stringValue;
+      else if (element.name === 'Name') currentTrack.name = stringValue;
+    }
+  };
+
+  return {
+    push(chunk: Uint8Array) {
+      const chunkBuffer = new ArrayBuffer(chunk.byteLength);
+      new Uint8Array(chunkBuffer).set(chunk);
+      for (const element of decoder.decode(chunkBuffer)) {
+        processElement(element);
+      }
+    },
+    finish() {
+      return Array.from(tracks.entries())
+        .filter(([, track]) => track.type === 2)
+        .map(([trackNumber, track]) => {
+          const language = track.language || 'und';
+          const codec = track.codec ?? 'audio';
+          const name = track.name ? `${track.name} · ` : '';
+          return {
+            id: `mkv:${trackNumber}`,
+            label: `${name}${language} · ${codec}`,
+            language,
+            codec,
+            name: track.name,
+            channels: track.channels,
+            samplingFrequency: track.samplingFrequency,
+            bitDepth: track.bitDepth,
+          } satisfies ExtractedMkvAudioTrack;
+        });
+    }
+  };
+}
+
+export function extractMkvAudioTracks(source: ArrayBuffer | Uint8Array): ExtractedMkvAudioTrack[] {
+  const extractor = createMkvAudioTrackExtractor();
+  const bytes = source instanceof ArrayBuffer ? new Uint8Array(source) : source;
+  for (let offset = 0; offset < bytes.byteLength; offset += DECODE_CHUNK_SIZE) {
+    extractor.push(bytes.subarray(offset, Math.min(offset + DECODE_CHUNK_SIZE, bytes.byteLength)));
+  }
+  return extractor.finish();
+}
+
+export const createMkvAudioExtractor = createMkvAudioTrackExtractor;
+export const extractMkvAudio = extractMkvAudioTracks;

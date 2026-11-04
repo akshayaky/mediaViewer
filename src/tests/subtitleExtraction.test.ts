@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createMkvSubtitleExtractor, extractMkvSubtitleTracks } from '../services/SubtitleExtraction';
+import { createMkvSubtitleExtractor, extractMkvAudioTracks, extractMkvSubtitleTracks } from '../services/SubtitleExtraction';
 
 function concatenate(...parts: Uint8Array[]): Uint8Array {
   const result = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
@@ -145,6 +145,27 @@ describe('MKV subtitle extraction', () => {
 
     expect(tracks).toHaveLength(2);
     expect(tracks[0].webVtt).toContain('Hello &lt;world&gt;');
+  });
+
+  it('extracts audio track metadata from MKV containers', () => {
+    const audioMetadata = element([0x16, 0x54, 0xae, 0x6b], concatenate(
+      trackEntry(1, 'A_AAC', 2),
+      trackEntry(2, 'A_AC3', 2)
+    ));
+    const segment = element([0x18, 0x53, 0x80, 0x67], concatenate(audioMetadata));
+    const buffer = new ArrayBuffer(segment.length);
+    new Uint8Array(buffer).set(segment);
+
+    const tracks = extractMkvAudioTracks(buffer);
+
+    expect(tracks).toHaveLength(2);
+    expect(tracks[0]).toMatchObject({
+      id: 'mkv:1',
+      language: 'eng',
+      codec: 'A_AAC'
+    });
+    expect(tracks[0].label).toContain('eng');
+    expect(tracks[1].label).toContain('A_AC3');
   });
 
   it('provides the Buffer polyfill when the browser global is unavailable', () => {

@@ -3,7 +3,7 @@ import { Media, LocalFile, SubtitleStyleSettings } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { subtitleService, SubtitleTrack } from '../services/SubtitleService';
 import { localScannerService } from '../services/LocalScannerService';
-import { createMkvSubtitleExtractor, extractMkvSubtitleTracks } from '../services/SubtitleExtraction';
+import { createMkvAudioTrackExtractor, createMkvSubtitleExtractor, extractMkvAudioTracks, extractMkvSubtitleTracks } from '../services/SubtitleExtraction';
 import {
   Play,
   Pause,
@@ -395,21 +395,27 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         try {
           let bytes: ArrayBuffer | Uint8Array;
           let extractedSubtitles;
+          let extractedAudioTracks: Array<{ id: string; label: string; language: string; codec: string; name: string; channels: number | null; samplingFrequency: number | null; bitDepth: number | null; }> = [];
           if (webFile) {
             bytes = await webFile.arrayBuffer();
             extractedSubtitles = extractMkvSubtitleTracks(bytes);
+            extractedAudioTracks = extractMkvAudioTracks(bytes);
           } else if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
             const { open } = await import('@tauri-apps/plugin-fs');
             const file = await open(activeFile.path);
-            const extractor = createMkvSubtitleExtractor();
+            const subtitleExtractor = createMkvSubtitleExtractor();
+            const audioExtractor = createMkvAudioTrackExtractor();
             const chunk = new Uint8Array(4 * 1024 * 1024);
             try {
               while (true) {
                 const bytesRead = await file.read(chunk);
                 if (bytesRead === null || bytesRead === 0) break;
-                extractor.push(chunk.subarray(0, bytesRead));
+                subtitleExtractor.push(chunk.subarray(0, bytesRead));
+                audioExtractor.push(chunk.subarray(0, bytesRead));
               }
-              extractedSubtitles = extractor.finish();
+              extractedSubtitles = subtitleExtractor.finish();
+              extractedAudioTracks = audioExtractor.finish();
+              console.log(extractedAudioTracks.length)
             } finally {
               await file.close();
             }
@@ -425,6 +431,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             embedded: true
           }));
           discoveredTracks.push(...extractedTracks);
+          console.log(extractedAudioTracks.length);
+          if (extractedAudioTracks.length > 0) {
+            setAudioTracks(extractedAudioTracks.map(track => ({
+              id: track.id,
+              label: track.label
+            })));
+            setSelectedAudioTrackId(extractedAudioTracks[0].id);
+            setAudioTrackSupport(true);
+          }
         } catch (subtitleParseError) {
           const message = subtitleParseError instanceof Error
             ? subtitleParseError.message
@@ -599,21 +614,25 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     const video = videoRef.current as VideoWithAudioTracks | null;
     const tracks = video?.audioTracks;
     if (!tracks) {
-      setAudioTracks([]);
-      setSelectedAudioTrackId('');
-      setAudioTrackSupport(Boolean(video && 'audioTracks' in video));
+    if (audioTracks.length > 0) {
+      setAudioTrackSupport(true);
       return;
     }
+    setAudioTracks([]);
+    setSelectedAudioTrackId('');
+    setAudioTrackSupport(Boolean(video && 'audioTracks' in video));
+    return;
+  }
 
-    setAudioTrackSupport(true);
-    const parsedTracks = Array.from({ length: tracks.length }, (_, index) => ({
-      id: String(index),
-      label: tracks[index].label || tracks[index].language || `Audio Track ${index + 1}`
-    }));
-    setAudioTracks(parsedTracks);
-    const enabledTrackIndex = Array.from({ length: tracks.length })
-      .findIndex((_, index) => tracks[index].enabled);
-    setSelectedAudioTrackId(String(enabledTrackIndex >= 0 ? enabledTrackIndex : 0));
+  setAudioTrackSupport(true);
+  const parsedTracks = Array.from({ length: tracks.length }, (_, index) => ({
+    id: String(index),
+    label: tracks[index].label || tracks[index].language || `Audio Track ${index + 1}`
+  }));
+  setAudioTracks(parsedTracks);
+  const enabledTrackIndex = Array.from({ length: tracks.length })
+    .findIndex((_, index) => tracks[index].enabled);
+  setSelectedAudioTrackId(String(enabledTrackIndex >= 0 ? enabledTrackIndex : 0));
   };
 
   // Handle Video Metadata Loaded & Initial Seek
@@ -963,6 +982,17 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             cycleSubtitles();
           }
           break;
+        case 'b':
+        case 'B':
+        if (e.shiftKey) {
+          e.preventDefault();
+          toggleSubtitles()
+          console.log("Shift + V pressed");
+        } else {
+          e.preventDefault();
+          cycleSubtitles();
+        }
+        break;
         case 'Escape':
           if (!document.fullscreenElement) {
             e.preventDefault();
