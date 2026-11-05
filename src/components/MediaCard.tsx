@@ -135,10 +135,14 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
   return (
     <div
-      onClick={event => onClick(media, event.currentTarget.getBoundingClientRect())}
+      onClick={event => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        onClick(media, rect);
+      }}
       onMouseEnter={event => {
         if (isFinePointer) {
-          onPreviewStart?.(media, event.currentTarget.getBoundingClientRect());
+          const rect = event.currentTarget.getBoundingClientRect();
+          onPreviewStart?.(media, rect);
         }
       }}
       onMouseLeave={() => {
@@ -151,10 +155,10 @@ export const MediaCard: React.FC<MediaCardProps> = ({
       {/* Backlight Glow Effect */}
       <div className="absolute -inset-4 opacity-0 group-hover:opacity-70 transition-opacity duration-500 blur-3xl pointer-events-none z-0">
         {cardImageUrl && (
-          <img 
+          <img
             src={cardImageUrl}
-            alt="" 
-            className="w-full h-full object-cover saturate-200" 
+            alt=""
+            className="w-full h-full object-cover saturate-200"
             loading="lazy"
           />
         )}

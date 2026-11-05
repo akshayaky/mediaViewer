@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { HeroShowcase } from '../components/HeroShowcase';
 import { MediaRail } from '../components/MediaRail';
-import { Media } from '../types/media';
+import { Media, UiPreferences } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { getAccentRgb } from '../helper/mediaDetailTheme';
 import { useDominantColor } from '../helper/useDominantColour';
@@ -19,6 +19,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
    isCollapsed
   }) => {
   const { pagePadding } = useSidebarPadding(isCollapsed);
+  const [uiPreferences, setUiPreferences] = useState<UiPreferences>({
+    card_orientation_by_type: {}
+  });
 
   const [homeData, setHomeData] = useState<{
     allMedia: Media[];
@@ -31,6 +34,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   useEffect(() => {
     let isMounted = true;
+    dbService.getSettings()
+      .then(settings => {
+        if (isMounted) setUiPreferences(settings.ui_preferences || { card_orientation_by_type: {} });
+      })
+      .catch(error => console.error('Failed to load home UI preferences:', error));
+
     const loadHomeData = async () => {
       const [allMedia, allHistory, localFiles] = await Promise.all([
         dbService.getAllMedia(),
@@ -120,7 +129,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Pick up where you left off"
           items={continueWatching}
           onSelectMedia={onSelectMedia}
-          landscapeCards
+          cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
         />
 
         <MediaRail
@@ -128,7 +137,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Your latest logged watches and plays"
           items={recentlyWatched}
           onSelectMedia={onSelectMedia}
-          landscapeCards
+          cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
         />
 
         <MediaRail
@@ -136,7 +145,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Personal favorites revisited multiple times"
           items={rewatchCandidates}
           onSelectMedia={onSelectMedia}
-          landscapeCards
+          cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
         />
 
         <MediaRail
@@ -144,7 +153,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Detected media files on local system"
           items={localLibraryList}
           onSelectMedia={onSelectMedia}
-          landscapeCards
+          cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
         />
 
         <MediaRail
@@ -152,7 +161,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Sessions currently on hold"
           items={abandonedList}
           onSelectMedia={onSelectMedia}
-          landscapeCards
+          cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
         />
       </div>
       </div>

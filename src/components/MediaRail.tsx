@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { MediaCard } from './MediaCard';
-import { Media, MediaHistory, MediaState } from '../types/media';
+import { Media, MediaCardOrientation, MediaHistory, MediaState, MediaType } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { getLastWatchedEpisodeArtwork } from '../helper/episodeProgress';
+import { useSidebarPadding } from '../hooks/useSidebarPadding';
+import { HorizontalDragScroll } from './HorizontalDragScroll';
 
 interface MediaRailProps {
   title: string;
   subtitle?: string;
   items: Media[];
   onSelectMedia: (media: Media) => void;
-  landscapeCards?: boolean;
+  cardOrientation?: MediaCardOrientation;
+  cardOrientationByType?: Partial<Record<MediaType, MediaCardOrientation>>;
   onPreviewStart?: (media: Media, rect: DOMRect) => void;
   onPreviewEnd?: () => void;
 }
@@ -19,10 +22,12 @@ export const MediaRail: React.FC<MediaRailProps> = ({
   subtitle,
   items,
   onSelectMedia,
-  landscapeCards = false,
+  cardOrientation,
+  cardOrientationByType = {},
   onPreviewStart,
   onPreviewEnd
 }) => {
+  const { isDesktop } = useSidebarPadding();
   const [states, setStates] = useState<Record<string, MediaState>>({});
   const [scores, setScores] = useState<Record<string, number | undefined>>({});
   const [images, setImages] = useState<Record<string, string | undefined>>({});
@@ -59,12 +64,14 @@ export const MediaRail: React.FC<MediaRailProps> = ({
         {subtitle && <span className="text-xs text-[#E27D12]/80 font-medium">{subtitle}</span>}
       </div>
 
-      <div className="flex space-x-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none">
+      <HorizontalDragScroll className="flex space-x-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none">
         {items.map(media => {
+          const orientation = cardOrientation || cardOrientationByType[media.type] || 'portrait';
+          const landscape = isDesktop && orientation === 'landscape';
           return (
             <div key={media.id} 
               className={`shrink-0 ${
-                landscapeCards
+                landscape
                   ? 'w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(30%-12px)] lg:w-[calc(25%-12px)] xl:w-[calc(22%-12px)]'
                   : 'w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(15%-12px)]'
               }`}>
@@ -72,7 +79,7 @@ export const MediaRail: React.FC<MediaRailProps> = ({
                 media={media}
                 state={states[media.id]}
                 score={scores[media.id]}
-                landscape={landscapeCards}
+                landscape={landscape}
                 landscapeImage={images[media.id]}
                 onClick={onSelectMedia}
                 onPreviewStart={onPreviewStart}
@@ -81,7 +88,7 @@ export const MediaRail: React.FC<MediaRailProps> = ({
             </div>
           );
         })}
-      </div>
+      </HorizontalDragScroll>
     </section>
   );
 };

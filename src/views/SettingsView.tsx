@@ -55,6 +55,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
   const [autoplayNext, setAutoplayNext] = useState<boolean>(settings.autoplay_next_episode !== false);
   const [sidebarHideEnabled, setSidebarHideEnabled] = useState(settings.sidebar_hide_enabled !== false);
   const [uiPreferences, setUiPreferences] = useState<UiPreferences>({
+    home_card_orientation: 'landscape',
     card_orientation_by_type: {
       Film: 'portrait',
       'TV Series': 'portrait',
@@ -125,6 +126,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       setAutoplayNext(nextSettings.autoplay_next_episode !== false);
       setSidebarHideEnabled(nextSettings.sidebar_hide_enabled !== false);
       setUiPreferences({
+        home_card_orientation: nextSettings.ui_preferences?.home_card_orientation === 'portrait'
+          ? 'portrait'
+          : 'landscape',
         card_orientation_by_type: {
           Film: nextSettings.ui_preferences?.card_orientation_by_type?.Film === 'landscape' ? 'landscape' : 'portrait',
           'TV Series': nextSettings.ui_preferences?.card_orientation_by_type?.['TV Series'] === 'landscape' ? 'landscape' : 'portrait',
@@ -196,6 +200,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       setTimeout(() => setSavedMessage(''), 3000);
     } catch (error) {
       console.error('Failed to save UI preferences:', error);
+      setSavedMessage('Could not save UI preferences.');
+      setTimeout(() => setSavedMessage(''), 3000);
+    }
+  };
+
+  const handleHomeCardOrientationChange = async (orientation: MediaCardOrientation) => {
+    const nextPreferences = { ...uiPreferences, home_card_orientation: orientation };
+    setUiPreferences(nextPreferences);
+    try {
+      await dbService.saveSetting('ui_preferences', nextPreferences);
+      setSavedMessage('UI preferences saved.');
+      setTimeout(() => setSavedMessage(''), 3000);
+    } catch (error) {
+      console.error('Failed to save Home page card orientation:', error);
       setSavedMessage('Could not save UI preferences.');
       setTimeout(() => setSavedMessage(''), 3000);
     }
@@ -1101,6 +1119,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
               <span>Hide sidebar in Detail View (show on left edge hover)</span>
             </label>
           </div>
+
+          {isDesktop && (
+            <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-2">
+              <label htmlFor="home-card-orientation" className="text-xs text-gray-200 font-bold block">
+                Home page cards
+              </label>
+              <select
+                id="home-card-orientation"
+                value={uiPreferences.home_card_orientation || 'landscape'}
+                onChange={event => void handleHomeCardOrientationChange(event.target.value as MediaCardOrientation)}
+                className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100"
+              >
+                <option value="portrait">Portrait (poster)</option>
+                <option value="landscape">Landscape (backdrop)</option>
+              </select>
+            </div>
+          )}
 
           {isDesktop && ([
             { type: 'Film', label: 'Movies' },

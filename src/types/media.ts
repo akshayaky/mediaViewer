@@ -223,6 +223,7 @@ export interface AppSettings {
 export type MediaCardOrientation = 'portrait' | 'landscape';
 
 export interface UiPreferences {
+  home_card_orientation?: MediaCardOrientation;
   card_orientation_by_type: Partial<Record<MediaType, MediaCardOrientation>>;
 }
 

@@ -6,6 +6,7 @@ import { dbService } from '../services/DatabaseService';
 import { ArrowDownUp, Search, Filter, Plus, X, RotateCcw, ChevronRight} from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
 import { getLastWatchedEpisodeArtwork } from '../helper/episodeProgress';
+import { HorizontalDragScroll } from '../components/HorizontalDragScroll';
 
 const DEFAULT_GRID_PREFERENCES: MediaGridPreferences = {
   sortBy: 'created_at',
@@ -531,12 +532,8 @@ useEffect(() => {
 
   const cardOrientation = typeFilter ? orientationByType[typeFilter] || 'portrait' : 'portrait';
   const useLandscapeCards = isDesktop && cardOrientation === 'landscape';
-  const renderGroupItems = (group: (typeof groupedItems)[number], horizontal = false) => (
-    <div className={horizontal
-      ? 'mt-2 flex gap-3 overflow-x-auto pb-4 pt-1 scrollbar-none'
-      : 'mt-2 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5'
-    }>
-      {group.items.map(media => (
+  const renderGroupItems = (group: (typeof groupedItems)[number], horizontal = false) => {
+    const cards = group.items.map(media => (
         <div
           key={`${group.key}:${media.id}`}
           className={horizontal
@@ -558,9 +555,18 @@ useEffect(() => {
             onPreviewEnd={onPreviewEnd}
           />
         </div>
-      ))}
-    </div>
-  );
+    ));
+
+    return horizontal ? (
+      <HorizontalDragScroll className="mt-2 flex gap-1 overflow-x-auto pb-4 pt-1 scrollbar-none">
+        {cards}
+      </HorizontalDragScroll>
+    ) : (
+      <div className="mt-2 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5">
+        {cards}
+      </div>
+    );
+  };
 
   const handleAddButtonClick = () => {
     if (onAddNewMedia) {
