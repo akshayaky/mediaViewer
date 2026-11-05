@@ -347,16 +347,19 @@ export function useMediaDetail(initialMedia: Media) {
   };
 
   const logSessionHistory = async (params: {
-    status: any;
-    score: number;
+    status: MediaHistory['status'];
+    score?: number;
     context?: string;
     thoughts?: string;
+    started_at?: string;
+    completed_at?: string;
   }) => {
     const now = new Date().toISOString();
     await dbService.saveHistory({
       id: `hist_manual_${Date.now()}`,
       media_id: currentMedia.id,
-      completed_at: now.split('T')[0],
+      started_at: params.started_at,
+      completed_at: params.completed_at || now.split('T')[0],
       status: params.status,
       score: params.score,
       context: params.context?.trim() || undefined,
@@ -364,6 +367,20 @@ export function useMediaDetail(initialMedia: Media) {
       source: 'Manual',
       created_at: now
     });
+    await refreshHistoryAndState();
+  };
+
+  const updateHistoryEntry = async (history: MediaHistory) => {
+    await dbService.saveHistory({
+      ...history,
+      media_id: currentMedia.id,
+      updated_at: new Date().toISOString()
+    });
+    await refreshHistoryAndState();
+  };
+
+  const deleteHistoryEntry = async (historyId: string) => {
+    await dbService.deleteHistory(historyId);
     await refreshHistoryAndState();
   };
 
@@ -405,7 +422,7 @@ export function useMediaDetail(initialMedia: Media) {
         id: `hist_ep_${Date.now()}_${seasonNumber}_${episodeNumber}`,
         media_id: currentMedia.id,
         completed_at: now.split('T')[0],
-        status: 'Finished',
+        status: 'Watched Episode',
         context: contextTag,
         source: 'Manual',
         created_at: now
@@ -543,6 +560,8 @@ export function useMediaDetail(initialMedia: Media) {
     handleManualMetadataRefresh,
     handlePlayFile,
     logSessionHistory,
+    updateHistoryEntry,
+    deleteHistoryEntry,
     addCustomFilePath,
     relatedMedia,
     isLoadingRelated,

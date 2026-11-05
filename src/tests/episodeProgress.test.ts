@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getHighQualityBackdropUrl, getLastWatchedEpisodeArtwork } from '../helper/episodeProgress';
+import { getHighQualityBackdropUrl, getLastWatchedEpisodeArtwork, isEpisodeWatched } from '../helper/episodeProgress';
 import { Media, MediaHistory } from '../types/media';
 
 const media: Media = {
@@ -95,6 +95,20 @@ describe('getLastWatchedEpisodeArtwork', () => {
 
   it('returns no episode artwork for non-series media', () => {
     expect(getLastWatchedEpisodeArtwork({ ...media, type: 'Film' }, [])).toEqual({});
+  });
+
+  it('recognizes the Watched Episode status while preserving legacy Finished logs', () => {
+    const watched = { ...watchedEpisode(1, 1), status: 'Watched Episode' as const };
+    expect(isEpisodeWatched([watched], 1, 1)).toBe(true);
+    expect(isEpisodeWatched([watchedEpisode(1, 1)], 1, 1)).toBe(true);
+  });
+
+  it('uses Watched Episode logs for last-watched artwork', () => {
+    const watched = { ...watchedEpisode(1, 1), status: 'Watched Episode' as const };
+    expect(getLastWatchedEpisodeArtwork(media, [watched])).toEqual({
+      still: 's1e1.jpg',
+      seasonPoster: 'season-1.jpg'
+    });
   });
 });
 

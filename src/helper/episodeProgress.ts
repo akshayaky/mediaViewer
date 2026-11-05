@@ -1,8 +1,12 @@
-import { Media, MediaHistory } from '../types/media';
+import { Media, MediaHistory, MediaStatus } from '../types/media';
 
 export interface WatchedEpisodeArtwork {
   still?: string;
   seasonPoster?: string;
+}
+
+export function isEpisodeCompletionStatus(status: MediaStatus): boolean {
+  return status === 'Finished' || status === 'Watched Episode';
 }
 
 export function isEpisodeWatched(historyList: MediaHistory[], seasonNumber: number, episodeNumber: number): boolean {
@@ -12,7 +16,7 @@ export function isEpisodeWatched(historyList: MediaHistory[], seasonNumber: numb
   );
 
   return historyList.some(history =>
-    history.status === 'Finished' &&
+    isEpisodeCompletionStatus(history.status) &&
     Boolean(history.context && episodeTag.test(history.context))
   );
 }
@@ -40,7 +44,7 @@ export function getLastWatchedEpisodeArtwork(media: Media, historyList: MediaHis
   if (!episodes.length) return {};
 
   const watchedHistory = historyList
-    .filter(history => history.status === 'Finished' && history.context)
+    .filter(history => isEpisodeCompletionStatus(history.status) && history.context)
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const lastWatchedEpisode = watchedHistory
     .map(history => episodes.find(({ seasonNumber, episode }) =>

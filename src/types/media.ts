@@ -1,6 +1,6 @@
 export type MediaType = 'Film' | 'TV Series' | 'VideoGame';
 
-export type MediaStatus = 'Finished' | 'Currently' | 'Abandoned' | 'Planned' | 'Paused';
+export type MediaStatus = 'Finished' | 'Watched Episode' | 'Currently' | 'Abandoned' | 'Planned' | 'Paused';
 
 export interface ExternalID {
   id: string;

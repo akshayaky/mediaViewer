@@ -50,7 +50,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
       setHomeData({
         allMedia,
         continueWatching: allMedia.filter(media => stateById.get(media.id)?.currently_watching_playing),
-        recentlyWatched: allMedia.filter(media => historyByMediaId.get(media.id)?.some(history => history.status === 'Finished')),
+        recentlyWatched: allMedia.filter(media => historyByMediaId.get(media.id)?.some(history =>
+          history.status === 'Finished' || history.status === 'Watched Episode'
+        )),
         rewatchCandidates: allMedia.filter(media =>
           (stateById.get(media.id)?.rewatch_count || 0) > 0 ||
           historyByMediaId.get(media.id)?.some(history => history.context?.toLowerCase().includes('rewatch'))

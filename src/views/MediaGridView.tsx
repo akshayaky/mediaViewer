@@ -85,8 +85,17 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [languageFilter, setLanguageFilter] = useState<string>('All');
+  const [typeFilterValue, setTypeFilterValue] = useState<string>('All');
+  const [yearFilter, setYearFilter] = useState<string>('All');
+  const [ratingFilter, setRatingFilter] = useState<string>('All');
+  const [publisherFilter, setPublisherFilter] = useState<string>('All');
+  const [developerFilter, setDeveloperFilter] = useState<string>('All');
+  const [runtimeFilter, setRuntimeFilter] = useState<string>('All');
+  const [watchFilter, setWatchFilter] = useState<string>('All');
+  const [completionFilter, setCompletionFilter] = useState<string>('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
   const [mediaList, setMediaList] = useState<Media[]>([]);
   const [stateByMediaId, setStateByMediaId] = useState<Record<string, Awaited<ReturnType<typeof dbService.getMediaState>>>>({});
   const [scoreByMediaId, setScoreByMediaId] = useState<Record<string, number | undefined>>({});
@@ -164,17 +173,10 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
       });
   }, [gridPreferences]);
 
-  // Listen for custom close-mobile-sheets event
-  useEffect(() => {
-    if (isFilterSheetOpen) {
-      window.history.pushState({ isSheetOpen: true }, '');
-    }
-  }, [isFilterSheetOpen]);
-
   useEffect(() => {
     const handleCloseSheets = (e: CustomEvent) => {
-      if (isFilterSheetOpen) {
-        setIsFilterSheetOpen(false);
+      if (isAdvancedFiltersOpen) {
+        setIsAdvancedFiltersOpen(false);
         e.preventDefault();
       }
     };
@@ -182,11 +184,29 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
     return () => {
       window.removeEventListener('close-mobile-sheets' as any, handleCloseSheets);
     };
-  }, [isFilterSheetOpen]);
+  }, [isAdvancedFiltersOpen]);
+
+  useEffect(() => {
+    if (!isAdvancedFiltersOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!filterPanelRef.current?.contains(event.target as Node)) {
+        setIsAdvancedFiltersOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsAdvancedFiltersOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAdvancedFiltersOpen]);
 
   // Catch over-swipe/pull down at the top of the viewport to focus search
 useEffect(() => {
-  if (isDetailsOpen || isAddModalOpen || isFilterSheetOpen) return;
+  if (isDetailsOpen || isAddModalOpen || isAdvancedFiltersOpen) return;
   let touchStartY = 0;
   let maxPullReached = 0;
   const SWIPE_TRIGGER_THRESHOLD = 120; // Pixels pulled before triggering focus
@@ -256,7 +276,7 @@ useEffect(() => {
     window.removeEventListener('touchmove', handleTouchMove);
     window.removeEventListener('touchend', handleTouchEnd);
   };
-}, [isDetailsOpen, isAddModalOpen, isFilterSheetOpen]);
+}, [isDetailsOpen, isAddModalOpen, isAdvancedFiltersOpen]);
 
 
 
@@ -275,10 +295,39 @@ useEffect(() => {
   });
   const availableLanguages = ['All', ...Array.from(languageSet)];
 
+  const sortedUniqueValues = (values: string[]) =>
+    Array.from(new Set(values.filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true })
+    );
+  const availableYears = sortedUniqueValues(items.flatMap(media =>
+    media.release_year === undefined ? [] : [String(media.release_year)]
+  ));
+  const availableRatings = sortedUniqueValues(items.flatMap(media => {
+    const score = scoreByMediaId[media.id];
+    return score === undefined ? [] : [String(score)];
+  }));
+  const availablePublishers = sortedUniqueValues(items.flatMap(media =>
+    media.publisher ? [media.publisher] : []
+  ));
+  const availableDevelopers = sortedUniqueValues(items.flatMap(media =>
+    media.developer ? [media.developer] : []
+  ));
+  const availableRuntimes = sortedUniqueValues(items.flatMap(media =>
+    media.runtime === undefined ? [] : [String(media.runtime)]
+  ));
+
   // Active filter count
   const activeFilterCount = (selectedGenre !== 'All' ? 1 : 0) +
     (statusFilter !== 'All' ? 1 : 0) +
-    (languageFilter !== 'All' ? 1 : 0);
+    (languageFilter !== 'All' ? 1 : 0) +
+    (typeFilterValue !== 'All' ? 1 : 0) +
+    (yearFilter !== 'All' ? 1 : 0) +
+    (ratingFilter !== 'All' ? 1 : 0) +
+    (publisherFilter !== 'All' ? 1 : 0) +
+    (developerFilter !== 'All' ? 1 : 0) +
+    (runtimeFilter !== 'All' ? 1 : 0) +
+    (watchFilter !== 'All' ? 1 : 0) +
+    (completionFilter !== 'All' ? 1 : 0);
 
   // Apply search query
   if (searchQuery.trim()) {
@@ -303,6 +352,40 @@ useEffect(() => {
   // Apply language filter
   if (languageFilter !== 'All') {
     items = items.filter(m => m.language?.includes(languageFilter));
+  }
+
+  if (typeFilterValue !== 'All') {
+    items = items.filter(media => media.type === typeFilterValue);
+  }
+  if (yearFilter !== 'All') {
+    items = items.filter(media => String(media.release_year ?? '') === yearFilter);
+  }
+  if (ratingFilter !== 'All') {
+    items = items.filter(media => {
+      const score = scoreByMediaId[media.id];
+      return ratingFilter === 'unrated' ? score === undefined : String(score) === ratingFilter;
+    });
+  }
+  if (publisherFilter !== 'All') {
+    items = items.filter(media => media.publisher === publisherFilter);
+  }
+  if (developerFilter !== 'All') {
+    items = items.filter(media => media.developer === developerFilter);
+  }
+  if (runtimeFilter !== 'All') {
+    items = items.filter(media => String(media.runtime ?? '') === runtimeFilter);
+  }
+  if (watchFilter !== 'All') {
+    items = items.filter(media => {
+      const hasBeenWatched = parseDate(stateByMediaId[media.id]?.last_watched_played) !== null;
+      return watchFilter === 'watched' ? hasBeenWatched : !hasBeenWatched;
+    });
+  }
+  if (completionFilter !== 'All') {
+    items = items.filter(media => {
+      const hasCompleted = parseDate(stateByMediaId[media.id]?.most_recent_completion) !== null;
+      return completionFilter === 'completed' ? hasCompleted : !hasCompleted;
+    });
   }
 
   const getSortValue = (media: Media): string | number | null => {
@@ -429,6 +512,22 @@ useEffect(() => {
       .map(([key, group]) => ({ key, label: group.label, items: group.items }));
   })();
 
+  const renderGroupItems = (group: (typeof groupedItems)[number]) => (
+    <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5 mt-2">
+      {group.items.map(media => (
+        <MediaCard
+          key={`${group.key}:${media.id}`}
+          media={media}
+          state={stateByMediaId[media.id]}
+          score={scoreByMediaId[media.id]}
+          onClick={onSelectMedia}
+          onPreviewStart={onPreviewStart}
+          onPreviewEnd={onPreviewEnd}
+        />
+      ))}
+    </div>
+  );
+
   const handleAddButtonClick = () => {
     if (onAddNewMedia) {
       onAddNewMedia();
@@ -441,21 +540,28 @@ useEffect(() => {
     setSelectedGenre('All');
     setStatusFilter('All');
     setLanguageFilter('All');
+    setTypeFilterValue('All');
+    setYearFilter('All');
+    setRatingFilter('All');
+    setPublisherFilter('All');
+    setDeveloperFilter('All');
+    setRuntimeFilter('All');
+    setWatchFilter('All');
+    setCompletionFilter('All');
   };
 
   return (
     <div
-      className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-6 mx-auto max-w-none transition-all duration-300"
+      className="p-4 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-4 mx-auto max-w-none transition-all duration-300"
       style={{
         paddingLeft: pagePadding,
         paddingTop: isDesktop?'': 'calc(env(safe-area-inset-top, 0px) + 12px)'
       }}
     >
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1f222e] pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1f222e] pb-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">{title}</h1>
-          <p className="text-xs sm:text-sm text-[#E27D12]/80 font-medium mt-1">{subtitle}</p>
+          <p className="text-xs sm:text-sm text-gray-400 font-medium mt-1">{subtitle}</p>
         </div>
 
         {(onAddNewMedia || typeFilter) && (
@@ -464,99 +570,324 @@ useEffect(() => {
               handleAddButtonClick();
               navigator.vibrate(15);
             }
-
             }
-            className="flex items-center justify-center space-x-2 bg-[#E27D12] hover:bg-[#E27D12] text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-rose-950/30 transition-all cursor-pointer touch-target w-full sm:w-auto"
+            className="flex items-center justify-center gap-2 rounded-lg border border-[#E27D12]/40 bg-[#E27D12] px-3.5 py-2 text-sm font-semibold text-white shadow-sm shadow-black/20 transition-colors hover:bg-[#f08a1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E27D12] cursor-pointer touch-target w-full sm:w-auto"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="h-4 w-4" />
             <span>Add Entry</span>
           </button>
         )}
       </div>
 
-      {/* Filter and Search Bar */}
-      <div style={{ top: 'calc(env(safe-area-inset-top, 0px))' }} 
-      className="sticky top-0 z-30 flex items-center gap-3 bg-[#14161f]/95 backdrop-blur-xl p-3 sm:p-4 rounded-xl border border-[#232736] shadow-lg">
-        {/* Search Box */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Search by title, publisher..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-lg pl-10 pr-4 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-[#E27D12]"
-          />
-        </div>
-
-        {/* Mobile Filter Button (< 768px) */}
-        <button
-          onClick={() => setIsFilterSheetOpen(true)}
-          className="md:hidden flex items-center space-x-2 bg-[#1b1d2a] hover:bg-[#252839] border border-[#2d3145] text-gray-200 px-3 py-2 rounded-lg text-sm font-medium touch-target cursor-pointer relative"
-        >
-          <Filter className="w-4 h-4 text-[#E27D12]" />
-          <span>Sort &amp; filters</span>
-          {activeFilterCount > 0 && (
-            <span className="bg-[#E27D12] text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
-
-        {/* Desktop Filter Toolbar (>= 768px) */}
-        <div className="hidden md:flex items-center gap-3">
-          {/* Genre Filter */}
-          <div className="flex items-center space-x-2">
-            <Filter className="w-4 h-4 text-gray-400" />
-            <select
-              value={selectedGenre}
-              onChange={e => setSelectedGenre(e.target.value)}
-              className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#E27D12]"
-            >
-              {availableGenres.map(g => (
-                <option key={g} value={g}>
-                  Genre: {g}
-                </option>
-              ))}
-            </select>
+      <div className="sticky top-0 z-30 -mx-1 bg-[#101116]/95 px-1 py-2">
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search your library by title or publisher..."
+              value={searchQuery}
+              onChange={event => setSearchQuery(event.target.value)}
+              className="h-11 w-full rounded-lg border border-[#343744] bg-[#191a20] pl-11 pr-11 text-sm text-white placeholder:text-gray-500 focus:border-[#E27D12] focus:outline-none focus:ring-1 focus:ring-[#E27D12]/40"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-white/5 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#E27D12]"
-          >
-            <option value="All">Status: All</option>
-            <option value="Finished">Status: Finished</option>
-            <option value="Currently">Status: Currently Active</option>
-            <option value="Abandoned">Status: Paused / Abandoned</option>
-            <option value="Planned">Status: Planned</option>
-          </select>
-
-          {/* Language Filter */}
-          {availableLanguages.length > 1 && (
-            <select
-              value={languageFilter}
-              onChange={e => setLanguageFilter(e.target.value)}
-              className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#E27D12]"
+          <div ref={filterPanelRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsAdvancedFiltersOpen(open => !open)}
+              aria-expanded={isAdvancedFiltersOpen}
+              aria-haspopup="dialog"
+              className={`relative flex h-11 w-11 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E27D12] sm:h-9 sm:w-auto sm:gap-2 sm:px-3 ${
+                isAdvancedFiltersOpen || activeFilterCount > 0
+                  ? 'border-[#E27D12]/50 bg-[#E27D12]/10 text-white'
+                  : 'border-[#30323a] bg-[#191a20] text-gray-300 hover:border-[#555862] hover:text-white'
+              }`}
+              aria-label={`Open filters${activeFilterCount > 0 ? `, ${activeFilterCount} active` : ''}`}
             >
-              {availableLanguages.map(g => (
-                <option key={g} value={g}>
-                  Language: {g}
-                </option>
-              ))}
-            </select>
-          )}
+              <Filter className="h-4 w-4 text-[#E27D12]" />
+              <span className="hidden text-xs font-medium sm:inline">Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="absolute -right-1 -top-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-[#E27D12] px-1 text-[10px] font-bold leading-none text-white sm:static sm:flex">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
 
+            {isAdvancedFiltersOpen && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Close filters"
+                  onClick={() => setIsAdvancedFiltersOpen(false)}
+                  className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm sm:hidden"
+                />
+                <div
+                  role="dialog"
+                  aria-label="Filters and organization"
+                  className="fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-2xl border-t border-white/10 bg-[#161822]/95 p-5 pb-[calc(4.5rem+var(--sab,0px))] shadow-2xl shadow-black/50 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:bottom-auto sm:mt-2 sm:max-h-[min(70vh,34rem)] sm:w-[min(38rem,calc(100vw-2rem))] sm:rounded-lg sm:border sm:border-[#343744] sm:bg-[#191a20] sm:p-4"
+                  style={{
+                    backdropFilter: 'blur(40px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(40px) saturate(180%)'
+                  }}
+                >
+                <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/20 sm:hidden" />
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-white sm:hidden">Filters &amp; organize</h2>
+                    <h2 className="hidden text-sm font-semibold text-white sm:block">Filters</h2>
+                    <p className="mt-0.5 text-xs text-gray-500">Refine your library view.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAdvancedFiltersOpen(false)}
+                    aria-label="Close filters"
+                    className="rounded-md p-1.5 text-gray-400 hover:bg-white/5 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="space-y-1 text-xs text-gray-400">
+                    <span className="block">Genre</span>
+                    <select
+                      aria-label="Filter by genre"
+                      value={selectedGenre}
+                      onChange={event => setSelectedGenre(event.target.value)}
+                      className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none"
+                    >
+                      {availableGenres.map(genre => <option key={genre} value={genre}>{genre === 'All' ? 'All genres' : genre}</option>)}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs text-gray-400">
+                    <span className="block">Status</span>
+                    <select
+                      aria-label="Filter by status"
+                      value={statusFilter}
+                      onChange={event => setStatusFilter(event.target.value)}
+                      className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none"
+                    >
+                      <option value="All">All statuses</option>
+                      <option value="Finished">Finished</option>
+                      <option value="Watched Episode">Watched Episode</option>
+                      <option value="Currently">Currently active</option>
+                      <option value="Abandoned">Abandoned</option>
+                      <option value="Paused">Paused</option>
+                      <option value="Planned">Planned</option>
+                    </select>
+                  </label>
+                  {availableLanguages.length > 1 && (
+                    <label className="space-y-1 text-xs text-gray-400">
+                      <span className="block">Language</span>
+                      <select
+                        aria-label="Filter by language"
+                        value={languageFilter}
+                        onChange={event => setLanguageFilter(event.target.value)}
+                        className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none"
+                      >
+                        {availableLanguages.map(language => <option key={language} value={language}>{language === 'All' ? 'All languages' : language}</option>)}
+                      </select>
+                    </label>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {!typeFilter && (
+                    <label className="space-y-1 text-xs text-gray-400">
+                      <span className="block">Media type</span>
+                      <select value={typeFilterValue} onChange={event => setTypeFilterValue(event.target.value)} className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none">
+                        <option value="All">All media types</option>
+                        <option value="Film">Film</option>
+                        <option value="TV Series">TV series</option>
+                        <option value="VideoGame">Video game</option>
+                      </select>
+                    </label>
+                  )}
+                  <label className="space-y-1 text-xs text-gray-400">
+                    <span className="block">Release year</span>
+                    <select value={yearFilter} onChange={event => setYearFilter(event.target.value)} className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none">
+                      <option value="All">Any year</option>
+                      {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs text-gray-400">
+                    <span className="block">Rating</span>
+                    <select value={ratingFilter} onChange={event => setRatingFilter(event.target.value)} className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none">
+                      <option value="All">Any rating</option>
+                      {availableRatings.map(rating => <option key={rating} value={rating}>{rating} / 5</option>)}
+                      <option value="unrated">Unrated</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs text-gray-400">
+                    <span className="block">Publisher</span>
+                    <select value={publisherFilter} onChange={event => setPublisherFilter(event.target.value)} className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none">
+                      <option value="All">Any publisher</option>
+                      {availablePublishers.map(publisher => <option key={publisher} value={publisher}>{publisher}</option>)}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs text-gray-400">
+                    <span className="block">Developer</span>
+                    <select value={developerFilter} onChange={event => setDeveloperFilter(event.target.value)} className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none">
+                      <option value="All">Any developer</option>
+                      {availableDevelopers.map(developer => <option key={developer} value={developer}>{developer}</option>)}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs text-gray-400">
+                    <span className="block">Runtime</span>
+                    <select value={runtimeFilter} onChange={event => setRuntimeFilter(event.target.value)} className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none">
+                      <option value="All">Any runtime</option>
+                      {availableRuntimes.map(runtime => <option key={runtime} value={runtime}>{runtime} min</option>)}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs text-gray-400">
+                    <span className="block">Watch history</span>
+                    <select value={watchFilter} onChange={event => setWatchFilter(event.target.value)} className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none">
+                      <option value="All">Any watch history</option>
+                      <option value="watched">Previously watched</option>
+                      <option value="unwatched">Never watched</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs text-gray-400">
+                    <span className="block">Completion</span>
+                    <select value={completionFilter} onChange={event => setCompletionFilter(event.target.value)} className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none">
+                      <option value="All">Any completion state</option>
+                      <option value="completed">Completed</option>
+                      <option value="incomplete">Not completed</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-4 flex justify-end border-t border-white/5 pt-3">
+                  <button type="button" onClick={resetFilters} className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:bg-white/5 hover:text-white">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Reset all filters
+                  </button>
+                </div>
+                <div className="mt-2 border-t border-white/5 pt-3 sm:hidden">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500">Organize</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1 text-xs text-gray-400">
+                      <span className="block">Sort by</span>
+                      <select
+                        aria-label="Sort by"
+                        value={gridPreferences.sortBy}
+                        onChange={event => updateGridPreferences(current => ({ ...current, sortBy: event.target.value as MediaGridSortField }))}
+                        className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none"
+                      >
+                        {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-xs text-gray-400">
+                      <span className="block">Group by</span>
+                      <select
+                        aria-label="Group by"
+                        value={gridPreferences.groupBy}
+                        onChange={event => updateGridPreferences(current => ({ ...current, groupBy: event.target.value as MediaGridGroupField }))}
+                        className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none"
+                      >
+                        {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateGridPreferences(current => ({ ...current, sortDescending: !current.sortDescending }))}
+                      aria-label={`Reverse sort order, currently ${gridPreferences.sortDescending ? 'descending' : 'ascending'}`}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-md border border-[#30323a] bg-[#111217] px-3 py-2 text-sm text-gray-200"
+                    >
+                      <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
+                      {gridPreferences.sortDescending ? 'Descending' : 'Ascending'}
+                    </button>
+                    {gridPreferences.groupBy !== 'none' && (
+                      <button
+                        type="button"
+                        onClick={() => updateGridPreferences(current => ({ ...current, groupDescending: !current.groupDescending }))}
+                        aria-label={`Reverse group order, currently ${gridPreferences.groupDescending ? 'descending' : 'ascending'}`}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-md border border-[#30323a] bg-[#111217] px-3 py-2 text-sm text-gray-200"
+                      >
+                        <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
+                        {gridPreferences.groupDescending ? 'Groups ↓' : 'Groups ↑'}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAdvancedFiltersOpen(false)}
+                    className="mt-3 w-full rounded-md bg-[#E27D12] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#f08a1b]"
+                  >
+                    Done
+                  </button>
+                </div>
+                </div>
+              </>
+            )}
+          </div>
           {activeFilterCount > 0 && (
             <button
+              type="button"
               onClick={resetFilters}
-              className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-xs flex items-center space-x-1 cursor-pointer"
-              title="Reset Filters"
+              title="Reset all filters"
+              aria-label="Reset all filters"
+              className="rounded-md p-2 text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="hidden flex-wrap items-center gap-2 border-t border-white/5 pt-2 sm:flex">
+          <span className="mr-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500">Organize</span>
+          <label className="flex min-w-[8rem] flex-1 items-center gap-2 text-xs text-gray-500 sm:flex-none">
+            <span>Sort</span>
+            <select
+              aria-label="Sort by"
+              value={gridPreferences.sortBy}
+              onChange={event => updateGridPreferences(current => ({ ...current, sortBy: event.target.value as MediaGridSortField }))}
+              className="min-w-0 flex-1 rounded-md border border-[#30323a] bg-[#191a20] px-2 py-1.5 text-xs text-gray-200 focus:border-[#E27D12] focus:outline-none sm:w-36 sm:flex-none"
+            >
+              {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => updateGridPreferences(current => ({ ...current, sortDescending: !current.sortDescending }))}
+            aria-label={`Reverse sort order, currently ${gridPreferences.sortDescending ? 'descending' : 'ascending'}`}
+            title={`Sort ${gridPreferences.sortDescending ? 'descending' : 'ascending'}`}
+            className="rounded-md border border-[#30323a] bg-[#191a20] p-1.5 text-gray-300 transition-colors hover:border-[#E27D12]/60 hover:text-white"
+          >
+            <ArrowDownUp className="h-3.5 w-3.5 text-[#E27D12]" />
+          </button>
+          <label className="flex min-w-[8rem] flex-1 items-center gap-2 text-xs text-gray-500 sm:flex-none">
+            <span>Group</span>
+            <select
+              aria-label="Group by"
+              value={gridPreferences.groupBy}
+              onChange={event => updateGridPreferences(current => ({ ...current, groupBy: event.target.value as MediaGridGroupField }))}
+              className="min-w-0 flex-1 rounded-md border border-[#30323a] bg-[#191a20] px-2 py-1.5 text-xs text-gray-200 focus:border-[#E27D12] focus:outline-none sm:w-36 sm:flex-none"
+            >
+              {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          {gridPreferences.groupBy !== 'none' && (
+            <button
+              type="button"
+              onClick={() => updateGridPreferences(current => ({ ...current, groupDescending: !current.groupDescending }))}
+              aria-label={`Reverse group order, currently ${gridPreferences.groupDescending ? 'descending' : 'ascending'}`}
+              title={`Groups ${gridPreferences.groupDescending ? 'descending' : 'ascending'}`}
+              className="flex items-center gap-1.5 rounded-md border border-[#30323a] bg-[#191a20] px-2 py-1.5 text-xs text-gray-300 transition-colors hover:border-[#E27D12]/60 hover:text-white"
+            >
+              <ArrowDownUp className="h-3.5 w-3.5 text-[#E27D12]" />
+              <span className="hidden sm:inline">{gridPreferences.groupDescending ? 'Groups ↓' : 'Groups ↑'}</span>
             </button>
           )}
         </div>
@@ -565,50 +896,6 @@ useEffect(() => {
       {preferenceError && (
         <p role="status" className="text-xs text-[#E27D12]">{preferenceError}</p>
       )}
-
-      <div className="hidden md:flex flex-wrap items-center gap-3 rounded-xl border border-[#232736] bg-[#14161f]/80 p-3">
-        <label className="flex items-center gap-2 text-xs font-medium text-gray-400">
-          Sort by
-          <select
-            value={gridPreferences.sortBy}
-            onChange={event => updateGridPreferences(current => ({ ...current, sortBy: event.target.value as MediaGridSortField }))}
-            className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#E27D12]"
-          >
-            {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-        <button
-          type="button"
-          onClick={() => updateGridPreferences(current => ({ ...current, sortDescending: !current.sortDescending }))}
-          aria-label={`Reverse sort order, currently ${gridPreferences.sortDescending ? 'descending' : 'ascending'}`}
-          title={`Reverse sort order (${gridPreferences.sortDescending ? 'descending' : 'ascending'})`}
-          className="flex items-center gap-2 rounded-lg border border-[#2d3145] bg-[#1b1d2a] px-3 py-2 text-sm text-gray-200 hover:border-[#E27D12]"
-        >
-          <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
-          {gridPreferences.sortDescending ? 'Descending' : 'Ascending'}
-        </button>
-        <label className="flex items-center gap-2 text-xs font-medium text-gray-400">
-          Group by
-          <select
-            value={gridPreferences.groupBy}
-            onChange={event => updateGridPreferences(current => ({ ...current, groupBy: event.target.value as MediaGridGroupField }))}
-            className="bg-[#1b1d2a] border border-[#2d3145] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#E27D12]"
-          >
-            {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-
-        {gridPreferences.groupBy !== 'none' && (
-        <button
-          type="button"
-          onClick={() => updateGridPreferences(current => ({ ...current, groupDescending: !current.groupDescending }))}
-          className="flex items-center gap-2 rounded-lg border border-[#2d3145] bg-[#1b1d2a] px-3 py-2 text-sm text-gray-200 hover:border-[#E27D12]"
-        >
-          <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
-          Groups: {gridPreferences.groupDescending ? 'Descending' : 'Ascending'}
-        </button>
-        )}
-      </div>
 
       {/* Grid */}
       {sortedItems.length === 0 ? (
@@ -623,9 +910,8 @@ useEffect(() => {
           transition: pullOffset === 0 ? 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)' : 'none'
         }}
       >
-      {groupedItems.map(group => (
+      {groupedItems.map(group => group.label ? (
         <details key={group.key} className="group/details mb-6" open>
-          {group.label && (
             <summary className="flex items-center justify-between cursor-pointer list-none mb-3 text-sm font-semibold text-gray-300 select-none hover:text-white transition-colors">
               <div className="flex items-center gap-2">
                 <ChevronRight 
@@ -635,170 +921,14 @@ useEffect(() => {
                 <span className="text-xs font-normal text-gray-500">{group.items.length}</span>
               </div>
             </summary>
-          )}
-          
-          <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5 mt-2">
-            {group.items.map(media => (
-              <MediaCard
-                key={`${group.key}:${media.id}`}
-                media={media}
-                state={stateByMediaId[media.id]}
-                score={scoreByMediaId[media.id]}
-                onClick={onSelectMedia}
-                onPreviewStart={onPreviewStart}
-                onPreviewEnd={onPreviewEnd}
-              />
-            ))}
-          </div>
+          {renderGroupItems(group)}
         </details>
+      ) : (
+        <div key={group.key} className="mb-6">
+          {renderGroupItems(group)}
+        </div>
       ))}
       </div>
-      )}
-
-      {/* Mobile Filter Slide-up Bottom Sheet */}
-      {isFilterSheetOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
-            onClick={() => setIsFilterSheetOpen(false)}
-          />
-
-          {/* Sheet Drawer */}
-          <div className="relative z-50 bg-[#161822] border-t border-white/10 rounded-t-2xl p-5 shadow-2xl space-y-5 animate-in slide-in-from-bottom duration-250"
-            style={{ paddingBottom: 'calc(4.5rem + var(--sab, 0px))' }}
-          >
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center space-x-2">
-                <Filter className="w-5 h-5 text-[#E27D12]" />
-                <h3 className="text-base font-bold text-white">Library View</h3>
-                {activeFilterCount > 0 && (
-                  <span className="bg-[#E27D12] text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                    {activeFilterCount} active
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => setIsFilterSheetOpen(false)}
-                className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-gray-300 uppercase tracking-wider">Sort by</label>
-                  <select
-                    value={gridPreferences.sortBy}
-                    onChange={event => updateGridPreferences(current => ({ ...current, sortBy: event.target.value as MediaGridSortField }))}
-                    className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3 py-3 text-sm text-gray-100 focus:outline-none focus:border-[#E27D12]"
-                  >
-                    {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-gray-300 uppercase tracking-wider">Group by</label>
-                  <select
-                    value={gridPreferences.groupBy}
-                    onChange={event => updateGridPreferences(current => ({ ...current, groupBy: event.target.value as MediaGridGroupField }))}
-                    className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3 py-3 text-sm text-gray-100 focus:outline-none focus:border-[#E27D12]"
-                  >
-                    {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => updateGridPreferences(current => ({ ...current, sortDescending: !current.sortDescending }))}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#2d3145] bg-[#1c1f2e] px-3 py-3 text-sm text-gray-200"
-              >
-                <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
-                {gridPreferences.sortDescending ? 'Descending order' : 'Ascending order'}
-              </button>
-
-              {/* NEW: Mobile Group Order Toggle */}
-              {gridPreferences.groupBy !== 'none' && (
-                <button
-                  type="button"
-                  onClick={() => updateGridPreferences(current => ({ ...current, groupDescending: !current.groupDescending }))}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#2d3145] bg-[#1c1f2e] px-3 py-3 text-sm text-gray-200 mt-2"
-                >
-                  <ArrowDownUp className="h-4 w-4 text-[#E27D12]" />
-                  {gridPreferences.groupDescending ? 'Groups: Descending' : 'Groups: Ascending'}
-                </button>
-              )}
-
-              {/* Genre Filter */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-gray-300 uppercase tracking-wider">Genre</label>
-                <select
-                  value={selectedGenre}
-                  onChange={e => setSelectedGenre(e.target.value)}
-                  className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3.5 py-3 text-sm text-gray-100 focus:outline-none focus:border-[#E27D12]"
-                >
-                  {availableGenres.map(g => (
-                    <option key={g} value={g}>
-                      Genre: {g}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Status Filter */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-gray-300 uppercase tracking-wider">Status</label>
-                <select
-                  value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value)}
-                  className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3.5 py-3 text-sm text-gray-100 focus:outline-none focus:border-[#E27D12]"
-                >
-                  <option value="All">Status: All</option>
-                  <option value="Finished">Status: Finished</option>
-                  <option value="Currently">Status: Currently Active</option>
-                  <option value="Abandoned">Status: Paused / Abandoned</option>
-                  <option value="Planned">Status: Planned</option>
-                </select>
-              </div>
-
-              {/* Language Filter */}
-              {availableLanguages.length > 1 && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-gray-300 uppercase tracking-wider">Language</label>
-                  <select
-                    value={languageFilter}
-                    onChange={e => setLanguageFilter(e.target.value)}
-                    className="w-full bg-[#1c1f2e] border border-[#2d3145] rounded-xl px-3.5 py-3 text-sm text-gray-100 focus:outline-none focus:border-[#E27D12]"
-                  >
-                    {availableLanguages.map(g => (
-                      <option key={g} value={g}>
-                        Language: {g}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center space-x-3 pt-2">
-              <button
-                onClick={resetFilters}
-                className="flex-1 bg-[#232738] hover:bg-[#2c3147] text-gray-300 font-semibold text-sm py-3 px-4 rounded-xl transition-all cursor-pointer touch-target flex items-center justify-center space-x-2"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>Reset</span>
-              </button>
-              <button
-                onClick={() => setIsFilterSheetOpen(false)}
-                className="flex-1 bg-[#E27D12] hover:bg-[#E27D12] text-white font-semibold text-sm py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer touch-target"
-              >
-                Apply Filters
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Add Media Modal */}

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { LocalFile, Media } from '../types/media';
+import { LocalFile, Media, MediaHistory, MediaStatus } from '../types/media';
 import { useMediaDetail } from '../hooks/useMediaDetail';
 import { useDominantColor } from '../helper/useDominantColour';
 import { getMediaTheme } from '../helper/mediaDetailTheme';
@@ -126,6 +126,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     handleManualMetadataRefresh,
     handlePlayFile,
     logSessionHistory,
+    updateHistoryEntry,
+    deleteHistoryEntry,
     addCustomFilePath,
     relatedMedia,
     isLoadingRelated,
@@ -337,10 +339,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
   // Local launcher & modals state
   const [showAddHistoryModal, setShowAddHistoryModal] = useState(false);
-  const [newStatus, setNewStatus] = useState<any>('Finished');
-  const [newScore, setNewScore] = useState<number>(4);
+  const [editingHistory, setEditingHistory] = useState<MediaHistory | null>(null);
+  const [newStatus, setNewStatus] = useState<MediaStatus>('Finished');
+  const [newScore, setNewScore] = useState<number | ''>(4);
   const [newContext, setNewContext] = useState<string>('Rewatch');
   const [newThoughts, setNewThoughts] = useState<string>('');
+  const [newStartedAt, setNewStartedAt] = useState('');
+  const [newCompletedAt, setNewCompletedAt] = useState('');
+  const [historyError, setHistoryError] = useState('');
 
   const [showFilePickerModal, setShowFilePickerModal] = useState(false);
   const [customPath, setCustomPath] = useState('');
@@ -420,16 +426,62 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     };
   }, [activeLocalFile, isAvailableLocally]);
 
-  const handleAddHistorySubmit = (e: React.FormEvent) => {
+  const openHistoryModal = (history?: MediaHistory) => {
+    setEditingHistory(history || null);
+    setNewStatus(history?.status || 'Finished');
+    setNewScore(history ? (history.score ?? '') : 4);
+    setNewContext(history?.context || (history ? '' : 'Rewatch'));
+    setNewThoughts(history?.thoughts || '');
+    setNewStartedAt(history?.started_at?.slice(0, 10) || '');
+    setNewCompletedAt(history
+      ? (history.completed_at?.slice(0, 10) || '')
+      : new Date().toISOString().slice(0, 10));
+    setHistoryError('');
+    setShowAddHistoryModal(true);
+  };
+
+  const handleAddHistorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    logSessionHistory({
-      status: newStatus,
-      score: newScore,
-      context: newContext,
-      thoughts: newThoughts
-    });
-    setShowAddHistoryModal(false);
-    setNewThoughts('');
+    setHistoryError('');
+    try {
+      if (editingHistory) {
+        await updateHistoryEntry({
+          ...editingHistory,
+          status: newStatus,
+          score: newScore === '' ? undefined : newScore,
+          context: newContext.trim() || undefined,
+          thoughts: newThoughts.trim() || undefined,
+          started_at: newStartedAt || undefined,
+          completed_at: newCompletedAt || undefined
+        });
+      } else {
+        await logSessionHistory({
+          status: newStatus,
+          score: newScore === '' ? undefined : newScore,
+          context: newContext,
+          thoughts: newThoughts,
+          started_at: newStartedAt || undefined,
+          completed_at: newCompletedAt || undefined
+        });
+      }
+      setShowAddHistoryModal(false);
+      setEditingHistory(null);
+      setNewThoughts('');
+    } catch (error) {
+      console.error('Failed to save history log:', error);
+      setHistoryError('Could not save this log. Please try again.');
+    }
+  };
+
+  const handleDeleteHistory = async (history: MediaHistory) => {
+    if (!window.confirm('Delete this history log? This cannot be undone.')) return;
+    setHistoryError('');
+    try {
+      await deleteHistoryEntry(history.id);
+    } catch (error) {
+      console.error('Failed to delete history log:', error);
+      setHistoryError('Could not delete this log. Please try again.');
+    }
   };
 
   const handleCustomPathSubmit = (e: React.FormEvent) => {
@@ -1067,13 +1119,15 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 <span>Interaction Journal ({historyList.length})</span>
               </h2>
               <button
-                onClick={() => setShowAddHistoryModal(true)}
+                onClick={() => openHistoryModal()}
                 className="mdv-btn mdv-btn-accent mdv-btn-log"
               >
                 <Plus className="mdv-icon-sm" />
                 <span>Log Session</span>
               </button>
             </div>
+
+            {historyError && <p role="alert" className="text-sm text-red-400">{historyError}</p>}
 
             {historyList.length === 0 ? (
               <p className="mdv-empty">No history sessions recorded yet.</p>
@@ -1110,8 +1164,30 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                       </p>
                     )}
 
-                    <div className="mdv-source">
-                      Source: {h.source} {h.original_source_record_id ? `(ID: ${h.original_source_record_id})` : ''}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="mdv-source">
+                        Source: {h.source} {h.original_source_record_id ? `(ID: ${h.original_source_record_id})` : ''}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openHistoryModal(h)}
+                          aria-label={`Edit ${h.status} log`}
+                          title="Edit log"
+                          className="text-gray-400 hover:text-white"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteHistory(h)}
+                          aria-label={`Delete ${h.status} log`}
+                          title="Delete log"
+                          className="text-gray-400 hover:text-red-400"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1495,19 +1571,42 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       {showAddHistoryModal && (
         <div className="mdv-modal-backdrop">
           <div className="mdv-modal">
-            <h3 className="mdv-modal-title">Log Interaction Session</h3>
+            <h3 className="mdv-modal-title">{editingHistory ? 'Edit Interaction Log' : 'Log Interaction Session'}</h3>
             <form onSubmit={handleAddHistorySubmit} className="mdv-form">
               <div>
                 <label className="mdv-label">Status</label>
                 <select
                   value={newStatus}
-                  onChange={e => setNewStatus(e.target.value)}
+                  onChange={e => setNewStatus(e.target.value as MediaStatus)}
                   className="mdv-input"
                 >
                   <option value="Finished">Finished</option>
+                  {currentMedia.type === 'TV Series' && <option value="Watched Episode">Watched Episode</option>}
                   <option value="Currently">Currently Active</option>
                   <option value="Abandoned">Abandoned / Paused</option>
+                  <option value="Paused">Paused</option>
+                  <option value="Planned">Planned</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="mdv-label">Started</label>
+                <input
+                  type="date"
+                  value={newStartedAt}
+                  onChange={e => setNewStartedAt(e.target.value)}
+                  className="mdv-input"
+                />
+              </div>
+
+              <div>
+                <label className="mdv-label">Completed / Logged</label>
+                <input
+                  type="date"
+                  value={newCompletedAt}
+                  onChange={e => setNewCompletedAt(e.target.value)}
+                  className="mdv-input"
+                />
               </div>
 
               <div>
@@ -1517,7 +1616,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                   min="1"
                   max="5"
                   value={newScore}
-                  onChange={e => setNewScore(Number(e.target.value))}
+                  onChange={e => setNewScore(e.target.value === '' ? '' : Number(e.target.value))}
                   className="mdv-input"
                 />
               </div>
@@ -1544,16 +1643,21 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 />
               </div>
 
+              {historyError && <p role="alert" className="text-sm text-red-400">{historyError}</p>}
+
               <div className="mdv-modal-actions">
                 <button
                   type="button"
-                  onClick={() => setShowAddHistoryModal(false)}
+                  onClick={() => {
+                    setShowAddHistoryModal(false);
+                    setEditingHistory(null);
+                  }}
                   className="mdv-btn mdv-btn-cancel"
                 >
                   Cancel
                 </button>
                 <button type="submit" className="mdv-btn mdv-btn-accent mdv-btn-save">
-                  Save Log
+                  {editingHistory ? 'Save Changes' : 'Save Log'}
                 </button>
               </div>
             </form>

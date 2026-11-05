@@ -11,6 +11,7 @@ import {
   ExternalID,
   PlaybackProgress
 } from '../types/media';
+import { isEpisodeCompletionStatus } from '../helper/episodeProgress';
 
 export class DatabaseService {
   private db: DatabaseTauri | null = null;
@@ -645,6 +646,11 @@ export class DatabaseService {
     );
   }
 
+  public async deleteHistory(history_id: string): Promise<void> {
+    if (!this.db) return;
+    await this.db.execute('DELETE FROM media_history WHERE id = ?', [history_id]);
+  }
+
   public async getMediaState(media_id: string): Promise<MediaState> {
     const histories = await this.getHistoryForMedia(media_id);
     if (!histories.length) {
@@ -662,6 +668,7 @@ export class DatabaseService {
     const latest = sorted[sorted.length - 1];
 
     let totalCount = 0;
+    let finishedCount = 0;
     let rewatchCount = 0;
     let abandonedCount = 0;
     let firstDate: string | undefined = undefined;
@@ -675,13 +682,19 @@ export class DatabaseService {
 
       if (h.status === 'Finished') {
         totalCount++;
-        if (totalCount > 1 || (h.context && h.context.toLowerCase().includes('rewatch'))) {
+        finishedCount++;
+        if (finishedCount > 1 || (h.context && h.context.toLowerCase().includes('rewatch'))) {
           rewatchCount++;
         }
         if (h.completed_at) {
           if (!recentCompletion || new Date(h.completed_at).getTime() > new Date(recentCompletion).getTime()) {
             recentCompletion = h.completed_at;
           }
+        }
+      } else if (h.status === 'Watched Episode') {
+        totalCount++;
+        if (h.completed_at && (!recentCompletion || new Date(h.completed_at).getTime() > new Date(recentCompletion).getTime())) {
+          recentCompletion = h.completed_at;
         }
       } else if (h.status === 'Abandoned') {
         abandonedCount++;
@@ -1139,7 +1152,7 @@ export class DatabaseService {
       );
     }
 
-    // When completed, log Finished status in media_history if not already logged
+    // When completed, log the appropriate status in media_history if not already logged
     if (isCompleted) {
       await this.syncCompletionToHistory(progress.media_id, s, e);
     }
@@ -1166,7 +1179,8 @@ export class DatabaseService {
       const contextTag2 = `S${season}E${episode}`;
 
       const alreadyFinished = history.some(h =>
-        h.status === 'Finished' && h.context && (h.context.includes(contextTag1) || h.context.includes(contextTag2))
+        isEpisodeCompletionStatus(h.status) && h.context &&
+        (h.context.includes(contextTag1) || h.context.includes(contextTag2))
       );
 
       if (!alreadyFinished) {
@@ -1175,7 +1189,7 @@ export class DatabaseService {
           id: `hist_auto_ep_${Date.now()}`,
           media_id,
           completed_at: now.split('T')[0],
-          status: 'Finished',
+          status: 'Watched Episode',
           context: contextTag1,
           source: 'Player',
           created_at: now
