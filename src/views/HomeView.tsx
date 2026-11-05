@@ -120,6 +120,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Pick up where you left off"
           items={continueWatching}
           onSelectMedia={onSelectMedia}
+          landscapeCards
         />
 
         <MediaRail
@@ -127,6 +128,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Your latest logged watches and plays"
           items={recentlyWatched}
           onSelectMedia={onSelectMedia}
+          landscapeCards
         />
 
         <MediaRail
@@ -134,6 +136,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Personal favorites revisited multiple times"
           items={rewatchCandidates}
           onSelectMedia={onSelectMedia}
+          landscapeCards
         />
 
         <MediaRail
@@ -141,6 +144,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Detected media files on local system"
           items={localLibraryList}
           onSelectMedia={onSelectMedia}
+          landscapeCards
         />
 
         <MediaRail
@@ -148,6 +152,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Sessions currently on hold"
           items={abandonedList}
           onSelectMedia={onSelectMedia}
+          landscapeCards
         />
       </div>
       </div>

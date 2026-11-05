@@ -8,15 +8,35 @@ interface MediaCardProps {
   media: Media;
   state?: MediaState;
   score?: number;
+  landscape?: boolean;
+  landscapeImage?: string;
   onClick: (media: Media, clickedCardRect?: DOMRect) => void;
   onPreviewStart?: (media: Media, rect: DOMRect) => void;
   onPreviewEnd?: () => void;
 }
 
-export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onPreviewStart, onPreviewEnd }) => {
+export const MediaCard: React.FC<MediaCardProps> = ({
+  media,
+  state,
+  landscape = false,
+  landscapeImage,
+  onClick,
+  onPreviewStart,
+  onPreviewEnd
+}) => {
   const [posterUrl, setPosterUrl] = useState<string | undefined>(media.poster);
   const [imgFailed, setImgFailed] = useState<boolean>(false);
+  const [usePosterFallback, setUsePosterFallback] = useState(false);
   const [progressPct, setProgressPct] = useState<number>(0);
+  const cardImageUrl = imgFailed
+    ? undefined
+    : landscape && !usePosterFallback
+      ? landscapeImage || media.backdrop || posterUrl
+      : posterUrl;
+
+  useEffect(() => {
+    setUsePosterFallback(false);
+  }, [media.id, landscapeImage]);
 
   useEffect(() => {
     let isMounted = true;
@@ -130,9 +150,9 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onP
     >
       {/* Backlight Glow Effect */}
       <div className="absolute -inset-4 opacity-0 group-hover:opacity-70 transition-opacity duration-500 blur-3xl pointer-events-none z-0">
-        {posterUrl && (
+        {cardImageUrl && (
           <img 
-            src={posterUrl} 
+            src={cardImageUrl}
             alt="" 
             className="w-full h-full object-cover saturate-200" 
             loading="lazy"
@@ -143,12 +163,18 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onP
       {/* Main Card Content */}
       <div className="relative flex flex-col bg-[#151720] rounded-sm overflow-hidden border border-transparent group-hover:border-white/10 hover:shadow-xl hover:shadow-black/50 transition-all duration-300 z-10">
         {/* Poster Image Container */}
-        <div className="relative aspect-[2/3] w-full bg-[#1b1e2b] overflow-hidden">
-          {posterUrl && !imgFailed ? (
+        <div className={`relative w-full bg-[#1b1e2b] overflow-hidden ${landscape ? 'aspect-[2/3] sidebar:aspect-video' : 'aspect-[2/3]'}`}>
+          {cardImageUrl ? (
             <img
-              src={posterUrl}
+              src={cardImageUrl}
               alt={media.title}
-              onError={handleImageError}
+              onError={() => {
+                if (landscape && !usePosterFallback && (landscapeImage || media.backdrop)) {
+                  setUsePosterFallback(true);
+                  return;
+                }
+                handleImageError();
+              }}
               className="w-full h-full object-cover transition-transform duration-500"
               loading="lazy"
             />
@@ -171,6 +197,12 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, state, onClick, onP
                 className="bg-[#E27D12] h-full transition-all duration-300 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
                 style={{ width: `${progressPct}%` }}
               />
+            </div>
+          )}
+          {landscape && (
+            <div className="absolute inset-x-0 bottom-0 z-10 hidden bg-gradient-to-t from-black/90 via-black/45 to-transparent px-3 pb-3 pt-10 sidebar:block">
+              <p className="truncate text-sm font-bold text-white drop-shadow">{media.title}</p>
+              <p className="mt-0.5 text-[11px] text-gray-300">{media.release_year || media.type}</p>
             </div>
           )}
         </div>

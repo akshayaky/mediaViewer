@@ -211,12 +211,19 @@ export interface AppSettings {
   player_mode?: 'builtin' | 'os_default';
   autoplay_next_episode?: boolean;
   sidebar_hide_enabled?: boolean;
+  ui_preferences?: UiPreferences;
   media_grid_preferences?: MediaGridPreferences;
   player_audio_settings?: {
     volume: number;
     muted: boolean;
   };
   player_subtitle_style?: SubtitleStyleSettings;
+}
+
+export type MediaCardOrientation = 'portrait' | 'landscape';
+
+export interface UiPreferences {
+  card_orientation_by_type: Partial<Record<MediaType, MediaCardOrientation>>;
 }
 
 export interface SubtitleStyleSettings {

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MediaCard } from '../components/MediaCard';
 import { AddMediaModal } from '../components/AddMediaModal';
-import { Media, MediaGridGroupField, MediaGridPreferences, MediaGridSortField, MediaType } from '../types/media';
+import { Media, MediaCardOrientation, MediaGridGroupField, MediaGridPreferences, MediaGridSortField, MediaType } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { ArrowDownUp, Search, Filter, Plus, X, RotateCcw, ChevronRight} from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
+import { getLastWatchedEpisodeArtwork } from '../helper/episodeProgress';
 
 const DEFAULT_GRID_PREFERENCES: MediaGridPreferences = {
   sortBy: 'created_at',
@@ -99,6 +100,8 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const [mediaList, setMediaList] = useState<Media[]>([]);
   const [stateByMediaId, setStateByMediaId] = useState<Record<string, Awaited<ReturnType<typeof dbService.getMediaState>>>>({});
   const [scoreByMediaId, setScoreByMediaId] = useState<Record<string, number | undefined>>({});
+  const [landscapeImageByMediaId, setLandscapeImageByMediaId] = useState<Record<string, string | undefined>>({});
+  const [orientationByType, setOrientationByType] = useState<Partial<Record<MediaType, MediaCardOrientation>>>({});
   const [gridPreferences, setGridPreferences] = useState<MediaGridPreferences>(DEFAULT_GRID_PREFERENCES);
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
   const [pullOffset, setPullOffset] = useState<number>(0);
@@ -125,6 +128,12 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
     setMediaList(media);
     setStateByMediaId(Object.fromEntries(states.map(state => [state.media_id, state])));
     setScoreByMediaId(Object.fromEntries(media.map((item, index) => [item.id, histories[index][0]?.score])));
+    setLandscapeImageByMediaId(Object.fromEntries(media.map((item, index) => [
+      item.id,
+      item.type === 'TV Series'
+        ? getLastWatchedEpisodeArtwork(item, histories[index]).still || item.backdrop
+        : item.backdrop
+    ])));
   };
   
 
@@ -133,6 +142,14 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
     void refreshList();
     void dbService.getSettings().then(settings => {
       const saved = settings.media_grid_preferences;
+      const savedOrientations = isRecord(settings.ui_preferences?.card_orientation_by_type)
+        ? settings.ui_preferences.card_orientation_by_type
+        : {};
+      setOrientationByType({
+        Film: savedOrientations.Film === 'landscape' ? 'landscape' : 'portrait',
+        'TV Series': savedOrientations['TV Series'] === 'landscape' ? 'landscape' : 'portrait',
+        VideoGame: savedOrientations.VideoGame === 'landscape' ? 'landscape' : 'portrait'
+      });
       if (isRecord(saved) && !preferenceChangedBeforeLoadRef.current) {
         setGridPreferences({
           sortBy: typeof saved.sortBy === 'string' && SORT_FIELDS.has(saved.sortBy as MediaGridSortField)
@@ -152,8 +169,8 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
       preferencesLoadedRef.current = true;
     }).catch(error => {
       preferencesLoadedRef.current = true;
-      setPreferenceError('Could not load sorting and grouping preferences.');
-      console.error('Failed to load media grid preferences:', error);
+      setPreferenceError('Could not load view preferences.');
+      console.error('Failed to load media view preferences:', error);
     });
     window.addEventListener('library-scanned', handleScanned);
     return () => {
@@ -512,18 +529,35 @@ useEffect(() => {
       .map(([key, group]) => ({ key, label: group.label, items: group.items }));
   })();
 
-  const renderGroupItems = (group: (typeof groupedItems)[number]) => (
-    <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5 mt-2">
+  const cardOrientation = typeFilter ? orientationByType[typeFilter] || 'portrait' : 'portrait';
+  const useLandscapeCards = isDesktop && cardOrientation === 'landscape';
+  const renderGroupItems = (group: (typeof groupedItems)[number], horizontal = false) => (
+    <div className={horizontal
+      ? 'mt-2 flex gap-3 overflow-x-auto pb-4 pt-1 scrollbar-none'
+      : 'mt-2 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5'
+    }>
       {group.items.map(media => (
-        <MediaCard
+        <div
           key={`${group.key}:${media.id}`}
-          media={media}
-          state={stateByMediaId[media.id]}
-          score={scoreByMediaId[media.id]}
-          onClick={onSelectMedia}
-          onPreviewStart={onPreviewStart}
-          onPreviewEnd={onPreviewEnd}
-        />
+          className={horizontal
+            ? `shrink-0 ${useLandscapeCards
+              ? 'w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(30%-12px)] lg:w-[calc(25%-12px)] xl:w-[calc(22%-12px)]'
+              : 'w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(15%-12px)]'
+            }`
+            : undefined
+          }
+        >
+          <MediaCard
+            media={media}
+            state={stateByMediaId[media.id]}
+            score={scoreByMediaId[media.id]}
+            landscape={useLandscapeCards}
+            landscapeImage={landscapeImageByMediaId[media.id]}
+            onClick={onSelectMedia}
+            onPreviewStart={onPreviewStart}
+            onPreviewEnd={onPreviewEnd}
+          />
+        </div>
       ))}
     </div>
   );
@@ -921,7 +955,7 @@ useEffect(() => {
                 <span className="text-xs font-normal text-gray-500">{group.items.length}</span>
               </div>
             </summary>
-          {renderGroupItems(group)}
+          {renderGroupItems(group, true)}
         </details>
       ) : (
         <div key={group.key} className="mb-6">

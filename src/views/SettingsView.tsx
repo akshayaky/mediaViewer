@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { dbService } from '../services/DatabaseService';
 import { localScannerService, isTauri } from '../services/LocalScannerService';
 import { invoke } from '@tauri-apps/api/core';
-import { AppSettings, MediaType } from '../types/media';
+import { AppSettings, MediaCardOrientation, MediaType, UiPreferences } from '../types/media';
 import { useNotionImporter } from '../hooks/useNotionImporter';
 import { useNotionSync } from '../hooks/useNotionSync';
 import { useLibraryScanner } from '../hooks/useLibraryScanner';
@@ -54,6 +54,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
   const [playerMode, setPlayerMode] = useState<'builtin' | 'os_default'>(settings.player_mode || 'builtin');
   const [autoplayNext, setAutoplayNext] = useState<boolean>(settings.autoplay_next_episode !== false);
   const [sidebarHideEnabled, setSidebarHideEnabled] = useState(settings.sidebar_hide_enabled !== false);
+  const [uiPreferences, setUiPreferences] = useState<UiPreferences>({
+    card_orientation_by_type: {
+      Film: 'portrait',
+      'TV Series': 'portrait',
+      VideoGame: 'portrait'
+    }
+  });
 
   const [savedMessage, setSavedMessage] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -117,6 +124,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       setPlayerMode(nextSettings.player_mode || 'builtin');
       setAutoplayNext(nextSettings.autoplay_next_episode !== false);
       setSidebarHideEnabled(nextSettings.sidebar_hide_enabled !== false);
+      setUiPreferences({
+        card_orientation_by_type: {
+          Film: nextSettings.ui_preferences?.card_orientation_by_type?.Film === 'landscape' ? 'landscape' : 'portrait',
+          'TV Series': nextSettings.ui_preferences?.card_orientation_by_type?.['TV Series'] === 'landscape' ? 'landscape' : 'portrait',
+          VideoGame: nextSettings.ui_preferences?.card_orientation_by_type?.VideoGame === 'landscape' ? 'landscape' : 'portrait'
+        }
+      });
     }).catch(err => console.error('Failed to load settings:', err));
   }, []);
 
@@ -161,11 +175,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       dbService.saveSetting('country_region', region.trim()),
       dbService.saveSetting('player_mode', playerMode),
       dbService.saveSetting('autoplay_next_episode', autoplayNext),
-      dbService.saveSetting('sidebar_hide_enabled', sidebarHideEnabled),
       saveNotionConfig(tokenInput, selectedDbId, notionApiMapping)
     ]);
     setSavedMessage('API credentials and preferences saved locally in SQLite.');
     setTimeout(() => setSavedMessage(''), 3000);
+  };
+
+  const handleCardOrientationChange = async (type: MediaType, orientation: MediaCardOrientation) => {
+    const nextPreferences: UiPreferences = {
+      ...uiPreferences,
+      card_orientation_by_type: {
+        ...uiPreferences.card_orientation_by_type,
+        [type]: orientation
+      }
+    };
+    setUiPreferences(nextPreferences);
+    try {
+      await dbService.saveSetting('ui_preferences', nextPreferences);
+      setSavedMessage('UI preferences saved.');
+      setTimeout(() => setSavedMessage(''), 3000);
+    } catch (error) {
+      console.error('Failed to save UI preferences:', error);
+      setSavedMessage('Could not save UI preferences.');
+      setTimeout(() => setSavedMessage(''), 3000);
+    }
   };
 
   const handleClearMediaType = async (type: MediaType, label: string) => {
@@ -1037,6 +1070,61 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
         {deleteError && <p role="alert" className="text-xs text-[#E27D12]">{deleteError}</p>}
       </section>
 
+      {/* UI Preferences Section */}
+      <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
+        <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+          <Settings className="w-5 h-5 text-[#E27D12]" />
+          <span>UI</span>
+        </h2>
+        <p className="text-xs text-gray-400">
+          Configure desktop navigation and card layouts. Card orientation does not affect mobile layouts.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-3">
+            <label className="flex items-center space-x-2 cursor-pointer text-gray-300 hover:text-white">
+              <input
+                type="checkbox"
+                checked={sidebarHideEnabled}
+                onChange={async event => {
+                  const enabled = event.target.checked;
+                  setSidebarHideEnabled(enabled);
+                  try {
+                    await dbService.saveSetting('sidebar_hide_enabled', enabled);
+                  } catch (error) {
+                    console.error('Failed to save sidebar visibility preference:', error);
+                    setSavedMessage('Could not save UI preferences.');
+                  }
+                }}
+                className="rounded text-[#E27D12] focus:ring-[#E27D12]"
+              />
+              <span>Hide sidebar in Detail View (show on left edge hover)</span>
+            </label>
+          </div>
+
+          {isDesktop && ([
+            { type: 'Film', label: 'Movies' },
+            { type: 'TV Series', label: 'TV Shows' },
+            { type: 'VideoGame', label: 'Games' }
+          ] as const).map(section => (
+            <div key={section.type} className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-2">
+              <label htmlFor={`card-orientation-${section.type}`} className="text-xs text-gray-200 font-bold block">
+                {section.label} cards
+              </label>
+              <select
+                id={`card-orientation-${section.type}`}
+                value={uiPreferences.card_orientation_by_type[section.type] || 'portrait'}
+                onChange={event => void handleCardOrientationChange(section.type, event.target.value as MediaCardOrientation)}
+                className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg p-2 text-xs text-gray-100"
+              >
+                <option value="portrait">Portrait (poster)</option>
+                <option value="landscape">Landscape (backdrop)</option>
+              </select>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Playback Preferences Section */}
       <section className="bg-[#14161f] p-6 rounded-2xl border border-[#232736] space-y-4">
         <h2 className="text-lg font-bold text-white flex items-center space-x-2">
@@ -1097,23 +1185,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                 className="rounded text-[#E27D12] focus:ring-[#E27D12]"
               />
               <span>Automatically play next episode on completion with countdown</span>
-            </label>
-          </div>
-
-          <div className="bg-[#1a1d29] p-4 rounded-xl border border-[#2d3145] space-y-3">
-            <label className="text-xs text-gray-200 font-bold block">UI & Navigation</label>
-            <label className="flex items-center space-x-2 cursor-pointer text-gray-300 hover:text-white pt-1">
-              <input
-                type="checkbox"
-                checked={sidebarHideEnabled}
-                onChange={(e) => {
-                  const val = e.target.checked;
-                  setSidebarHideEnabled(val);
-                  dbService.saveSetting('sidebar_hide_enabled', val);
-                }}
-                className="rounded text-[#E27D12] focus:ring-[#E27D12]"
-              />
-              <span>Hide sidebar in Detail View (show on left edge hover)</span>
             </label>
           </div>
 

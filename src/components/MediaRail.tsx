@@ -2,19 +2,30 @@ import React, { useEffect, useState } from 'react';
 import { MediaCard } from './MediaCard';
 import { Media, MediaHistory, MediaState } from '../types/media';
 import { dbService } from '../services/DatabaseService';
+import { getLastWatchedEpisodeArtwork } from '../helper/episodeProgress';
 
 interface MediaRailProps {
   title: string;
   subtitle?: string;
   items: Media[];
   onSelectMedia: (media: Media) => void;
+  landscapeCards?: boolean;
   onPreviewStart?: (media: Media, rect: DOMRect) => void;
   onPreviewEnd?: () => void;
 }
 
-export const MediaRail: React.FC<MediaRailProps> = ({ title, subtitle, items, onSelectMedia, onPreviewStart, onPreviewEnd }) => {
+export const MediaRail: React.FC<MediaRailProps> = ({
+  title,
+  subtitle,
+  items,
+  onSelectMedia,
+  landscapeCards = false,
+  onPreviewStart,
+  onPreviewEnd
+}) => {
   const [states, setStates] = useState<Record<string, MediaState>>({});
   const [scores, setScores] = useState<Record<string, number | undefined>>({});
+  const [images, setImages] = useState<Record<string, string | undefined>>({});
 
   useEffect(() => {
     let isMounted = true;
@@ -23,11 +34,16 @@ export const MediaRail: React.FC<MediaRailProps> = ({ title, subtitle, items, on
         dbService.getMediaState(media.id),
         dbService.getHistoryForMedia(media.id)
       ]);
-      return [media.id, state, (history[0] as MediaHistory | undefined)?.score] as const;
+      const lastEpisodeStill = getLastWatchedEpisodeArtwork(media, history).still;
+      const image = media.type === 'TV Series'
+        ? lastEpisodeStill || media.backdrop
+        : media.backdrop;
+      return [media.id, state, (history[0] as MediaHistory | undefined)?.score, image] as const;
     })).then(results => {
       if (!isMounted) return;
       setStates(Object.fromEntries(results.map(([id, state]) => [id, state])));
       setScores(Object.fromEntries(results.map(([id, , score]) => [id, score])));
+      setImages(Object.fromEntries(results.map(([id, , , image]) => [id, image])));
     }).catch(err => console.error('Failed to load media rail data:', err));
     return () => {
       isMounted = false;
@@ -47,11 +63,17 @@ export const MediaRail: React.FC<MediaRailProps> = ({ title, subtitle, items, on
         {items.map(media => {
           return (
             <div key={media.id} 
-              className="w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(15%-12px)] shrink-0">
+              className={`shrink-0 ${
+                landscapeCards
+                  ? 'w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(30%-12px)] lg:w-[calc(25%-12px)] xl:w-[calc(22%-12px)]'
+                  : 'w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(15%-12px)]'
+              }`}>
               <MediaCard
                 media={media}
                 state={states[media.id]}
                 score={scores[media.id]}
+                landscape={landscapeCards}
+                landscapeImage={images[media.id]}
                 onClick={onSelectMedia}
                 onPreviewStart={onPreviewStart}
                 onPreviewEnd={onPreviewEnd}
