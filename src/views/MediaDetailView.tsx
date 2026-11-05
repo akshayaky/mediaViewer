@@ -1785,12 +1785,12 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             setActivePlayerSession(null);
             refreshLocalFiles();
           }}
-          onEpisodeChange={(nextFile, s, ep, title) => {
+          onEpisodeChange={(nextFile, s, ep, title, position) => {
             setActivePlayerSession({
               file: nextFile,
               season: s || nextFile.season || 1,
               episode: ep || nextFile.episode || 1,
-              position: 0,
+              position: position || 0,
               title: title || nextFile.parsed_title || nextFile.filename
             });
             refreshLocalFiles();

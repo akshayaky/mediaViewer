@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Media, LocalFile, SubtitleStyleSettings } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { subtitleService, SubtitleTrack } from '../services/SubtitleService';
@@ -133,7 +133,7 @@ export interface VideoPlayerModalProps {
   sideBarIsCollapsed: boolean;
   sidebarHideEnabled?: boolean;
   onClose: () => void;
-  onEpisodeChange?: (nextFile: LocalFile, season?: number, episode?: number, title?: string) => void;
+  onEpisodeChange?: (nextFile: LocalFile, season?: number, episode?: number, title?: string, position?: number) => void;
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
@@ -242,7 +242,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     return null;
   }, [media, seasonNumber, episodeNumber, allLocalFiles]);
 
-  const nextEpInfo = getNextEpisodeFile();
+  const nextEpInfo = useMemo(() => getNextEpisodeFile(), [getNextEpisodeFile]);
   const pickerSeasons = Array.from(new Set(
     allLocalFiles
       .filter(file => file.exists && file.season !== undefined && file.episode !== undefined)
@@ -645,7 +645,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     discoverEmbeddedSubtitleTracks();
     setVideoMetadataLoaded(true);
 
-    if (initialPosition > 0 && initialPosition < video.duration - 10) {
+    if (initialPosition > 0 && initialPosition < video.duration) {
       video.currentTime = initialPosition;
     }
 
@@ -675,6 +675,32 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       is_completed: isCompleted
     });
   }, [media.id, media.type, seasonNumber, episodeNumber]);
+
+  const switchEpisode = useCallback(async (file: LocalFile, season: number, episode: number, title: string) => {
+    if (!onEpisodeChange) return;
+
+    const video = videoRef.current;
+    if (video && video.duration > 0) {
+      saveProgress(video.currentTime, video.duration);
+    }
+
+    try {
+      const progress = await dbService.getPlaybackProgress(media.id, season, episode);
+      const currentEpisodePosition = video && season === seasonNumber && episode === episodeNumber
+        ? video.currentTime
+        : undefined;
+      onEpisodeChange(
+        file,
+        season,
+        episode,
+        title,
+        currentEpisodePosition ?? (progress && !progress.is_completed ? progress.position_seconds : 0)
+      );
+    } catch (progressError) {
+      console.error('Failed to load episode playback progress:', progressError);
+      setError('Could not load playback progress for this episode.');
+    }
+  }, [episodeNumber, media.id, onEpisodeChange, saveProgress, seasonNumber]);
 
   // Periodic Progress Saving
   useEffect(() => {
@@ -785,7 +811,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       preservePointerDuringTransition();
       if (nextEpInfo && onEpisodeChange) {
         setCountdownCancelled(false);
-        onEpisodeChange(
+        void switchEpisode(
           nextEpInfo.file,
           nextEpInfo.season,
           nextEpInfo.episode,
@@ -806,7 +832,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     return () => {
       if (countdownIntervalRef.current) clearTimeout(countdownIntervalRef.current);
     };
-  }, [showNextCountdown, countdownSeconds, isPlaying]);
+  }, [showNextCountdown, countdownSeconds, isPlaying, nextEpInfo, switchEpisode]);
 
   // Play / Pause Toggle
   const togglePlay = () => {
@@ -1289,7 +1315,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                       key={file.id}
                       type="button"
                       onClick={() => {
-                        onEpisodeChange?.(file, season, episode, getEpisodeTitle(file, season, episode));
+                        void switchEpisode(file, season, episode, getEpisodeTitle(file, season, episode));
                         setIsEpisodePickerOpen(false);
                       }}
                       className={`flex min-w-0 flex-[0_0_calc(33.333%_-_0.167rem)] flex-col gap-1 rounded-lg p-1 text-left transition-colors sidebar:w-full sidebar:flex-none sidebar:flex-row sidebar:gap-3 sidebar:rounded-xl sidebar:p-2 ${
@@ -1397,14 +1423,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               onClick={() => {
                 if (countdownIntervalRef.current) clearTimeout(countdownIntervalRef.current);
                 setShowNextCountdown(false);
-                if (onEpisodeChange) {
-                  onEpisodeChange(
-                    nextEpInfo.file,
-                    nextEpInfo.season,
-                    nextEpInfo.episode,
-                    getEpisodeTitle(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode)
-                  );
-                }
+                void switchEpisode(
+                  nextEpInfo.file,
+                  nextEpInfo.season,
+                  nextEpInfo.episode,
+                  getEpisodeTitle(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode)
+                );
               }}
               className="px-4 py-1.5 rounded-xl bg-[#E27D12] hover:bg-[#E27D12] text-white text-xs font-bold shadow-md cursor-pointer flex items-center space-x-1"
             >
@@ -1469,14 +1493,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             {media.type === 'TV Series' && nextEpInfo && (
               <button
                 onClick={() => {
-                  if (onEpisodeChange) {
-                    onEpisodeChange(
-                      nextEpInfo.file,
-                      nextEpInfo.season,
-                      nextEpInfo.episode,
-                      getEpisodeTitle(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode)
-                    );
-                  }
+                  void switchEpisode(
+                    nextEpInfo.file,
+                    nextEpInfo.season,
+                    nextEpInfo.episode,
+                    getEpisodeTitle(nextEpInfo.file, nextEpInfo.season, nextEpInfo.episode)
+                  );
                 }}
                 className="group p-2 text-gray-300 hover:text-white cursor-pointer"
                 title={`Next Episode (S${String(nextEpInfo.season).padStart(2, '0')}E${String(nextEpInfo.episode).padStart(2, '0')})`}
