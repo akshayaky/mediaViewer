@@ -133,6 +133,7 @@ export interface VideoPlayerModalProps {
   sideBarIsCollapsed: boolean;
   sidebarHideEnabled?: boolean;
   onClose: () => void;
+  onPlaybackCompleted?: () => Promise<void>;
   onEpisodeChange?: (nextFile: LocalFile, season?: number, episode?: number, title?: string, position?: number) => void;
 }
 
@@ -147,6 +148,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   sideBarIsCollapsed = false,
   sidebarHideEnabled = false,
   onClose,
+  onPlaybackCompleted,
   onEpisodeChange
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -210,6 +212,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   // Save Progress Throttle
   const lastSavedPosRef = useRef<number>(0);
+  const completionNotificationKeyRef = useRef<string | null>(null);
 
   const volumeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -663,6 +666,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     lastSavedPosRef.current = pos;
     const now = new Date().toISOString();
     const isCompleted = forceCompleted || (pos / dur >= 0.9);
+    const completionKey = `${media.id}_${seasonNumber}_${episodeNumber}`;
+    const shouldNotifyCompletion = isCompleted && completionNotificationKeyRef.current !== completionKey;
+    if (shouldNotifyCompletion) completionNotificationKeyRef.current = completionKey;
 
     void dbService.savePlaybackProgress({
       id: `prog_${media.id}_${seasonNumber}_${episodeNumber}`,
@@ -673,8 +679,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       duration_seconds: dur,
       updated_at: now,
       is_completed: isCompleted
+    }).then(async () => {
+      if (shouldNotifyCompletion) await onPlaybackCompleted?.();
+    }).catch(error => {
+      if (shouldNotifyCompletion && completionNotificationKeyRef.current === completionKey) {
+        completionNotificationKeyRef.current = null;
+      }
+      console.error('Failed to save playback progress or refresh episode history:', error);
     });
-  }, [media.id, media.type, seasonNumber, episodeNumber]);
+  }, [media.id, media.type, seasonNumber, episodeNumber, onPlaybackCompleted]);
 
   const switchEpisode = useCallback(async (file: LocalFile, season: number, episode: number, title: string) => {
     if (!onEpisodeChange) return;

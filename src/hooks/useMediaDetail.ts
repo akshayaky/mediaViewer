@@ -219,14 +219,14 @@ export function useMediaDetail(initialMedia: Media) {
     setAllProgress(await dbService.getAllPlaybackProgressForMedia(currentMedia.id));
   };
 
-  const refreshHistoryAndState = async () => {
+  const refreshHistoryAndState = useCallback(async () => {
     const [history, mediaState] = await Promise.all([
       dbService.getHistoryForMedia(currentMedia.id),
       dbService.getMediaState(currentMedia.id)
     ]);
     setHistoryList(history);
     setState(mediaState);
-  };
+  }, [currentMedia.id]);
 
   const handleManualMetadataRefresh = async () => {
     setIsRefreshingMetadata(true);
@@ -572,6 +572,7 @@ export function useMediaDetail(initialMedia: Media) {
     getResumeTarget,
     toggleEpisodeWatchStatus,
     linkFileToEpisode,
-    refreshLocalFiles
+    refreshLocalFiles,
+    refreshHistoryAndState
   };
 }

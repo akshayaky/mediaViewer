@@ -138,7 +138,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     getResumeTarget,
     toggleEpisodeWatchStatus,
     linkFileToEpisode,
-    refreshLocalFiles
+    refreshLocalFiles,
+    refreshHistoryAndState
   } = useMediaDetail(initialMedia);
 
   const [playerModeSetting, setPlayerModeSetting] = useState<'builtin' | 'os_default'>('builtin');
@@ -1783,8 +1784,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           sidebarHideEnabled={sidebarHideEnabled}
           onClose={() => {
             setActivePlayerSession(null);
-            refreshLocalFiles();
+            void Promise.all([refreshLocalFiles(), refreshHistoryAndState()])
+              .catch(error => console.error('Failed to refresh media details after playback:', error));
           }}
+          onPlaybackCompleted={refreshHistoryAndState}
           onEpisodeChange={(nextFile, s, ep, title, position) => {
             setActivePlayerSession({
               file: nextFile,
