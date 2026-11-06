@@ -10,7 +10,7 @@ interface MediaRailProps {
   title: string;
   subtitle?: string;
   items: Media[];
-  onSelectMedia: (media: Media) => void;
+  onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
   cardOrientation?: MediaCardOrientation;
   cardOrientationByType?: Partial<Record<MediaType, MediaCardOrientation>>;
   onPreviewStart?: (media: Media, rect: DOMRect) => void;

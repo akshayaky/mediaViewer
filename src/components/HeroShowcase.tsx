@@ -6,7 +6,7 @@ import { getAccentRgb } from '../helper/mediaDetailTheme';
 
 interface HeroShowcaseProps {
   media: Media;
-  onSelectMedia: (media: Media) => void;
+  onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
   accentColor: string;
   contentPaddingLeft: string;
 }
@@ -19,6 +19,10 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
 }) => {
   const [latestHistory, setLatestHistory] = useState<MediaHistory>();
   const [state, setState] = useState<MediaState>();
+  const handleSelectFeaturedMedia = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const heroRect = event.currentTarget.closest('.hero-showcase')?.getBoundingClientRect();
+    onSelectMedia(media, heroRect || event.currentTarget.getBoundingClientRect());
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -163,7 +167,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
         {/* Action Buttons */}
         <div className="flex items-center space-x-3 pt-2">
           <button
-            onClick={() => onSelectMedia(media)}
+            onClick={handleSelectFeaturedMedia}
             className="flex items-center space-x-2 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all transform hover:-translate-y-0.5 cursor-pointer"
             style={{
               backgroundColor: 'var(--hero-accent)',
@@ -174,7 +178,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
             <span>View Details</span>
           </button>
           <button
-            onClick={() => onSelectMedia(media)}
+            onClick={handleSelectFeaturedMedia}
             className="flex items-center space-x-2 bg-gray-800/80 hover:bg-gray-700/80 text-gray-200 font-semibold text-sm px-4 py-2.5 rounded-xl border border-gray-700 backdrop-blur-md transition-all cursor-pointer"
           >
             <Info className="w-4 h-4" />

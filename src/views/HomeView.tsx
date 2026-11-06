@@ -8,7 +8,7 @@ import { useDominantColor } from '../helper/useDominantColour';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
 interface HomeViewProps {
-  onSelectMedia: (media: Media) => void;
+  onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
   onAccentColorChange: (color?: string) => void;
   isCollapsed?: boolean;
 }

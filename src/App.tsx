@@ -54,6 +54,7 @@ export function App() {
   const [detailReturnTransition, setDetailReturnTransition] = useState<DetailReturnTransition | null>(null);
   const mainViewRef = useRef<HTMLElement>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
+  const homeScrollRef = useRef<HTMLDivElement>(null);
   const homeScrollTop = useRef(0);
   const detailOrigin = useRef<{ centerX: number; centerY: number; radius: number } | null>(null);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,9 +191,8 @@ export function App() {
       detailOrigin.current = null;
     }
 
-    if (activeTab === 'home' && !selectedMedia && mainViewRef.current) {
-      homeScrollTop.current = mainViewRef.current.scrollTop;
-      mainViewRef.current.scrollTop = 0;
+    if (activeTab === 'home' && !selectedMedia && homeScrollRef.current) {
+      homeScrollTop.current = homeScrollRef.current.scrollTop;
     }
 
     setSelectedMedia(media);
@@ -236,7 +236,7 @@ export function App() {
 
   const handleBackToTab = () => {
     const origin = detailOrigin.current;
-    if (origin && ['movies', 'tv', 'games'].includes(activeTab)) {
+    if (origin && ['home', 'movies', 'tv', 'games'].includes(activeTab)) {
       clearTransitionTimer();
       if (returnTransitionTimer.current) {
         clearTimeout(returnTransitionTimer.current);
@@ -255,18 +255,23 @@ export function App() {
         setDetailReturnTransition(current => current ? { ...current, closing: true } : current);
       });
       returnTransitionTimer.current = setTimeout(() => {
+        if (activeTab === 'home' && homeScrollRef.current) {
+          homeScrollRef.current.scrollTop = homeScrollTop.current;
+        }
         setSelectedMedia(null);
         setCardTransition(null);
         setDetailReturnTransition(null);
         detailOrigin.current = null;
-        window.dispatchEvent(new CustomEvent('library-scanned'));
+        if (activeTab !== 'home') {
+          window.dispatchEvent(new CustomEvent('library-scanned'));
+        }
         returnTransitionTimer.current = null;
       }, 400);
       return;
     }
 
-    if (activeTab === 'home' && mainViewRef.current) {
-      mainViewRef.current.scrollTop = homeScrollTop.current;
+    if (activeTab === 'home' && homeScrollRef.current) {
+      homeScrollRef.current.scrollTop = homeScrollTop.current;
     }
     setSelectedMedia(null);
     setSelectedAccentColor(undefined);
@@ -386,6 +391,14 @@ export function App() {
     }
   };
 
+  const renderHomeView = () => (
+    <HomeView
+      onSelectMedia={handleSelectMedia}
+      onAccentColorChange={setSelectedAccentColor}
+      isCollapsed={isCollapsed}
+    />
+  );
+
   const renderActiveView = () => {
     if (selectedMedia) {
       return renderDetailView();
@@ -393,13 +406,7 @@ export function App() {
 
     switch (activeTab) {
       case 'home':
-        return (
-          <HomeView
-            onSelectMedia={handleSelectMedia}
-            onAccentColorChange={setSelectedAccentColor}
-            isCollapsed={isCollapsed}
-          />
-        );
+        return renderHomeView();
       case 'movies':
       case 'tv':
       case 'games':
@@ -437,9 +444,21 @@ export function App() {
     );
   };
 
+  const completeDetailOpening = () => {
+    if (cardTransition?.phase !== 'commit') return;
+
+    clearTransitionTimer();
+    if (transitionFrame.current !== null) {
+      cancelAnimationFrame(transitionFrame.current);
+      transitionFrame.current = null;
+    }
+    setCardTransition(current => current?.phase === 'commit' ? null : current);
+  };
+
   const hasUnderlyingGrid = Boolean(
     selectedMedia && ['movies', 'tv', 'games'].includes(activeTab)
   );
+  const hasUnderlyingHome = Boolean(selectedMedia && activeTab === 'home');
   const isGridTab = ['movies', 'tv', 'games'].includes(activeTab);
 
   const pageAccentColor = selectedMedia
@@ -465,7 +484,7 @@ export function App() {
       <main
         ref={mainViewRef}
         className={`relative isolate flex-1 transition-colors duration-350 ${
-          isGridTab ? 'overflow-hidden' : 'overflow-y-auto'
+          isGridTab || activeTab === 'home' ? 'overflow-hidden' : 'overflow-y-auto'
         }`}
         style={{
           backgroundColor: !selectedMedia && activeTab === 'home'
@@ -498,21 +517,27 @@ export function App() {
           <div ref={gridScrollRef} className="absolute inset-0 z-0 overflow-y-auto">
             {hasUnderlyingGrid ? renderGridView() : renderActiveView()}
           </div>
+        ) : activeTab === 'home' ? (
+          <div ref={homeScrollRef} className="absolute inset-0 z-0 overflow-y-auto">
+            {renderHomeView()}
+          </div>
         ) : (
           <div className="relative z-0">{renderActiveView()}</div>
         )}
-        {hasUnderlyingGrid && (
+        {(hasUnderlyingGrid || hasUnderlyingHome) && (
           <div
             className="mdv-detail-scroll-container absolute inset-0 z-10 overflow-y-auto"
-            onScroll={() => {
-              if (cardTransition?.phase !== 'commit') return;
+            onScroll={completeDetailOpening}
+            onPointerDown={event => {
+              const container = event.currentTarget;
+              const rect = container.getBoundingClientRect();
+              const gutterWidth = Math.max(container.offsetWidth - container.clientWidth, 12);
+              const isRtl = getComputedStyle(container).direction === 'rtl';
+              const onScrollbar = isRtl
+                ? event.clientX <= rect.left + gutterWidth
+                : event.clientX >= rect.right - gutterWidth;
 
-              clearTransitionTimer();
-              if (transitionFrame.current !== null) {
-                cancelAnimationFrame(transitionFrame.current);
-                transitionFrame.current = null;
-              }
-              setCardTransition(current => current?.phase === 'commit' ? null : current);
+              if (onScrollbar) completeDetailOpening();
             }}
             style={{
               backgroundColor: pageAccentColor || selectedMedia?.accent_color || '#423e3f',
