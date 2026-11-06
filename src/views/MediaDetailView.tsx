@@ -58,17 +58,6 @@ interface MediaDetailViewProps {
   onSelectMedia?: (media: Media) => void;
   onAccentColorChange?: (color: string) => void;
   accentColorOverride?: string;
-  cardTransition?: {
-    mediaId: string;
-    centerX: number;
-    centerY: number;
-    detailCenterX: number;
-    detailCenterY: number;
-    radius: number;
-    phase: 'preview' | 'reverse' | 'commit' | 'reveal';
-    entered: boolean;
-    color: string;
-  };
 }
 
 interface DominantColorExtractorProps {
@@ -112,7 +101,7 @@ function getFileQualityLabel(file: LocalFile): string {
   return 'SD / Default';
 }
 
-export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isCollapsed, onSelectMedia, onAccentColorChange, cardTransition, accentColorOverride }) => {
+export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isCollapsed, onSelectMedia, onAccentColorChange, accentColorOverride }) => {
   const {
     currentMedia,
     historyList,
@@ -333,7 +322,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
   const detailAccentColor = accentColorForPage || accentColorOverride;
   const theme = getMediaTheme(detailAccentColor);
-  const isTransitioningBackground = Boolean(cardTransition && cardTransition.phase !== 'reveal');
 
   // Season accordion state
   const [expandedSeason, setExpandedSeason] = useState<number | null>(1);
@@ -512,15 +500,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       data-tone={theme.tone}
       style={{
         ...theme.cssVars,
-        backgroundColor: detailAccentColor || currentMedia.accent_color || '#423e3f',
-        clipPath: cardTransition && isTransitioningBackground
-          ? `circle(${cardTransition.phase !== 'reverse' && cardTransition.entered ? cardTransition.radius : 0}px at ${cardTransition.detailCenterX}px ${cardTransition.detailCenterY}px)`
-          : undefined,
-        transition: cardTransition?.phase === 'commit'
-          ? 'clip-path 710ms cubic-bezier(0.2, 0.8, 0.2, 1)'
-          : cardTransition?.phase === 'preview'
-            ? 'clip-path 115ms cubic-bezier(0.42, 0, 0.58, 1)'
-            : undefined,
+        backgroundColor: detailAccentColor || currentMedia.accent_color || '#423e3f'
       }}
     >
       {/* Pinned Backdrop */}

@@ -231,7 +231,7 @@ export function App() {
         setCardTransition(current => current?.mediaId === media.id ? null : current);
         transitionTimer.current = null;
       }, 70);
-    }, 2100);
+    }, 710);
   };
 
   const handleBackToTab = () => {
@@ -438,7 +438,6 @@ export function App() {
         onBack={handleBackToTab}
         isCollapsed={isCollapsed}
         onAccentColorChange={setSelectedAccentColor}
-        cardTransition={cardTransition?.mediaId === selectedMedia.id ? cardTransition : undefined}
         accentColorOverride={selectedAccentColor}
       />
     );
@@ -492,27 +491,6 @@ export function App() {
             : '#0c0d10'
         }}
       >
-        {cardTransition && (selectedMedia || activeTab !== 'home') && (
-          <div
-            key={cardTransition.mediaId}
-            aria-hidden="true"
-            className="pointer-events-none fixed inset-0 z-0 will-change-[clip-path,opacity]"
-            style={{
-              backgroundColor: cardTransition.color,
-              opacity: cardTransition.phase === 'preview'
-                ? cardTransition.entered ? 0.46 : 0
-                : cardTransition.phase === 'reveal' ? 0 : cardTransition.phase === 'commit' ? 1 : 0.46,
-              clipPath: `circle(${cardTransition.phase === 'reverse' || !cardTransition.entered ? 0 : cardTransition.radius}px at ${cardTransition.centerX}px ${cardTransition.centerY}px)`,
-              transition: cardTransition.phase === 'preview'
-                ? 'clip-path 1150ms cubic-bezier(0.42, 0, 0.58, 1), opacity 450ms cubic-bezier(0.42, 0, 0.58, 1)'
-                : cardTransition.phase === 'reverse'
-                ? 'clip-path 16000ms cubic-bezier(0.42, 0, 0.58, 1), opacity 1600000ms ease-in-out'
-                  : cardTransition.phase === 'commit'
-                    ? 'clip-path 2100ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 2100ms ease-in-out'
-                    : 'opacity 70ms ease-out'
-            }}
-          />
-        )}
         {isGridTab ? (
           <div ref={gridScrollRef} className="absolute inset-0 z-0 overflow-y-auto">
             {hasUnderlyingGrid ? renderGridView() : renderActiveView()}
