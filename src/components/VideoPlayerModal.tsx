@@ -208,6 +208,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   isEpisodePickerOpenRef.current = isEpisodePickerOpen;
   const [selectedPickerSeason, setSelectedPickerSeason] = useState(seasonNumber);
 
+  const episodeListRef = useRef<HTMLDivElement>(null);
+
   const togglePlayerPanel = (
     panel: 'episode' | 'speed' | 'subtitle' | 'subtitleStyle' | 'audio',
     isOpen: boolean
@@ -229,6 +231,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   useEffect(() => () => {
     if (playbackNoticeTimerRef.current) clearTimeout(playbackNoticeTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (isEpisodePickerOpen && episodeListRef.current) {
+      const activeElement = episodeListRef.current.querySelector('[data-current-episode="true"]');
+      if (activeElement) {
+        activeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }
+    }
+  }, [isEpisodePickerOpen, selectedPickerSeason]);
 
   // Next Episode Countdown state
   const [showNextCountdown, setShowNextCountdown] = useState<boolean>(false);
@@ -1368,7 +1379,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 ))}
               </nav>
 
-              <div className="min-h-0 min-w-0 flex flex-1 flex-row items-stretch gap-1 overflow-x-auto overflow-y-hidden overscroll-contain p-1.5 touch-pan-x min-[380px]:p-2 sidebar:flex-col sidebar:space-y-1 sidebar:overflow-x-hidden sidebar:overflow-y-auto sidebar:touch-pan-y sm:p-3">
+              <div 
+                ref={episodeListRef}
+                className="min-h-0 min-w-0 flex flex-1 flex-row items-stretch gap-1 overflow-x-auto overflow-y-hidden overscroll-contain p-1.5 touch-pan-x min-[380px]:p-2 sidebar:flex-col sidebar:space-y-1 sidebar:overflow-x-hidden sidebar:overflow-y-auto sidebar:touch-pan-y sm:p-3">
                 {allLocalFiles
                   .filter(file => file.exists && file.season === selectedPickerSeason && file.episode !== undefined)
                   .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0))
@@ -1382,6 +1395,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     <button
                       key={file.id}
                       type="button"
+                      data-current-episode={isCurrentEpisode}
                       onClick={() => {
                         void switchEpisode(file, season, episode, getEpisodeTitle(file, season, episode));
                         setIsEpisodePickerOpen(false);
