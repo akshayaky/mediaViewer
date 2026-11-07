@@ -4,6 +4,7 @@ export interface MetadataSearchResult {
   title: string;
   original_title?: string;
   release_year?: number;
+  language?: string;
   type: MediaType;
   description?: string;
   poster?: string;

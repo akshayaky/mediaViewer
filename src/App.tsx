@@ -7,6 +7,7 @@ import { WishlistView } from './views/WishlistView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
 import { UnmatchedInboxView } from './views/UnmatchedInboxView';
+import { UniversalSearchOverlay } from './components/UniversalSearchOverlay';
 import { dbService } from './services/DatabaseService';
 import { Media } from './types/media';
 
@@ -48,6 +49,10 @@ export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [selectedMedia, setSelectedMedia] = useState<Media | null>(null);
   const [selectedAccentColor, setSelectedAccentColor] = useState<string>();
+  const [homeAccentColor, setHomeAccentColor] = useState<string>();
+  const [isUniversalSearchOpen, setIsUniversalSearchOpen] = useState(false);
+  const [autoPlayFileId, setAutoPlayFileId] = useState<string | null>(null);
+  const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [cardTransition, setCardTransition] = useState<CardTransitionState | null>(null);
@@ -61,6 +66,11 @@ export function App() {
   const returnTransitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewStartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transitionFrame = useRef<number | null>(null);
+  const pageAccentColor = selectedMedia
+    ? selectedAccentColor || selectedMedia.accent_color
+    : activeTab === 'home'
+      ? homeAccentColor
+      : undefined;
 
   const clearTransitionTimer = () => {
     if (transitionTimer.current) {
@@ -128,7 +138,20 @@ export function App() {
     initApp();
   }, []);
 
+  useEffect(() => {
+    const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsUniversalSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalSearchShortcut);
+    return () => window.removeEventListener('keydown', handleGlobalSearchShortcut);
+  }, []);
+
   const handleSelectTab = (tab: NavTab) => {
+    setAutoPlayFileId(null);
+    setAutoPlayOnOpen(false);
     clearTransitionTimer();
     if (returnTransitionTimer.current) {
       clearTimeout(returnTransitionTimer.current);
@@ -235,6 +258,8 @@ export function App() {
   };
 
   const handleBackToTab = () => {
+    setAutoPlayFileId(null);
+    setAutoPlayOnOpen(false);
     const origin = detailOrigin.current;
     if (origin && ['home', 'movies', 'tv', 'games'].includes(activeTab)) {
       clearTransitionTimer();
@@ -279,15 +304,15 @@ export function App() {
 
   // Android / Browser Back Button & Popstate Handling
   useEffect(() => {
-    if (selectedAccentColor) {
-      document.documentElement.style.setProperty('--hero-accent', selectedAccentColor);
+    if (pageAccentColor) {
+      document.documentElement.style.setProperty('--hero-accent', pageAccentColor);
       // Use color-mix to create a lighter shade for hover
-      document.documentElement.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${selectedAccentColor}, white 20%)`);
+      document.documentElement.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${pageAccentColor}, white 20%)`);
     } else {
       document.documentElement.style.removeProperty('--hero-accent');
       document.documentElement.style.removeProperty('--hero-accent-light');
     }
-  }, [selectedAccentColor]);
+  }, [pageAccentColor]);
 
   useEffect(() => {
     // Push dummy history entry when opening detail or sheet/modal view
@@ -394,7 +419,7 @@ export function App() {
   const renderHomeView = () => (
     <HomeView
       onSelectMedia={handleSelectMedia}
-      onAccentColorChange={setSelectedAccentColor}
+    onAccentColorChange={setHomeAccentColor}
       isCollapsed={isCollapsed}
     />
   );
@@ -423,7 +448,7 @@ export function App() {
         return (
           <HomeView
             onSelectMedia={handleSelectMedia}
-            onAccentColorChange={setSelectedAccentColor}
+            onAccentColorChange={setHomeAccentColor}
           />
         );
     }
@@ -439,8 +464,20 @@ export function App() {
         isCollapsed={isCollapsed}
         onAccentColorChange={setSelectedAccentColor}
         accentColorOverride={selectedAccentColor}
+        autoPlayFileId={autoPlayFileId || undefined}
+        autoPlayOnOpen={autoPlayOnOpen}
+        onAutoPlayHandled={() => {
+          setAutoPlayFileId(null);
+          setAutoPlayOnOpen(false);
+        }}
       />
     );
+  };
+
+  const handleUniversalSearchOpenMedia = (media: Media, options?: { autoPlayFileId?: string; play?: boolean }) => {
+    setAutoPlayFileId(options?.autoPlayFileId || null);
+    setAutoPlayOnOpen(Boolean(options?.play));
+    handleSelectMedia(media);
   };
 
   const completeDetailOpening = () => {
@@ -459,12 +496,6 @@ export function App() {
   );
   const hasUnderlyingHome = Boolean(selectedMedia && activeTab === 'home');
   const isGridTab = ['movies', 'tv', 'games'].includes(activeTab);
-
-  const pageAccentColor = selectedMedia
-    ? selectedAccentColor || selectedMedia.accent_color
-    : activeTab === 'home'
-      ? selectedAccentColor
-      : undefined;
 
   return (
     <div className="flex h-screen bg-[#0c0d10] text-gray-100 font-sans overflow-hidden">
@@ -533,6 +564,11 @@ export function App() {
           </div>
         )}
       </main>
+      <UniversalSearchOverlay
+        isOpen={isUniversalSearchOpen}
+        onClose={() => setIsUniversalSearchOpen(false)}
+        onOpenMedia={handleUniversalSearchOpenMedia}
+      />
     </div>
   );
 }

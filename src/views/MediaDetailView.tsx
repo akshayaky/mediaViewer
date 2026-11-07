@@ -47,7 +47,6 @@ import {
   Sparkles,
   X,
   Check,
-  Info,
   Wallpaper
 } from 'lucide-react';
 
@@ -58,6 +57,9 @@ interface MediaDetailViewProps {
   onSelectMedia?: (media: Media) => void;
   onAccentColorChange?: (color: string) => void;
   accentColorOverride?: string;
+  autoPlayFileId?: string;
+  autoPlayOnOpen?: boolean;
+  onAutoPlayHandled?: () => void;
 }
 
 interface DominantColorExtractorProps {
@@ -101,7 +103,7 @@ function getFileQualityLabel(file: LocalFile): string {
   return 'SD / Default';
 }
 
-export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isCollapsed, onSelectMedia, onAccentColorChange, accentColorOverride }) => {
+export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isCollapsed, onSelectMedia, onAccentColorChange, accentColorOverride, autoPlayFileId, autoPlayOnOpen, onAutoPlayHandled }) => {
   const {
     currentMedia,
     historyList,
@@ -140,6 +142,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     position: number;
     title?: string;
   } | null>(null);
+  const handledAutoPlayKey = useRef<string | null>(null);
 
   useEffect(() => {
     dbService.getSettings().then(s => {
@@ -381,6 +384,24 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       });
     }
   };
+
+  useEffect(() => {
+    const autoPlayKey = autoPlayFileId || (autoPlayOnOpen ? 'resume' : null);
+    if (!autoPlayKey) {
+      handledAutoPlayKey.current = null;
+      return;
+    }
+    if (!localFiles.length || handledAutoPlayKey.current === autoPlayKey) return;
+    const file = autoPlayFileId ? localFiles.find(localFile => localFile.id === autoPlayFileId) : undefined;
+    if (autoPlayFileId && !file) return;
+    handledAutoPlayKey.current = autoPlayKey;
+    if (autoPlayFileId) {
+      if (file?.exists) void handleTriggerPlay(file);
+    } else {
+      void handleTriggerPlay();
+    }
+    onAutoPlayHandled?.();
+  }, [autoPlayFileId, autoPlayOnOpen, localFiles, onAutoPlayHandled, handleTriggerPlay]);
 
   useEffect(() => {
     const playButtonRow = playButtonRowRef.current;

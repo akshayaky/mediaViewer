@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Media } from '../types/media';
 import { MetadataSearchOptions, MetadataSearchResult } from '../providers/interfaces';
 import { tmdbProvider } from '../providers/TMDBProvider';
@@ -9,6 +9,8 @@ import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { Search, Loader2, X, RefreshCw, CheckCircle2, Film, Tv, Gamepad2 } from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
 import { MetadataSearchFilters } from './MetadataSearchFilters';
+import { HighlightedFilterInput } from './HighlightedFilterInput';
+import { matchesMediaTextFilter, parseMediaTextFilter } from '../services/MediaTextFilter';
 
 
 interface FixMatchModalProps {
@@ -41,6 +43,11 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   const bottomPaddingForMobile = `5rem`;
   const [sidebarHideEnabled, setSidebarHideEnabled] = useState(false);
   const { isDesktop, pagePadding} = useSidebarPadding(isCollapsed, sidebarHideEnabled);
+  const parsedQuery = useMemo(() => parseMediaTextFilter(query), [query]);
+  const matchingResults = useMemo(
+    () => results.filter(candidate => matchesMediaTextFilter(candidate, parsedQuery.filters)),
+    [parsedQuery.filters, results]
+  );
   
 
   useEffect(() => {
@@ -77,8 +84,9 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
     }, [query]);
   
     useEffect(() => {
-      if (!debouncedQuery.trim() || debouncedQuery.trim() !== query.trim()) return;
-      if (getMetadataSearchKey(debouncedQuery, searchOptions) === lastSearchedKey) return;
+      const parsedDebouncedQuery = parseMediaTextFilter(debouncedQuery).query;
+      if (!parsedDebouncedQuery.trim() || debouncedQuery.trim() !== query.trim()) return;
+      if (getMetadataSearchKey(parsedDebouncedQuery, searchOptions) === lastSearchedKey) return;
 
       const handler = setTimeout(() => handleSearch(debouncedQuery, searchOptions), 400);
       return () => clearTimeout(handler);
@@ -87,16 +95,20 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
   if (!isOpen) return null;
 
   const handleSearch = async (searchQuery: string, options: MetadataSearchOptions = searchOptions) => {
-      if (!searchQuery.trim()) return;
+      const parsed = parseMediaTextFilter(searchQuery);
+      if (!parsed.query.trim()) {
+        setResults([]);
+        return;
+      }
 
-      setLastSearchedKey(getMetadataSearchKey(searchQuery, options));
+      setLastSearchedKey(getMetadataSearchKey(parsed.query, options));
       setIsSearching(true);
       setResults([]);
       setSelectedResult(null);
       setPreviewDetails(null);
 
       try {
-        const searchResults = await searchMediaMetadata(searchQuery, media.type, options);
+        const searchResults = await searchMediaMetadata(parsed.query, media.type, options);
         setResults(searchResults);
       } catch (err) {
         console.error('Failed to search external provider for match correction:', err);
@@ -107,7 +119,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (getMetadataSearchKey(query, searchOptions) !== lastSearchedKey) {
+    if (getMetadataSearchKey(parsedQuery.query, searchOptions) !== lastSearchedKey) {
       handleSearch(query, searchOptions);
     }
   };
@@ -251,12 +263,15 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
           <form onSubmit={handleSubmit} className="flex space-x-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
+              <HighlightedFilterInput
                 placeholder={`Search correct ${media.type === 'VideoGame' ? 'game' : media.type === 'Film' ? 'movie' : 'TV series'}...`}
                 value={query}
-                onChange={e => setQuery(e.target.value)}
-                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-[#E27D12]"
+                onChange={setQuery}
+                wrapperClassName="w-full rounded-xl bg-[#1b1d2a]"
+                inputClassName="w-full border border-[#2d3145] rounded-xl pl-10 pr-4 py-2.5 text-sm placeholder-gray-500 focus:outline-none focus:border-[#E27D12]"
+                highlightClassName="pl-10 pr-4"
+                highlightStyle={{ fontFamily: 'inherit', fontSize: '0.875rem', lineHeight: '1.25rem', letterSpacing: 'normal' }}
+                ariaLabel={`Search ${media.type}`}
                 autoFocus
               />
             </div>
@@ -278,11 +293,11 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
           <MetadataSearchFilters type={media.type} options={searchOptions} onChange={setSearchOptions} />
 
           {/* Results list */}
-          {(results.length > 0 || isSearching) && (
+          {(matchingResults.length > 0 || isSearching) && (
             <div className="space-y-2">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Search Candidates</h4>
               <div className="grid grid-cols-1 gap-2 max-h-100 overflow-y-auto pr-1">
-                {isSearching && results.length === 0 ? (
+                {isSearching && matchingResults.length === 0 ? (
                   <div className="space-y-2">
                     {[1, 2, 3].map((i) => (
                       <div key={i} className="p-3 rounded-xl border border-[#2d3145] bg-[#1b1d2a] flex items-center space-x-3 animate-pulse">
@@ -295,7 +310,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
                     ))}
                   </div>
                 ) : (
-                  results.map((res, idx) => {
+                  matchingResults.map((res, idx) => {
                     const isSelected = selectedResult?.external_id === res.external_id;
 
                     return (

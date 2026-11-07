@@ -7,6 +7,7 @@ import { ArrowDownUp, Search, Filter, Plus, X, RotateCcw, ChevronRight} from 'lu
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
 import { getLastWatchedEpisodeArtwork } from '../helper/episodeProgress';
 import { HorizontalDragScroll } from '../components/HorizontalDragScroll';
+import { matchesMediaTextFilter, parseMediaTextFilter } from '../services/MediaTextFilter';
 
 const DEFAULT_GRID_PREFERENCES: MediaGridPreferences = {
   sortBy: 'created_at',
@@ -106,6 +107,7 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const [gridPreferences, setGridPreferences] = useState<MediaGridPreferences>(DEFAULT_GRID_PREFERENCES);
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
   const [pullOffset, setPullOffset] = useState<number>(0);
+  const [searchScrollLeft, setSearchScrollLeft] = useState(0);
   //const [crossedThreshold, setCrossedThreshold] = useState<boolean>(false);
   const crossedThresholdRef = useRef<boolean>(false);
   const preferencesLoadedRef = useRef(false);
@@ -300,6 +302,7 @@ useEffect(() => {
 
   // Filter by media type if specified
   let items = typeFilter ? mediaList.filter(m => m.type === typeFilter) : mediaList;
+  const parsedTextFilter = parseMediaTextFilter(searchQuery);
 
   // Extract unique genres
   const genresSet = new Set<string>();
@@ -335,7 +338,8 @@ useEffect(() => {
   ));
 
   // Active filter count
-  const activeFilterCount = (selectedGenre !== 'All' ? 1 : 0) +
+  const activeFilterCount = parsedTextFilter.filters.length +
+    (selectedGenre !== 'All' ? 1 : 0) +
     (statusFilter !== 'All' ? 1 : 0) +
     (languageFilter !== 'All' ? 1 : 0) +
     (typeFilterValue !== 'All' ? 1 : 0) +
@@ -347,9 +351,13 @@ useEffect(() => {
     (watchFilter !== 'All' ? 1 : 0) +
     (completionFilter !== 'All' ? 1 : 0);
 
-  // Apply search query
-  if (searchQuery.trim()) {
-    const q = searchQuery.toLowerCase();
+  // Apply recognized text operators before the remaining free-text query.
+  if (parsedTextFilter.filters.length) {
+    items = items.filter(media => matchesMediaTextFilter(media, parsedTextFilter.filters));
+  }
+
+  if (parsedTextFilter.query) {
+    const q = parsedTextFilter.query.toLocaleLowerCase();
     items = items.filter(
       m => m.title.toLowerCase().includes(q) || m.publisher?.toLowerCase().includes(q)
     );
@@ -588,6 +596,7 @@ useEffect(() => {
     setRuntimeFilter('All');
     setWatchFilter('All');
     setCompletionFilter('All');
+    setSearchQuery('');
   };
 
   return (
@@ -621,22 +630,52 @@ useEffect(() => {
 
       <div className="sticky top-0 z-30 -mx-1 bg-[#101116]/95 px-1 py-2">
         <div className="flex items-center gap-2">
-          <div className="relative min-w-0 flex-1">
+          <div className="relative min-w-0 flex-1 rounded-lg border border-[#343744] bg-[#191a20] focus-within:border-[#E27D12] focus-within:ring-1 focus-within:ring-[#E27D12]/40">
             <Search className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-11 right-11 z-10 flex items-center overflow-hidden whitespace-pre text-sm"
+            >
+              <span
+                className="whitespace-pre"
+                style={{ transform: `translateX(-${searchScrollLeft}px)` }}
+              >
+                {parsedTextFilter.tokens.map((token, index) => (
+                  <span
+                    key={`${index}-${token.text}`}
+                    className={
+                      token.status === 'valid'
+                        ? 'text-emerald-400'
+                        : token.status === 'invalid'
+                          ? 'text-rose-400'
+                          : token.status === 'unsupported'
+                            ? 'text-gray-500'
+                            : 'text-white'
+                    }
+                  >
+                    {token.text}
+                  </span>
+                ))}
+              </span>
+            </div>
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search your library by title or publisher..."
+              placeholder="Search titles, y:2008, y:2000-2010, type:game..."
+              title="Filter with y:2008, y:2000-2010, y:>2015, y:<2010, type:movie|show|game|video"
               value={searchQuery}
               onChange={event => setSearchQuery(event.target.value)}
-              className="h-11 w-full rounded-lg border border-[#343744] bg-[#191a20] pl-11 pr-11 text-sm text-white placeholder:text-gray-500 focus:border-[#E27D12] focus:outline-none focus:ring-1 focus:ring-[#E27D12]/40"
+              onScroll={event => setSearchScrollLeft(event.currentTarget.scrollLeft)}
+              className={`relative h-11 w-full rounded-lg bg-transparent pl-11 pr-11 text-sm caret-white placeholder:text-gray-500 focus:outline-none ${
+                searchQuery ? 'text-transparent' : 'text-white'
+              }`}
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
                 aria-label="Clear search"
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-white/5 hover:text-white"
+                className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-white/5 hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>

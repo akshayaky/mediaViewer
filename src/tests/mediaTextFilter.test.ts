@@ -1,0 +1,68 @@
+import { describe, expect, it } from 'vitest';
+import { Media } from '../types/media';
+import { matchesMediaTextFilter, parseMediaTextFilter } from '../services/MediaTextFilter';
+
+const media = (type: Media['type'], release_year: number): Media => ({
+  id: `${type}-${release_year}`,
+  type,
+  title: 'Example',
+  release_year,
+  genres: [],
+  created_at: '',
+  updated_at: ''
+});
+
+describe('advanced media text filters', () => {
+  it('parses filters regardless of their order and keeps remaining query text', () => {
+    const parsed = parseMediaTextFilter('type:game Example y:2000-2010');
+
+    expect(parsed.query).toBe('Example');
+    expect(matchesMediaTextFilter(media('VideoGame', 2008), parsed.filters)).toBe(true);
+    expect(matchesMediaTextFilter(media('Film', 2008), parsed.filters)).toBe(false);
+    expect(matchesMediaTextFilter(media('VideoGame', 2011), parsed.filters)).toBe(false);
+  });
+
+  it('supports exact years, ranges, and strict year comparisons', () => {
+    expect(matchesMediaTextFilter(media('Film', 2008), parseMediaTextFilter('y:2008').filters)).toBe(true);
+    expect(matchesMediaTextFilter(media('Film', 2008), parseMediaTextFilter('y:2000-2010').filters)).toBe(true);
+    expect(matchesMediaTextFilter(media('Film', 2008), parseMediaTextFilter('y:>2008').filters)).toBe(false);
+    expect(matchesMediaTextFilter(media('Film', 2009), parseMediaTextFilter('y:>2008').filters)).toBe(true);
+    expect(matchesMediaTextFilter(media('Film', 2010), parseMediaTextFilter('y:<2010').filters)).toBe(false);
+  });
+
+  it('supports all media type aliases and leaves malformed operators as text', () => {
+    expect(matchesMediaTextFilter(media('Film', 2020), parseMediaTextFilter('type:video').filters)).toBe(true);
+    expect(matchesMediaTextFilter(media('TV Series', 2020), parseMediaTextFilter('type:show').filters)).toBe(true);
+    expect(matchesMediaTextFilter(media('VideoGame', 2020), parseMediaTextFilter('type:game').filters)).toBe(true);
+    expect(parseMediaTextFilter('y:20 type:books').query).toBe('y:20 type:books');
+    expect(parseMediaTextFilter('y:2010-2000').filters).toHaveLength(1);
+    expect(matchesMediaTextFilter(media('Film', 2005), parseMediaTextFilter('y:2010-2000').filters)).toBe(true);
+  });
+
+  it('classifies valid, invalid, unsupported, and ordinary query tokens for highlighting', () => {
+    const parsed = parseMediaTextFilter('Dune y:2008 type:book status:finished');
+
+    expect(parsed.query).toBe('Dune type:book status:finished');
+    expect(parsed.tokens.map(token => [token.text, token.status])).toEqual([
+      ['Dune', 'query'],
+      [' ', 'query'],
+      ['y:2008', 'valid'],
+      [' ', 'query'],
+      ['type:book', 'invalid'],
+      [' ', 'query'],
+      ['status:finished', 'unsupported']
+    ]);
+  });
+
+  it('normalizes remaining query spacing when filters are interleaved', () => {
+    expect(parseMediaTextFilter('Dune y:2008  Part Two').query).toBe('Dune Part Two');
+  });
+
+  it('combines multiple operators as intersections', () => {
+    const filters = parseMediaTextFilter('type:movie y:>2000 y:<2010').filters;
+
+    expect(matchesMediaTextFilter(media('Film', 2005), filters)).toBe(true);
+    expect(matchesMediaTextFilter(media('Film', 2010), filters)).toBe(false);
+    expect(matchesMediaTextFilter(media('VideoGame', 2005), filters)).toBe(false);
+  });
+});

@@ -1,13 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Media, MediaType } from '../types/media';
 import { MetadataSearchOptions, MetadataSearchResult } from '../providers/interfaces';
-import { igdbProvider } from '../providers/IGDBProvider';
-import { tmdbProvider } from '../providers/TMDBProvider';
-import { searchMediaMetadata, getMetadataSearchKey } from '../services/MediaSearchService';
+import { searchMediaMetadata, getMetadataSearchKey, addMetadataResultToLibrary } from '../services/MediaSearchService';
 import { MetadataSearchFilters } from './MetadataSearchFilters';
-import { dbService } from '../services/DatabaseService';
 import { Search, Loader2, X, Plus, CheckCircle2, Film, Tv, Gamepad2 } from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
+import { HighlightedFilterInput } from './HighlightedFilterInput';
+import { matchesMediaTextFilter, parseMediaTextFilter } from '../services/MediaTextFilter';
 
 interface AddMediaModalProps {
   type: MediaType;
@@ -32,17 +31,26 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
   const [lastSearchedKey, setLastSearchedKey] = useState('');
   const [searchOptions, setSearchOptions] = useState<MetadataSearchOptions>({});
+  const parsedQuery = useMemo(() => parseMediaTextFilter(searchQuery), [searchQuery]);
+  const matchingResults = useMemo(
+    () => (results[type] || []).filter(candidate => matchesMediaTextFilter(candidate, parsedQuery.filters)),
+    [parsedQuery.filters, results, type]
+  );
   // const [mediaType, setMediaType] = useState(type);
 
   const { pagePadding } = useSidebarPadding(isCollapsed);
   const handleSearch = async (searchQuery: string, options: MetadataSearchOptions = searchOptions) => {
-    if (!searchQuery.trim()) return;
+    const parsed = parseMediaTextFilter(searchQuery);
+    if (!parsed.query.trim()) {
+      setResults(prev => ({ ...prev, [type]: [] }));
+      return;
+    }
 
-    setLastSearchedKey(getMetadataSearchKey(searchQuery, options));
+    setLastSearchedKey(getMetadataSearchKey(parsed.query, options));
     setIsSearching(true);
 
     try {
-      const searchResults = await searchMediaMetadata(searchQuery, type, options);
+      const searchResults = await searchMediaMetadata(parsed.query, type, options);
       setResults(prev => ({ ...prev, [type]: searchResults }));
     } catch (err) {
       console.error('Failed to search external provider:', err);
@@ -53,7 +61,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (getMetadataSearchKey(searchQuery, searchOptions) !== lastSearchedKey) {
+    if (getMetadataSearchKey(parsedQuery.query, searchOptions) !== lastSearchedKey) {
       handleSearch(searchQuery, searchOptions);
     }
   };
@@ -66,7 +74,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   }, [isOpen]);
 
   useEffect(() => {
-    if (searchQuery.trim() && (!results[type] || results[type].length === 0)) {
+    if (parsedQuery.query.trim() && (!results[type] || results[type].length === 0)) {
       handleSearch(searchQuery, searchOptions);
     }
   }, [type])
@@ -94,11 +102,11 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   }, [searchQuery]);
 
   useEffect(() => {
-    if (!debouncedQuery.trim() || debouncedQuery.trim() !== searchQuery.trim()) return;
-    if (getMetadataSearchKey(debouncedQuery, searchOptions) === lastSearchedKey) return;
+    const parsedDebouncedQuery = parseMediaTextFilter(debouncedQuery).query;
+    if (!parsedDebouncedQuery.trim() || debouncedQuery.trim() !== searchQuery.trim()) return;
+    if (getMetadataSearchKey(parsedDebouncedQuery, searchOptions) === lastSearchedKey) return;
 
     const handler = setTimeout(() => {
-      setResults({} as Record<MediaType, MetadataSearchResult[]>);
       handleSearch(debouncedQuery, searchOptions);
     }, 400);
     return () => clearTimeout(handler);
@@ -112,60 +120,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
     setImportingId(candidate.external_id);
 
     try {
-      let details: Partial<Media> = {};
-      if (candidate.type === 'VideoGame') {
-        details = await igdbProvider.getMediaDetails(candidate.external_id);
-      } else {
-        details = await tmdbProvider.getMediaDetails(candidate.external_id);
-      }
-
-      const now = new Date().toISOString();
-      const mediaId = `media_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-
-      // Extract language with fallback: details > candidate > undefined
-      const newLanguage = details.language || candidate.language || undefined;
-
-      const newMedia: Media = {
-        id: mediaId,
-        type: candidate.type,
-        title: details.title || candidate.title,
-        original_title: details.original_title || candidate.original_title,
-        release_year: details.release_year || candidate.release_year,
-        description: details.description || candidate.description,
-        genres: details.genres || [],
-        runtime: details.runtime,
-        poster: details.poster || candidate.poster,
-        backdrop: details.backdrop || candidate.backdrop,
-        logo: details.logo,
-        publisher: details.publisher,
-        developer: details.developer,
-        cast: details.cast,
-        seasons: details.seasons,
-        language: newLanguage,
-        metadata_source: details.metadata_source || candidate.provider,
-        metadata_refreshed_at: now,
-        created_at: now,
-        updated_at: now,
-        external_ids: [
-          {
-            id: `ext_${Date.now()}`,
-            media_id: mediaId,
-            provider: candidate.provider,
-            external_id: candidate.external_id
-          }
-        ]
-      };
-
-      await dbService.saveMedia(newMedia);
-      await dbService.saveHistory({
-        id: `hist_${Date.now()}`,
-        media_id: mediaId,
-        status: 'Planned',
-        source: 'Manual',
-        created_at: now,
-        updated_at: now
-      });
-      window.dispatchEvent(new CustomEvent('library-scanned'));
+      const newMedia = await addMetadataResultToLibrary(candidate);
 
       setAddedIds(prev => new Set(prev).add(candidate.external_id));
 
@@ -222,12 +177,15 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
           <form onSubmit={handleSubmit} className="flex space-x-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
+              <HighlightedFilterInput
                 placeholder={`Search ${type === 'VideoGame' ? 'games' : type === 'Film' ? 'movies' : 'TV series'}...`}
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full bg-[#1b1d2a] border border-[#2d3145] rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-[#E27D12]"
+                onChange={setSearchQuery}
+                wrapperClassName="w-full rounded-xl bg-[#1b1d2a]"
+                inputClassName="w-full border border-[#2d3145] rounded-xl pl-10 pr-4 py-2.5 text-sm placeholder-gray-500 focus:outline-none focus:border-[#E27D12]"
+                highlightClassName="pl-10 pr-4"
+                highlightStyle={{ fontFamily: 'inherit', fontSize: '0.875rem', lineHeight: '1.25rem', letterSpacing: 'normal' }}
+                ariaLabel={`Search ${type}`}
                 autoFocus
               />
             </div>
@@ -254,9 +212,9 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
           <MetadataSearchFilters type={type} options={searchOptions} onChange={setSearchOptions} />
 
           {/* Results Grid */}
-          {results[type] && results[type].length > 0 ? (
+          {matchingResults.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              {results[type].map((res, idx) => {
+              {matchingResults.map((res, idx) => {
                 const isAdded = addedIds.has(res.external_id);
                 const isImporting = importingId === res.external_id;
 
@@ -330,7 +288,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
                 );
               })}
             </div>
-          ) : searchQuery && !isSearching && (!results[type] || results[type].length === 0) ? (
+          ) : searchQuery && !isSearching && (!results[type] || results[type].length === 0 || matchingResults.length === 0) ? (
             <div className="p-8 text-center text-gray-400 bg-[#1b1d2a] rounded-xl border border-[#2d3145]">
               <p className="text-sm font-medium">No results found for "{searchQuery}". Try a different search term.</p>
             </div>
