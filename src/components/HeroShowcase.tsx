@@ -7,32 +7,95 @@ interface HeroShowcaseProps {
   media: Media;
   mediaItems: Media[];
   onActiveMediaChange: (media: Media) => void;
+  onSwipeAccentChange: (media: Media | null, progress: number) => void;
   onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
   contentPaddingLeft: string;
+}
+
+interface HeroSwipe {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startedAt: number;
+  width: number;
+  dx: number;
+  direction: -1 | 1;
+  progress: number;
+  targetMedia: Media | null;
+  isSettling: boolean;
 }
 
 export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
   media,
   mediaItems,
   onActiveMediaChange,
+  onSwipeAccentChange,
   onSelectMedia,
   contentPaddingLeft
 }) => {
   const [displayedMedia, setDisplayedMedia] = useState(media);
   const [outgoingMedia, setOutgoingMedia] = useState<Media | null>(null);
+  const [skipArtworkEnterId, setSkipArtworkEnterId] = useState<string | null>(null);
   const [latestHistory, setLatestHistory] = useState<MediaHistory>();
   const [state, setState] = useState<MediaState>();
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [isManuallyPaused, setIsManuallyPaused] = useState(false);
   const manualPauseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [swipe, setSwipe] = useState<HeroSwipe | null>(null);
+  const swipeRef = useRef<HeroSwipe | null>(null);
+  const swipeSettleTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accentAnimationFrame = useRef<number | null>(null);
+  const skipNextCrossfade = useRef(false);
   const activeIndex = Math.max(0, mediaItems.findIndex(item => item.id === media.id));
   const canNavigate = mediaItems.length > 1;
+
+  const updateSwipe = (nextSwipe: HeroSwipe | null) => {
+    swipeRef.current = nextSwipe;
+    setSwipe(nextSwipe);
+  };
+
+  const animateSwipeAccent = (target: Media | null, from: number, to: number) => {
+    if (accentAnimationFrame.current !== null) {
+      cancelAnimationFrame(accentAnimationFrame.current);
+    }
+
+    const startedAt = performance.now();
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220;
+    const animate = (now: number) => {
+      const progress = duration ? Math.min((now - startedAt) / duration, 1) : 1;
+      const eased = 1 - (1 - progress) ** 3;
+      onSwipeAccentChange(target, from + (to - from) * eased);
+      if (progress < 1) {
+        accentAnimationFrame.current = requestAnimationFrame(animate);
+      } else {
+        accentAnimationFrame.current = null;
+        if (to === 0) onSwipeAccentChange(null, 0);
+      }
+    };
+    accentAnimationFrame.current = requestAnimationFrame(animate);
+  };
+
+  const clearSwipeSettleTimeout = () => {
+    if (swipeSettleTimeout.current) {
+      clearTimeout(swipeSettleTimeout.current);
+      swipeSettleTimeout.current = null;
+    }
+  };
 
   useEffect(() => {
     if (displayedMedia.id === media.id) return;
 
-    setOutgoingMedia(displayedMedia);
+    clearSwipeSettleTimeout();
+    updateSwipe(null);
+    if (skipNextCrossfade.current) {
+      skipNextCrossfade.current = false;
+      setOutgoingMedia(null);
+      setSkipArtworkEnterId(media.id);
+    } else {
+      setOutgoingMedia(displayedMedia);
+      setSkipArtworkEnterId(null);
+    }
     setDisplayedMedia(media);
   }, [displayedMedia, media]);
 
@@ -72,6 +135,8 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
 
   useEffect(() => () => {
     if (manualPauseTimeout.current) clearTimeout(manualPauseTimeout.current);
+    if (swipeSettleTimeout.current) clearTimeout(swipeSettleTimeout.current);
+    if (accentAnimationFrame.current !== null) cancelAnimationFrame(accentAnimationFrame.current);
   }, []);
 
   const handleSelectFeaturedMedia = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -87,29 +152,123 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
     onActiveMediaChange(mediaItems[(activeIndex + direction + mediaItems.length) % mediaItems.length]);
   };
 
-  const renderArtwork = (item: Media, outgoing = false) => (
+  const handleSwipePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (
+      !canNavigate ||
+      event.pointerType === 'mouse' ||
+      !window.matchMedia('(max-width: 639px)').matches ||
+      (event.target as HTMLElement).closest('button')
+    ) return;
+
+    clearSwipeSettleTimeout();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsManuallyPaused(true);
+    if (manualPauseTimeout.current) clearTimeout(manualPauseTimeout.current);
+    manualPauseTimeout.current = setTimeout(() => setIsManuallyPaused(false), 7000);
+    updateSwipe({
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startedAt: event.timeStamp,
+      width: event.currentTarget.clientWidth,
+      dx: 0,
+      direction: 1,
+      progress: 0,
+      targetMedia: null,
+      isSettling: false
+    });
+  };
+
+  const handleSwipePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const activeSwipe = swipeRef.current;
+    if (!activeSwipe || activeSwipe.pointerId !== event.pointerId || activeSwipe.isSettling) return;
+
+    const deltaX = event.clientX - activeSwipe.startX;
+    const deltaY = event.clientY - activeSwipe.startY;
+    if (Math.abs(deltaY) > 10 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      if (activeSwipe.targetMedia) {
+        animateSwipeAccent(activeSwipe.targetMedia, activeSwipe.progress, 0);
+      }
+      updateSwipe(null);
+      return;
+    }
+    if (Math.abs(deltaX) < 4) return;
+
+    const direction: -1 | 1 = deltaX < 0 ? 1 : -1;
+    const targetMedia = mediaItems[(activeIndex + direction + mediaItems.length) % mediaItems.length];
+    const dx = Math.sign(deltaX) * Math.min(Math.abs(deltaX), activeSwipe.width);
+    const progress = Math.min(Math.abs(dx) / activeSwipe.width, 1);
+    const nextSwipe = { ...activeSwipe, dx, direction, progress, targetMedia };
+    updateSwipe(nextSwipe);
+    onSwipeAccentChange(targetMedia, progress);
+  };
+
+  const finishSwipe = (event: React.PointerEvent<HTMLDivElement>, cancelled = false) => {
+    const activeSwipe = swipeRef.current;
+    if (!activeSwipe || activeSwipe.pointerId !== event.pointerId || activeSwipe.isSettling) return;
+
+    const elapsed = Math.max(event.timeStamp - activeSwipe.startedAt, 1);
+    const velocity = Math.abs(activeSwipe.dx) / elapsed;
+    const shouldNavigate = !cancelled && activeSwipe.targetMedia !== null &&
+      (activeSwipe.progress >= 0.22 || (Math.abs(activeSwipe.dx) > 30 && velocity >= 0.55));
+    const nextSwipe = {
+      ...activeSwipe,
+      dx: shouldNavigate ? -activeSwipe.direction * activeSwipe.width : 0,
+      progress: shouldNavigate ? 1 : 0,
+      isSettling: true
+    };
+    updateSwipe(nextSwipe);
+    animateSwipeAccent(activeSwipe.targetMedia, activeSwipe.progress, shouldNavigate ? 1 : 0);
+    clearSwipeSettleTimeout();
+    swipeSettleTimeout.current = setTimeout(() => {
+      swipeSettleTimeout.current = null;
+      if (shouldNavigate && activeSwipe.targetMedia) {
+        skipNextCrossfade.current = true;
+        setIsManuallyPaused(true);
+        if (manualPauseTimeout.current) clearTimeout(manualPauseTimeout.current);
+        manualPauseTimeout.current = setTimeout(() => setIsManuallyPaused(false), 7000);
+        onActiveMediaChange(activeSwipe.targetMedia);
+      } else {
+        updateSwipe(null);
+      }
+    }, 220);
+  };
+
+  const renderArtwork = (item: Media, outgoing = false, dragStyle?: React.CSSProperties) => (
     <div
       key={`${item.id}-${outgoing ? 'outgoing' : 'active'}`}
-      className={`absolute inset-0 ${outgoing ? 'z-0 hero-artwork-exit' : 'z-[1] hero-artwork-enter'}`}
+      className={`absolute inset-0 ${item.poster ? 'hero-artwork-has-poster' : ''} ${dragStyle || (!outgoing && item.id === skipArtworkEnterId) ? 'hero-artwork-dragging' : outgoing ? 'z-0 hero-artwork-exit' : 'z-[1] hero-artwork-enter'}`}
       aria-hidden="true"
+      style={dragStyle}
     >
-      <img src={item.backdrop} alt="" className="hero-backdrop-fill" />
-      <img
-        src={item.backdrop}
-        alt={outgoing ? '' : item.title}
-        className="hero-backdrop-img absolute inset-0 w-full h-full object-cover object-top opacity-75"
-      />
+      {item.backdrop && (
+        <>
+          <img src={item.backdrop} alt="" className="hero-backdrop-fill" />
+          <img
+            src={item.backdrop}
+            alt={outgoing ? '' : item.title}
+            className="hero-backdrop-img absolute inset-0 w-full h-full object-cover object-top opacity-75"
+          />
+        </>
+      )}
+      {item.poster && (
+        <img src={item.poster} alt="" className="hero-poster-img absolute inset-0 w-full h-full object-cover" />
+      )}
     </div>
   );
 
   return (
     <div
-      className="hero-showcase relative w-full h-[80vh] min-h-[50vh] sm:min-h-[80px] overflow-hidden group"
+      className="hero-showcase relative w-full h-[75vh] min-h-[50vh] sm:min-h-[80px] overflow-hidden group"
       style={{
-        backgroundColor: 'var(--hero-accent, #e11d48)'
+        backgroundColor: 'var(--hero-accent, #E27D12)'
       } as React.CSSProperties}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onPointerDown={handleSwipePointerDown}
+      onPointerMove={handleSwipePointerMove}
+      onPointerUp={event => finishSwipe(event)}
+      onPointerCancel={event => finishSwipe(event, true)}
       onFocusCapture={() => setIsFocused(true)}
       onBlurCapture={event => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsFocused(false);
@@ -119,7 +278,16 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
       aria-label="Featured media"
     >
       {outgoingMedia && renderArtwork(outgoingMedia, true)}
-      {displayedMedia.backdrop ? renderArtwork(displayedMedia) : (
+      {swipe?.targetMedia && renderArtwork(swipe.targetMedia, false, {
+        zIndex: 2,
+        transform: `translateX(${swipe.direction * swipe.width + swipe.dx}px)`,
+        transition: swipe.isSettling ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none'
+      })}
+      {displayedMedia.backdrop || displayedMedia.poster ? renderArtwork(displayedMedia, false, swipe?.targetMedia ? {
+        zIndex: 1,
+        transform: `translateX(${swipe.dx}px)`,
+        transition: swipe.isSettling ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none'
+      } : undefined) : (
         <div
           className="absolute inset-0 z-0"
           style={{
@@ -141,7 +309,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
             : undefined
         }}
       >
-        <div className="flex items-center space-x-2">
+        {/* <div className="flex items-center space-x-2">
           <span
             className="text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center space-x-1.5 shadow-md"
             style={{ backgroundColor: 'rgba(var(--hero-accent-rgb), 0.88)' }}
@@ -150,10 +318,10 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
             <span>Featured Selection</span>
           </span>
           <span className="text-xs text-gray-400 font-medium">{displayedMedia.type}</span>
-        </div>
+        </div> */}
 
         {displayedMedia.logo ? (
-          <div className="py-1">
+          <div className="hero-title-lockup py-1">
             <img
               src={displayedMedia.logo}
               alt={displayedMedia.title}
@@ -169,12 +337,12 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
 
         <h1
           id={`hero-title-text-${displayedMedia.id}`}
-          className={`text-4xl font-extrabold text-white tracking-tight drop-shadow-md leading-none ${displayedMedia.logo ? 'hidden' : ''}`}
+          className={`hero-title-text text-4xl font-extrabold text-white tracking-tight drop-shadow-md leading-none ${displayedMedia.logo ? 'hidden' : ''}`}
         >
           {displayedMedia.title}
         </h1>
 
-        <div className="flex items-center space-x-4 text-xs font-semibold text-gray-300">
+        {/* <div className="flex items-center space-x-4 text-xs font-semibold text-gray-300">
           {displayedMedia.release_year && (
             <span className="flex items-center space-x-1">
               <Calendar className="w-3.5 h-3.5" style={{ color: 'var(--hero-accent)' }} />
@@ -205,16 +373,16 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
               {latestHistory.context}
             </span>
           )}
-        </div>
+        </div> */}
 
         <p className="text-sm text-gray-300 line-clamp-2 leading-relaxed opacity-90">
-          {displayedMedia.description || 'No description available.'}
+          {/* {displayedMedia.description || 'No description available.'} */}
         </p>
 
         <div className="flex items-center space-x-3 pt-2">
           <button
             onClick={handleSelectFeaturedMedia}
-            className="flex items-center space-x-2 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all transform hover:-translate-y-0.5 cursor-pointer"
+          className="flex items-center space-x-2 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-transform transform hover:-translate-y-0.5 cursor-pointer"
             style={{
               backgroundColor: 'var(--hero-accent)',
               boxShadow: '0 12px 28px rgba(var(--hero-accent-rgb), 0.24)'
@@ -223,13 +391,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
             <Play className="w-4 h-4 fill-current" />
             <span>View Details</span>
           </button>
-          <button
-            onClick={handleSelectFeaturedMedia}
-            className="flex items-center space-x-2 bg-gray-800/80 hover:bg-gray-700/80 text-gray-200 font-semibold text-sm px-4 py-2.5 rounded-xl border border-gray-700 backdrop-blur-md transition-all cursor-pointer"
-          >
-            <Info className="w-4 h-4" />
-            <span>History ({state?.total_watch_play_count ?? 0})</span>
-          </button>
+
         </div>
       </div>
 
@@ -239,7 +401,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
             type="button"
             onClick={() => navigate(-1)}
             aria-label="Previous featured item"
-            className="touch-target flex items-center justify-center rounded-full border border-white/20 bg-black/45 text-white backdrop-blur-md transition hover:bg-black/70"
+            className="hero-navigation-arrow touch-target flex items-center justify-center rounded-full border border-white/20 bg-black/45 text-white backdrop-blur-md transition hover:bg-black/70"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
@@ -265,7 +427,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
             type="button"
             onClick={() => navigate(1)}
             aria-label="Next featured item"
-            className="touch-target flex items-center justify-center rounded-full border border-white/20 bg-black/45 text-white backdrop-blur-md transition hover:bg-black/70"
+            className="hero-navigation-arrow touch-target flex items-center justify-center rounded-full border border-white/20 bg-black/45 text-white backdrop-blur-md transition hover:bg-black/70"
           >
             <ChevronRight className="w-5 h-5" />
           </button>

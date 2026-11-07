@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HeroShowcase } from '../components/HeroShowcase';
 import { MediaRail } from '../components/MediaRail';
 import { Media, MediaHistory, MediaState, UiPreferences } from '../types/media';
@@ -183,23 +183,73 @@ export const HomeView: React.FC<HomeViewProps> = ({
     [allMedia, allHistory, mediaStates]
   );
   const [activeHeroId, setActiveHeroId] = useState<string>();
+  const hasInitializedHeroAccent = useRef(false);
   const activeHero = heroItems.find(media => media.id === activeHeroId) || heroItems[0];
+  const activeHeroIndex = Math.max(0, heroItems.findIndex(media => media.id === activeHero?.id));
+  const previousHero = heroItems.length > 1
+    ? heroItems[(activeHeroIndex - 1 + heroItems.length) % heroItems.length]
+    : undefined;
+  const nextHero = heroItems.length > 1
+    ? heroItems[(activeHeroIndex + 1) % heroItems.length]
+    : undefined;
   const dominantColor = useDominantColor(activeHero?.backdrop);
+  const previousDominantColor = useDominantColor(previousHero?.backdrop);
+  const nextDominantColor = useDominantColor(nextHero?.backdrop);
   const heroAccentColor = activeHero?.accent_color || (
-    dominantColor ? `rgb(${dominantColor.join(', ')})` : '#e11d48'
+    dominantColor ? `rgb(${dominantColor.join(', ')})` : '#E27D12'
   );
   const handleActiveHeroChange = useCallback((media: Media) => {
     setActiveHeroId(current => current === media.id ? current : media.id);
   }, []);
+  const handleHeroSwipeAccentChange = useCallback((target: Media | null, progress: number) => {
+    const root = document.documentElement;
+    if (!target) {
+      root.style.setProperty('--hero-accent', heroAccentColor);
+      root.style.setProperty('--hero-accent-rgb', getAccentRgb(heroAccentColor));
+      root.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${heroAccentColor}, white 20%)`);
+      onAccentColorChange(heroAccentColor);
+      return;
+    }
+
+    const targetRgb = target.id === previousHero?.id
+      ? previousDominantColor
+      : target.id === nextHero?.id
+        ? nextDominantColor
+        : null;
+    const targetColor = target.accent_color || (
+      targetRgb ? `rgb(${targetRgb.join(', ')})` : heroAccentColor
+    );
+    const from = parseColor(heroAccentColor);
+    const to = parseColor(targetColor);
+    if (!from || !to) return;
+
+    const color = `rgb(${from.map((channel, index) =>
+      Math.round(channel + (to[index] - channel) * progress)
+    ).join(', ')})`;
+    root.style.setProperty('--hero-accent', color);
+    root.style.setProperty('--hero-accent-rgb', getAccentRgb(color));
+    root.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${color}, white 20%)`);
+    onAccentColorChange(color);
+  }, [heroAccentColor, nextDominantColor, nextHero?.id, onAccentColorChange, previousDominantColor, previousHero?.id]);
 
   useEffect(() => {
     if (!activeHero) {
       onAccentColorChange(undefined);
       return;
     }
+    if (!activeHero.accent_color && !dominantColor) return;
 
     const root = document.documentElement;
-    const currentAccent = getComputedStyle(root).getPropertyValue('--hero-accent').trim() || '#e11d48';
+    if (!hasInitializedHeroAccent.current) {
+      hasInitializedHeroAccent.current = true;
+      root.style.setProperty('--hero-accent', heroAccentColor);
+      root.style.setProperty('--hero-accent-rgb', getAccentRgb(heroAccentColor));
+      root.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${heroAccentColor}, white 20%)`);
+      onAccentColorChange(heroAccentColor);
+      return;
+    }
+
+    const currentAccent = getComputedStyle(root).getPropertyValue('--hero-accent').trim() || '#E27D12';
     const from = parseColor(currentAccent);
     const to = parseColor(heroAccentColor);
     if (!from || !to) {
@@ -222,6 +272,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       root.style.setProperty('--hero-accent', color);
       root.style.setProperty('--hero-accent-rgb', getAccentRgb(color));
       root.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${color}, white 20%)`);
+      onAccentColorChange(color);
       if (progress < 1) {
         frame = requestAnimationFrame(animate);
       } else {
@@ -230,7 +281,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
     };
     frame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frame);
-  }, [activeHero?.id, heroAccentColor, onAccentColorChange]);
+  }, [activeHero, dominantColor, heroAccentColor, onAccentColorChange]);
 
   if (allMedia.length === 0) {
     return (
@@ -253,6 +304,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           media={activeHero}
           mediaItems={heroItems}
           onActiveMediaChange={handleActiveHeroChange}
+          onSwipeAccentChange={handleHeroSwipeAccentChange}
           onSelectMedia={onSelectMedia}
           contentPaddingLeft={pagePadding}
         />

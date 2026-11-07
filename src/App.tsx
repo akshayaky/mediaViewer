@@ -10,6 +10,7 @@ import { UnmatchedInboxView } from './views/UnmatchedInboxView';
 import { UniversalSearchOverlay } from './components/UniversalSearchOverlay';
 import { dbService } from './services/DatabaseService';
 import { Media } from './types/media';
+import { getAccentRgb } from './helper/mediaDetailTheme';
 
 interface CardTransitionState {
   mediaId: string;
@@ -55,6 +56,8 @@ export function App() {
   const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const homeAccentColorRef = useRef(homeAccentColor);
+  homeAccentColorRef.current = homeAccentColor;
   const [cardTransition, setCardTransition] = useState<CardTransitionState | null>(null);
   const [detailReturnTransition, setDetailReturnTransition] = useState<DetailReturnTransition | null>(null);
   const mainViewRef = useRef<HTMLElement>(null);
@@ -304,15 +307,28 @@ export function App() {
 
   // Android / Browser Back Button & Popstate Handling
   useEffect(() => {
-    if (pageAccentColor) {
-      document.documentElement.style.setProperty('--hero-accent', pageAccentColor);
+    if (activeTab === 'home' && !selectedMedia) {
+      const accentColor = homeAccentColorRef.current || '#E27D12';
+      document.documentElement.style.setProperty('--hero-accent', accentColor);
+      document.documentElement.style.setProperty('--hero-accent-rgb', getAccentRgb(accentColor));
+      document.documentElement.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${accentColor}, white 20%)`);
+      return;
+    }
+
+    const accentColor = selectedMedia
+      ? selectedAccentColor || selectedMedia.accent_color
+      : undefined;
+    if (accentColor) {
+      document.documentElement.style.setProperty('--hero-accent', accentColor);
+      document.documentElement.style.setProperty('--hero-accent-rgb', getAccentRgb(accentColor));
       // Use color-mix to create a lighter shade for hover
-      document.documentElement.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${pageAccentColor}, white 20%)`);
+      document.documentElement.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${accentColor}, white 20%)`);
     } else {
       document.documentElement.style.removeProperty('--hero-accent');
+      document.documentElement.style.removeProperty('--hero-accent-rgb');
       document.documentElement.style.removeProperty('--hero-accent-light');
     }
-  }, [pageAccentColor]);
+  }, [activeTab, selectedAccentColor, selectedMedia?.accent_color, selectedMedia?.id]);
 
   useEffect(() => {
     // Push dummy history entry when opening detail or sheet/modal view
@@ -513,7 +529,9 @@ export function App() {
       {/* Main View Area */}
       <main
         ref={mainViewRef}
-        className={`relative isolate flex-1 transition-colors duration-350 ${
+        className={`relative isolate flex-1 ${
+          !selectedMedia && activeTab === 'home' ? 'transition-none' : 'transition-colors duration-350'
+        } ${
           isGridTab || activeTab === 'home' ? 'overflow-hidden' : 'overflow-y-auto'
         }`}
         style={{
