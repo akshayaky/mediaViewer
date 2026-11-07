@@ -1,11 +1,105 @@
-import React, { useEffect, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { HeroShowcase } from '../components/HeroShowcase';
 import { MediaRail } from '../components/MediaRail';
-import { Media, UiPreferences } from '../types/media';
+import { Media, MediaHistory, MediaState, UiPreferences } from '../types/media';
 import { dbService } from '../services/DatabaseService';
-import { getAccentRgb } from '../helper/mediaDetailTheme';
+import { getAccentRgb, parseColor } from '../helper/mediaDetailTheme';
 import { useDominantColor } from '../helper/useDominantColour';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
+
+interface HeroCandidate {
+  media: Media;
+  priority: number;
+  activityTime: number;
+}
+
+function getFranchiseKey(title: string): string {
+  const primaryTitle = title.split(/[:|–—]/, 1)[0];
+  return primaryTitle
+    .toLowerCase()
+    .replace(/\b(part|volume|vol|season|episode)\s+(i{1,3}|iv|v|\d+)\b/g, '')
+    .replace(/\s+\d+$/, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getHeroCandidates(
+  mediaList: Media[],
+  history: MediaHistory[],
+  states: MediaState[]
+): Media[] {
+  const now = Date.now();
+  const recentAddWindow = 90 * 24 * 60 * 60 * 1000;
+  const recentActivityWindow = 30 * 24 * 60 * 60 * 1000;
+  const historyByMediaId = new Map<string, MediaHistory[]>();
+  history.forEach(entry => {
+    const entries = historyByMediaId.get(entry.media_id) || [];
+    entries.push(entry);
+    historyByMediaId.set(entry.media_id, entries);
+  });
+  const stateByMediaId = new Map(states.map(state => [state.media_id, state]));
+  const candidates: HeroCandidate[] = [];
+
+  for (const media of mediaList) {
+    const backdrop = media.backdrop?.trim();
+    if (!backdrop || backdrop.length < 8 || backdrop === media.poster?.trim()) continue;
+
+    const entries = historyByMediaId.get(media.id) || [];
+    const latestEntry = entries.reduce<MediaHistory | undefined>((latest, entry) => {
+      if (!latest) return entry;
+      const entryTime = new Date(entry.completed_at || entry.started_at || entry.created_at).getTime();
+      const latestTime = new Date(latest.completed_at || latest.started_at || latest.created_at).getTime();
+      return entryTime > latestTime ? entry : latest;
+    }, undefined);
+    const ratedHighly = entries.some(entry => (entry.score || 0) >= 4);
+
+    const latestActivityTime = latestEntry
+      ? new Date(latestEntry.completed_at || latestEntry.started_at || latestEntry.created_at).getTime()
+      : 0;
+    const isRecentlyAdded = now - new Date(media.created_at).getTime() <= recentAddWindow;
+    const isRecentlyPlayed = now - latestActivityTime <= recentActivityWindow;
+    let priority = 5;
+    if (stateByMediaId.get(media.id)?.currently_watching_playing) {
+      priority = 0;
+    } else if (latestEntry && isRecentlyPlayed &&
+      ['Currently', 'Watched Episode', 'Finished'].includes(latestEntry.status)) {
+      priority = 1;
+    } else if (isRecentlyAdded) {
+      priority = 2;
+    }
+
+    if (latestEntry?.status === 'Finished') priority = Math.min(priority, 3);
+    if (ratedHighly) priority = Math.min(priority, 4);
+
+    candidates.push({
+      media,
+      priority,
+      activityTime: latestActivityTime || new Date(media.created_at).getTime() || 0
+    });
+  }
+
+  candidates.sort((a, b) =>
+    a.priority - b.priority ||
+    b.activityTime - a.activityTime ||
+    a.media.id.localeCompare(b.media.id)
+  );
+
+  const selected: HeroCandidate[] = [];
+  const franchises = new Set<string>();
+  const typeCounts = new Map<Media['type'], number>();
+  for (const candidate of candidates) {
+    const franchise = getFranchiseKey(candidate.media.title);
+    const typeCount = typeCounts.get(candidate.media.type) || 0;
+    if (franchises.has(franchise) || typeCount >= 2) continue;
+
+    selected.push(candidate);
+    franchises.add(franchise);
+    typeCounts.set(candidate.media.type, typeCount + 1);
+    if (selected.length === 6) break;
+  }
+
+  return selected.map(candidate => candidate.media);
+}
 
 interface HomeViewProps {
   onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
@@ -25,12 +119,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   const [homeData, setHomeData] = useState<{
     allMedia: Media[];
+    allHistory: MediaHistory[];
+    mediaStates: MediaState[];
     continueWatching: Media[];
     recentlyWatched: Media[];
     rewatchCandidates: Media[];
     abandonedList: Media[];
     localLibraryList: Media[];
-  }>({ allMedia: [], continueWatching: [], recentlyWatched: [], rewatchCandidates: [], abandonedList: [], localLibraryList: [] });
+  }>({ allMedia: [], allHistory: [], mediaStates: [], continueWatching: [], recentlyWatched: [], rewatchCandidates: [], abandonedList: [], localLibraryList: [] });
 
   useEffect(() => {
     let isMounted = true;
@@ -58,6 +154,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
       if (!isMounted) return;
       setHomeData({
         allMedia,
+        allHistory,
+        mediaStates: states,
         continueWatching: allMedia.filter(media => stateById.get(media.id)?.currently_watching_playing),
         recentlyWatched: allMedia.filter(media => historyByMediaId.get(media.id)?.some(history =>
           history.status === 'Finished' || history.status === 'Watched Episode'
@@ -79,15 +177,60 @@ export const HomeView: React.FC<HomeViewProps> = ({
     };
   }, []);
 
-  const { allMedia, continueWatching, recentlyWatched, rewatchCandidates, abandonedList, localLibraryList } = homeData;
-  const heroMedia = allMedia.find(m => m.title.includes("House of the Dragon")) || allMedia[0];
-  const dominantColor = useDominantColor(heroMedia?.backdrop || heroMedia?.poster);
-  const heroAccentColor = heroMedia?.accent_color || (
+  const { allMedia, allHistory, mediaStates, continueWatching, recentlyWatched, rewatchCandidates, abandonedList, localLibraryList } = homeData;
+  const heroItems = useMemo(
+    () => getHeroCandidates(allMedia, allHistory, mediaStates),
+    [allMedia, allHistory, mediaStates]
+  );
+  const [activeHeroId, setActiveHeroId] = useState<string>();
+  const activeHero = heroItems.find(media => media.id === activeHeroId) || heroItems[0];
+  const dominantColor = useDominantColor(activeHero?.backdrop);
+  const heroAccentColor = activeHero?.accent_color || (
     dominantColor ? `rgb(${dominantColor.join(', ')})` : '#e11d48'
   );
-  useLayoutEffect(() => {
-    onAccentColorChange(heroMedia ? heroAccentColor : undefined);
-  }, [heroAccentColor, heroMedia, onAccentColorChange]);
+  const handleActiveHeroChange = useCallback((media: Media) => {
+    setActiveHeroId(current => current === media.id ? current : media.id);
+  }, []);
+
+  useEffect(() => {
+    if (!activeHero) {
+      onAccentColorChange(undefined);
+      return;
+    }
+
+    const root = document.documentElement;
+    const currentAccent = getComputedStyle(root).getPropertyValue('--hero-accent').trim() || '#e11d48';
+    const from = parseColor(currentAccent);
+    const to = parseColor(heroAccentColor);
+    if (!from || !to) {
+      root.style.setProperty('--hero-accent', heroAccentColor);
+      root.style.setProperty('--hero-accent-rgb', getAccentRgb(heroAccentColor));
+      root.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${heroAccentColor}, white 20%)`);
+      onAccentColorChange(heroAccentColor);
+      return;
+    }
+
+    const startTime = performance.now();
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 850;
+    let frame = 0;
+    const animate = (now: number) => {
+      const progress = duration ? Math.min((now - startTime) / duration, 1) : 1;
+      const eased = 1 - (1 - progress) ** 3;
+      const color = `rgb(${from.map((channel, index) =>
+        Math.round(channel + (to[index] - channel) * eased)
+      ).join(', ')})`;
+      root.style.setProperty('--hero-accent', color);
+      root.style.setProperty('--hero-accent-rgb', getAccentRgb(color));
+      root.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${color}, white 20%)`);
+      if (progress < 1) {
+        frame = requestAnimationFrame(animate);
+      } else {
+        onAccentColorChange(heroAccentColor);
+      }
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, [activeHero?.id, heroAccentColor, onAccentColorChange]);
 
   if (allMedia.length === 0) {
     return (
@@ -97,25 +240,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
     );
   }
 
-  const homeStyle = {
-    '--hero-accent': heroAccentColor,
-    '--hero-accent-rgb': getAccentRgb(heroAccentColor)
-  } as React.CSSProperties;
   return (
     <div
       className="min-h-full space-y-6 mx-auto"
     style={{
-      ...homeStyle,
       backgroundImage: 'radial-gradient(ellipse 85% 48% at 50% 0%, rgba(var(--hero-accent-rgb), 0.11), transparent 78%)'
     }}>
       <div className="relative z-10 space-y-6">
       {/* Featured Hero Banner */}
-      <HeroShowcase
-        media={heroMedia}
-        onSelectMedia={onSelectMedia}
-        accentColor={heroAccentColor}
-        contentPaddingLeft={pagePadding}
-      />
+      {activeHero && (
+        <HeroShowcase
+          media={activeHero}
+          mediaItems={heroItems}
+          onActiveMediaChange={handleActiveHeroChange}
+          onSelectMedia={onSelectMedia}
+          contentPaddingLeft={pagePadding}
+        />
+      )}
 
       {/* Media Rails */}
       <div
