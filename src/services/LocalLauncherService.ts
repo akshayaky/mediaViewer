@@ -14,6 +14,17 @@ export class LocalLauncherService {
 
     try {
       if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+        if (launchTarget.startsWith('content://')) {
+          const { invoke } = await import('@tauri-apps/api/core');
+          await invoke('plugin:android-fs|show_view_file_app_chooser', {
+            uri: { uri: launchTarget, documentTopTreeUri: null }
+          });
+          return {
+            success: true,
+            message: `Opened ${file.filename} with an Android app.`
+          };
+        }
+
         const { openPath } = await import('@tauri-apps/plugin-opener');
         await openPath(launchTarget);
         return {

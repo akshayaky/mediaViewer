@@ -524,7 +524,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
         if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
           const { invoke } = await import('@tauri-apps/api/core');
-          await invoke('grant_video_files_access', { videoPath: activeFile.path });
+          if (!activeFile.path.startsWith('content://')) {
+            await invoke('grant_video_files_access', { videoPath: activeFile.path });
+          }
           const url = await invoke<string>('get_video_stream_url', { filePath: activeFile.path });
           if (isMounted) setStreamUrl(url);
           void loadSubtitleTracks();
