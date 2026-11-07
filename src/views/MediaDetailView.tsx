@@ -784,7 +784,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           </section>
 
           {/* Multi-Watch / Multi-Play Context Explanation Callout */}
-          {historyList.length > 1 && (
+          {/* {historyList.length > 1 && (
             <section className="bg-purple-950/40 border border-purple-500/40 p-5 rounded-2xl space-y-3 shadow-md">
               <div className="flex items-center space-x-2 text-purple-300 font-bold text-sm">
                 <Info className="w-5 h-5 text-purple-400 shrink-0" />
@@ -814,7 +814,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 )}
               </div>
             </section>
-          )}
+          )} */}
 
           {/* Cast Rail */}
           {currentMedia.cast && currentMedia.cast.length > 0 && (
