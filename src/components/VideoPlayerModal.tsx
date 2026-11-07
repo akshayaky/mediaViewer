@@ -1290,7 +1290,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
           {isEpisodePickerOpen && (
             <div
-              className="absolute right-0 top-14 flex h-[18rem] max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111319]/20 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))] sidebar:h-[min(36rem,max(0px,calc(100dvh-12rem-var(--sab,0px))))] sidebar:max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] sidebar:flex-row sm:rounded-2xl"
+              className="absolute right-0 top-14 flex h-[18rem] max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111319]/50 shadow-2xl backdrop-blur-2xl sm:w-[min(42rem,calc(100vw-2rem))] sidebar:h-[min(36rem,max(0px,calc(100dvh-12rem-var(--sab,0px))))] sidebar:max-h-[max(0px,calc(100dvh-12rem-var(--sab,0px)))] sidebar:flex-row sm:rounded-2xl"
               onMouseEnter={() => {
                 if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
               }}
@@ -1625,7 +1625,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               </button>
               {showSubtitleStyleEditor && (
                 <div
-                  className="absolute bottom-full right-0 z-50 mb-3 w-80 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-white/15 bg-[#151722]/95 p-4 text-white shadow-2xl backdrop-blur-xl"
+                  className="absolute bottom-full right-0 z-50 mb-3 w-80 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-white/15 bg-[#151722]/50 p-4 text-white shadow-2xl backdrop-blur-xl"
                   aria-label="Subtitle appearance settings"
                   onClick={event => event.stopPropagation()}
                 >
