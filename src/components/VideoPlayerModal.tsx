@@ -75,6 +75,8 @@ const SUBTITLE_FONT_FAMILIES = [
   { label: 'Georgia', value: 'Georgia, serif' }
 ];
 
+const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
 const normalizeSubtitleStyle = (value: unknown): SubtitleStyleSettings => {
   const style = typeof value === 'object' && value !== null
     ? value as Partial<SubtitleStyleSettings>
@@ -183,6 +185,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyleSettings>(DEFAULT_SUBTITLE_STYLE);
   const [subtitleStyleLoaded, setSubtitleStyleLoaded] = useState(false);
   const [showSubtitleStyleEditor, setShowSubtitleStyleEditor] = useState(false);
+  const [showSpeedPicker, setShowSpeedPicker] = useState(false);
+  const [showSubtitlePicker, setShowSubtitlePicker] = useState(false);
+  const [showAudioPicker, setShowAudioPicker] = useState(false);
   const [audioTracks, setAudioTracks] = useState<{ id: string; label: string }[]>([]);
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string>('');
   const [audioTrackSupport, setAudioTrackSupport] = useState<boolean | null>(null);
@@ -194,12 +199,36 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [showSeekLeft, setShowSeekLeft] = useState(false);
   const [showSeekRight, setShowSeekRight] = useState(false);
   const [showVolumeChange, setShowVolumeChange] = useState(false);
+  const [playbackNotice, setPlaybackNotice] = useState('');
   const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cursorOverrideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playbackNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isEpisodePickerOpen, setIsEpisodePickerOpen] = useState(false);
   const isEpisodePickerOpenRef = useRef(false);
   isEpisodePickerOpenRef.current = isEpisodePickerOpen;
   const [selectedPickerSeason, setSelectedPickerSeason] = useState(seasonNumber);
+
+  const togglePlayerPanel = (
+    panel: 'episode' | 'speed' | 'subtitle' | 'subtitleStyle' | 'audio',
+    isOpen: boolean
+  ) => {
+    const shouldOpen = !isOpen;
+    setIsEpisodePickerOpen(panel === 'episode' && shouldOpen);
+    setShowSpeedPicker(panel === 'speed' && shouldOpen);
+    setShowSubtitlePicker(panel === 'subtitle' && shouldOpen);
+    setShowSubtitleStyleEditor(panel === 'subtitleStyle' && shouldOpen);
+    setShowAudioPicker(panel === 'audio' && shouldOpen);
+  };
+
+  const showPlaybackNotice = useCallback((message: string) => {
+    setPlaybackNotice(message);
+    if (playbackNoticeTimerRef.current) clearTimeout(playbackNoticeTimerRef.current);
+    playbackNoticeTimerRef.current = setTimeout(() => setPlaybackNotice(''), 1800);
+  }, []);
+
+  useEffect(() => () => {
+    if (playbackNoticeTimerRef.current) clearTimeout(playbackNoticeTimerRef.current);
+  }, []);
 
   // Next Episode Countdown state
   const [showNextCountdown, setShowNextCountdown] = useState<boolean>(false);
@@ -262,6 +291,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     media.seasons
       ?.find(item => item.season_number === season)
       ?.episodes?.find(item => item.episode_number === episode);
+
+  const selectSubtitle = useCallback((id: string) => {
+    setSelectedSubtitleId(id);
+    const trackId = id.startsWith('sidecar:') ? id.slice('sidecar:'.length) : id;
+    const track = [...subtitleTracks, ...embeddedSubtitleTracks].find(item => item.id === trackId);
+    showPlaybackNotice(id === 'off' ? 'Subtitles Off' : track?.label || 'Subtitle changed');
+  }, [subtitleTracks, embeddedSubtitleTracks, showPlaybackNotice]);
   
     const cycleSubtitles = useCallback(() => {
      // Toggle on/off between available tracks and "off"
@@ -286,8 +322,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
        ? 'off'
        : `sidecar:${allTracks[currentIndex].id}`;
 
-     setSelectedSubtitleId(targetTrack);
-   }, [selectedSubtitleId, subtitleTracks, embeddedSubtitleTracks, lastSelectedSubtitleId]);
+     selectSubtitle(targetTrack);
+   }, [selectedSubtitleId, subtitleTracks, embeddedSubtitleTracks, lastSelectedSubtitleId, selectSubtitle]);
 
    const toggleSubtitles = useCallback(() => {
      // Toggle on/off between available tracks and "off"
@@ -313,8 +349,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
        ? 'off'
        : `sidecar:${allTracks[currentIndex].id}`;
 
-     setSelectedSubtitleId(targetTrack);
-   }, [selectedSubtitleId, subtitleTracks, embeddedSubtitleTracks, setLastSelectedSubtitleId]);
+     selectSubtitle(targetTrack);
+   }, [selectedSubtitleId, subtitleTracks, embeddedSubtitleTracks, setLastSelectedSubtitleId, selectSubtitle]);
 
   // Load Settings
   useEffect(() => {
@@ -894,12 +930,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   }, [isMuted]);
 
   // Speed
-  const handleSpeedChange = (speed: number) => {
+  const handleSpeedChange = useCallback((speed: number) => {
     setPlaybackSpeed(speed);
     if (videoRef.current) {
       videoRef.current.playbackRate = speed;
     }
-  };
+    showPlaybackNotice(`${speed}x`);
+  }, [showPlaybackNotice]);
 
   // Fullscreen
   const toggleFullscreen = () => {
@@ -1010,6 +1047,17 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           e.preventDefault();
           toggleMute();
           break;
+        case ',':
+          e.preventDefault();
+          handleSpeedChange(PLAYBACK_SPEEDS[Math.max(0, PLAYBACK_SPEEDS.indexOf(playbackSpeed) - 1)]);
+          break;
+        case '.':
+          e.preventDefault();
+          handleSpeedChange(PLAYBACK_SPEEDS[Math.min(
+            PLAYBACK_SPEEDS.length - 1,
+            PLAYBACK_SPEEDS.indexOf(playbackSpeed) + 1
+          )]);
+          break;
         case 'v':
         case 'V':
           if (e.shiftKey) {
@@ -1043,7 +1091,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, toggleMute, toggleFullscreen]);
+  }, [togglePlay, toggleMute, toggleFullscreen, toggleSubtitles, cycleSubtitles, handleSpeedChange, playbackSpeed]);
 
   const handleExitPlayer = () => {
     const video = videoRef.current;
@@ -1268,6 +1316,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         </div>
       )}
 
+      {playbackNotice && (
+        <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 z-40 rounded-xl border border-white/15 bg-[#111319]/50 px-4 py-2 text-sm font-semibold text-white shadow-xl backdrop-blur-xl">
+          {playbackNotice}
+        </div>
+      )}
+
+
       {media.type === 'TV Series' && allLocalFiles.length > 1 && (
         <div
           onClick={event => event.stopPropagation()}
@@ -1279,10 +1334,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             type="button"
             onClick={() => {
               setSelectedPickerSeason(seasonNumber);
-              setIsEpisodePickerOpen(open => !open);
+              togglePlayerPanel('episode', isEpisodePickerOpen);
             }}
             aria-expanded={isEpisodePickerOpen}
-            className="flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#111319]/90 px-3 py-2 text-xs font-semibold text-white shadow-xl backdrop-blur-xl transition-colors hover:bg-[#1a1d26] sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm"
+            className="flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#111319]/50 px-3 py-2 text-xs font-semibold text-white shadow-xl backdrop-blur-xl transition-colors hover:bg-[#1a1d26] sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm"
           >
             <span>S{String(seasonNumber).padStart(2, '0')}E{String(episodeNumber).padStart(2, '0')}</span>
             <ChevronDown className={`h-4 w-4 transition-transform ${isEpisodePickerOpen ? 'rotate-180' : ''}`} />
@@ -1560,20 +1615,35 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
               title={`Playback speed: ${playbackSpeed}x`}
             >
-              <Sliders className="w-5 h-5 text-gray-400 transition-transform group-hover:scale-110 group-hover:text-white group-focus-within:scale-110 group-focus-within:text-white" />
-              <select
-                value={playbackSpeed}
-                onChange={(e) => handleSpeedChange(Number(e.target.value))}
-                aria-label="Playback speed"
-                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 max-[1089px]:absolute max-[1089px]:inset-0 max-[1089px]:h-full max-[1089px]:w-full max-[1089px]:opacity-0 max-[1089px]:cursor-pointer"
+              <button
+                onClick={() => togglePlayerPanel('speed', showSpeedPicker)}
+                className="flex h-full w-full items-center justify-center p-2 transition-colors hover:text-white"
               >
-                <option value={0.5} className="bg-[#14161f]">0.5x</option>
-                <option value={0.75} className="bg-[#14161f]">0.75x</option>
-                <option value={1.0} className="bg-[#14161f]">1.0x Normal</option>
-                <option value={1.25} className="bg-[#14161f]">1.25x</option>
-                <option value={1.5} className="bg-[#14161f]">1.5x</option>
-                <option value={2.0} className="bg-[#14161f]">2.0x</option>
-              </select>
+                <Sliders className="w-5 h-5 text-gray-400 transition-transform group-hover:scale-110 group-hover:text-white group-focus-within:scale-110 group-focus-within:text-white" />
+              </button>
+              
+              {showSpeedPicker && (
+                <div 
+                  className="absolute bottom-full right-0 z-50 mb-3 w-40 rounded-xl border border-white/10 bg-[#111319]/50 p-1.5 text-white shadow-2xl backdrop-blur-2xl"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {PLAYBACK_SPEEDS.map(speed => (
+                    <button
+                      key={speed}
+                      onClick={() => {
+                        handleSpeedChange(speed);
+                        setShowSpeedPicker(false);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors ${
+                        playbackSpeed === speed ? 'bg-[#E27D12]/20 text-[#E27D12]' : 'hover:bg-white/10 text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      <span>{speed}x</span>
+                      {playbackSpeed === speed && <div className="h-1 w-1 rounded-full bg-[#E27D12]" />}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Subtitles Selector */}
@@ -1581,41 +1651,82 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
               title={subtitleError || 'Subtitle track'}
             >
-              <Subtitles className="w-5 h-5 text-[#E27D12] transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
-              <select
-                value={selectedSubtitleId}
-                onChange={(e) => setSelectedSubtitleId(e.target.value)}
-                aria-label="Subtitle track"
-                disabled={mkvParsing || subtitleTracks.length + embeddedSubtitleTracks.length === 0}
-                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-60 max-[1089px]:absolute max-[1089px]:inset-0 max-[1089px]:h-full max-[1089px]:w-full max-[1089px]:opacity-0 max-[1089px]:cursor-pointer"
+              <button
+                onClick={() => togglePlayerPanel('subtitle', showSubtitlePicker)}
+                className="flex h-full w-full items-center justify-center p-2 transition-colors hover:text-white"
               >
-                {subtitleTracks.length + embeddedSubtitleTracks.length === 0 ? (
-                  <option value="off" className="bg-[#14161f]">
-                    {mkvParsing ? 'Reading embedded subtitles…' : subtitleError ? 'Subtitle load failed' : loading ? 'Searching subtitles…' : 'No subtitles available'}
-                  </option>
-                ) : (
-                  <>
-                    <option value="off" className="bg-[#14161f]">Subtitles Off</option>
-                    {subtitleTracks.map(sub => (
-                      <option key={sub.id} value={`sidecar:${sub.id}`} className="bg-[#14161f]">
-                        {sub.label}{sub.embedded ? ' (Embedded)' : ''}
-                      </option>
-                    ))}
-                    {embeddedSubtitleTracks.map(track => (
-                      <option key={track.id} value={track.id} className="bg-[#14161f]">
-                        {track.label} (Embedded)
-                      </option>
-                    ))}
-                  </>
-                )}
-              </select>
+                <Subtitles className={`w-5 h-5 transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125 ${
+                  selectedSubtitleId === 'off' ? 'text-white' : 'text-[#E27D12]'
+                }`} />
+              </button>
+
+              {showSubtitlePicker && (
+                <div 
+                  className="absolute bottom-full right-0 z-50 mb-3 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-[#111319]/50 p-1.5 text-white shadow-2xl backdrop-blur-2xl overflow-hidden"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="max-h-60 overflow-y-auto overscroll-contain p-1 space-y-0.5">
+                    <button
+                      onClick={() => {
+                        selectSubtitle('off');
+                        setShowSubtitlePicker(false);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors ${
+                        selectedSubtitleId === 'off' ? 'bg-[#E27D12]/20 text-[#E27D12]' : 'hover:bg-white/10 text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      <span>Subtitles Off</span>
+                      {selectedSubtitleId === 'off' && <div className="h-1 w-1 rounded-full bg-[#E27D12]" />}
+                    </button>
+                    
+                    {subtitleTracks.length + embeddedSubtitleTracks.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-gray-400 italic">
+                        {mkvParsing ? 'Reading embedded subtitles…' : subtitleError ? 'Subtitle load failed' : loading ? 'Searching subtitles…' : 'No subtitles available'}
+                      </div>
+                    ) : (
+                      <>
+                        {subtitleTracks.map(sub => (
+                          <button
+                            key={sub.id}
+                            onClick={() => {
+                              selectSubtitle(`sidecar:${sub.id}`);
+                              setShowSubtitlePicker(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors ${
+                              selectedSubtitleId === `sidecar:${sub.id}` ? 'bg-[#E27D12]/20 text-[#E27D12]' : 'hover:bg-white/10 text-gray-300 hover:text-white'
+                            }`}
+                          >
+                            <span>{sub.label}{sub.embedded ? ' (Embedded)' : ''}</span>
+                            {selectedSubtitleId === `sidecar:${sub.id}` && <div className="h-1 w-1 rounded-full bg-[#E27D12]" />}
+                          </button>
+                        ))}
+                        {embeddedSubtitleTracks.map(track => (
+                          <button
+                            key={track.id}
+                            onClick={() => {
+                              selectSubtitle(track.id);
+                              setShowSubtitlePicker(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors ${
+                              selectedSubtitleId === track.id ? 'bg-[#E27D12]/20 text-[#E27D12]' : 'hover:bg-white/10 text-gray-300 hover:text-white'
+                            }`}
+                          >
+                            <span>{track.label} (Embedded)</span>
+                            {selectedSubtitleId === track.id && <div className="h-1 w-1 rounded-full bg-[#E27D12]" />}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Subtitle Style Controls */}
             <div className="relative flex shrink-0 items-center">
               <button
                 type="button"
-                onClick={() => setShowSubtitleStyleEditor(open => !open)}
+                onClick={() => togglePlayerPanel('subtitleStyle', showSubtitleStyleEditor)}
                 aria-label="Customize subtitles"
                 aria-expanded={showSubtitleStyleEditor}
                 title="Customize subtitles"
@@ -1762,30 +1873,47 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               className="group relative flex h-9 w-9 shrink-0 items-center justify-center text-white min-[1090px]:h-auto min-[1090px]:w-auto min-[1090px]:space-x-1 min-[1090px]:text-xs"
               title={audioTrackSupport === false ? 'Audio track switching is not supported by this video runtime.' : 'Audio track'}
             >
-              <AudioLines className="w-5 h-5 text-[#E27D12] transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
-              <select
-                value={audioTracks.length ? selectedAudioTrackId : ''}
-                onChange={(e) => setSelectedAudioTrackId(e.target.value)}
-                aria-label="Audio track"
-                disabled={audioTracks.length < 2}
-                className="bg-black/60 border border-white/20 text-white text-xs rounded-lg px-2 py-1 backdrop-blur-md cursor-pointer hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-60 max-[1089px]:absolute max-[1089px]:inset-0 max-[1089px]:h-full max-[1089px]:w-full max-[1089px]:opacity-0 max-[1089px]:cursor-pointer"
+              <button
+                onClick={() => togglePlayerPanel('audio', showAudioPicker)}
+                className="flex h-full w-full items-center justify-center p-2 transition-colors hover:text-white"
               >
-                {audioTracks.length === 0 ? (
-                  <option value="" className="bg-[#14161f]">
-                    {audioTrackSupport === false
-                      ? 'Audio switching unavailable'
-                      : audioTrackSupport === null
-                        ? 'Detecting audio…'
-                        : 'No alternate audio'}
-                  </option>
-                ) : (
-                  audioTracks.map(track => (
-                    <option key={track.id} value={track.id} className="bg-[#14161f]">
-                      {track.label}
-                    </option>
-                  ))
-                )}
-              </select>
+                <AudioLines className="w-5 h-5 text-[#E27D12] transition-transform group-hover:scale-110 group-hover:brightness-125 group-focus-within:scale-110 group-focus-within:brightness-125" />
+              </button>
+
+              {showAudioPicker && (
+                <div 
+                  className="absolute bottom-full right-0 z-50 mb-3 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-[#111319]/50 p-1.5 text-white shadow-2xl backdrop-blur-2xl overflow-hidden"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="max-h-60 overflow-y-auto overscroll-contain p-1 space-y-0.5">
+                    {audioTracks.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-gray-400 italic">
+                        {audioTrackSupport === false
+                          ? 'Audio switching unavailable'
+                          : audioTrackSupport === null
+                            ? 'Detecting audio…'
+                            : 'No alternate audio'}
+                      </div>
+                    ) : (
+                      audioTracks.map(track => (
+                        <button
+                          key={track.id}
+                          onClick={() => {
+                            setSelectedAudioTrackId(track.id);
+                            setShowAudioPicker(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors ${
+                            selectedAudioTrackId === track.id ? 'bg-[#E27D12]/20 text-[#E27D12]' : 'hover:bg-white/10 text-gray-300 hover:text-white'
+                          }`}
+                        >
+                          <span>{track.label}</span>
+                          {selectedAudioTrackId === track.id && <div className="h-1 w-1 rounded-full bg-[#E27D12]" />}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Fullscreen Toggle */}
