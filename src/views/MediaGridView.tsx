@@ -3,11 +3,11 @@ import { MediaCard } from '../components/MediaCard';
 import { AddMediaModal } from '../components/AddMediaModal';
 import { Media, MediaCardOrientation, MediaGridGroupField, MediaGridPreferences, MediaGridSortField, MediaType } from '../types/media';
 import { dbService } from '../services/DatabaseService';
-import { ArrowDownUp, Search, Filter, Plus, X, RotateCcw, ChevronRight} from 'lucide-react';
+import { ArrowDownUp, Search, Filter, Plus, X, RotateCcw, ChevronRight, MoreHorizontal, ChevronUp } from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
 import { getLastWatchedEpisodeArtwork } from '../helper/episodeProgress';
-import { HorizontalDragScroll } from '../components/HorizontalDragScroll';
 import { matchesMediaTextFilter, parseMediaTextFilter } from '../services/MediaTextFilter';
+import { getMediaCardWidth } from '../helper/mediaCardSizing';
 
 const DEFAULT_GRID_PREFERENCES: MediaGridPreferences = {
   sortBy: 'created_at',
@@ -49,6 +49,73 @@ const GROUP_OPTIONS: { value: MediaGridGroupField; label: string }[] = [
 const SORT_FIELDS = new Set<MediaGridSortField>(SORT_OPTIONS.map(option => option.value));
 const GROUP_FIELDS = new Set<MediaGridGroupField>(GROUP_OPTIONS.map(option => option.value));
 
+interface CardDisplayMenuProps {
+  orientation?: MediaCardOrientation;
+  onOrientationChange?: (orientation: MediaCardOrientation) => void;
+}
+
+const CardDisplayMenu: React.FC<CardDisplayMenuProps> = ({
+  orientation,
+  onOrientationChange
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={menuRef} className="relative ml-auto">
+      <button
+        type="button"
+        onClick={() => setIsOpen(open => !open)}
+        aria-label="Card display options"
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        title="Card display options"
+        className="flex h-8 w-8 items-center justify-center rounded-md border border-[#30323a] bg-[#191a20] text-gray-300 transition-colors hover:border-[#E27D12]/60 hover:text-white"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {isOpen && (
+        <div
+          role="dialog"
+          aria-label="Card display options"
+          className="absolute right-0 top-full z-[60] mt-2 w-64 rounded-lg border border-[#343744] bg-[#191a20] p-4 shadow-2xl shadow-black/50"
+        >
+          {orientation && onOrientationChange && (
+            <label className="block space-y-1.5 text-xs text-gray-400">
+              <span className="block font-medium text-gray-200">Card orientation</span>
+              <select
+                aria-label="Card orientation"
+                value={orientation}
+                onChange={event => onOrientationChange(event.target.value as MediaCardOrientation)}
+                className="w-full rounded-md border border-[#30323a] bg-[#111217] px-2.5 py-2 text-sm text-gray-200 focus:border-[#E27D12] focus:outline-none"
+              >
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+              </select>
+            </label>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -68,7 +135,8 @@ interface MediaGridViewProps {
   onPreviewEnd?: () => void;
   onAddNewMedia?: () => void;
   isCollapsed?: boolean;
-  isDetailsOpen?: boolean
+  isDetailsOpen?: boolean;
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export const MediaGridView: React.FC<MediaGridViewProps> = ({
@@ -80,7 +148,8 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   onPreviewEnd,
   onAddNewMedia,
   isCollapsed,
-  isDetailsOpen
+  isDetailsOpen,
+  scrollContainerRef
 }) => {
   const { isDesktop, pagePadding } = useSidebarPadding(isCollapsed);
 
@@ -106,16 +175,30 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const [orientationByType, setOrientationByType] = useState<Partial<Record<MediaType, MediaCardOrientation>>>({});
   const [gridPreferences, setGridPreferences] = useState<MediaGridPreferences>(DEFAULT_GRID_PREFERENCES);
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
+  const [orientationPreferenceError, setOrientationPreferenceError] = useState<string | null>(null);
   const [pullOffset, setPullOffset] = useState<number>(0);
   const [searchScrollLeft, setSearchScrollLeft] = useState(0);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   //const [crossedThreshold, setCrossedThreshold] = useState<boolean>(false);
   const crossedThresholdRef = useRef<boolean>(false);
   const preferencesLoadedRef = useRef(false);
+  const uiPreferencesLoadedRef = useRef(false);
   const preferenceChangedBeforeLoadRef = useRef(false);
   const preferenceSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const orientationSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // Add this near your state definitions
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => setShowBackToTop(scrollContainer.scrollTop > 320);
+    handleScroll();
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, [scrollContainerRef]);
 
   const updateGridPreferences = (update: (current: MediaGridPreferences) => MediaGridPreferences) => {
     if (!preferencesLoadedRef.current) preferenceChangedBeforeLoadRef.current = true;
@@ -153,6 +236,7 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
         'TV Series': savedOrientations['TV Series'] === 'landscape' ? 'landscape' : 'portrait',
         VideoGame: savedOrientations.VideoGame === 'landscape' ? 'landscape' : 'portrait'
       });
+      uiPreferencesLoadedRef.current = true;
       if (isRecord(saved) && !preferenceChangedBeforeLoadRef.current) {
         setGridPreferences({
           sortBy: typeof saved.sortBy === 'string' && SORT_FIELDS.has(saved.sortBy as MediaGridSortField)
@@ -180,6 +264,31 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
       window.removeEventListener('library-scanned', handleScanned);
     };
   }, []);
+
+  useEffect(() => {
+    if (!uiPreferencesLoadedRef.current) return;
+    const timeout = window.setTimeout(() => {
+      const saveUiPreferences = async () => {
+        const settings = await dbService.getSettings();
+        await dbService.saveSetting('ui_preferences', {
+          ...settings.ui_preferences,
+          card_orientation_by_type: {
+            ...settings.ui_preferences?.card_orientation_by_type,
+            ...orientationByType
+          }
+        });
+      };
+      orientationSaveQueueRef.current = orientationSaveQueueRef.current
+        .catch(() => undefined)
+        .then(saveUiPreferences)
+        .then(() => setOrientationPreferenceError(null))
+        .catch(error => {
+          setOrientationPreferenceError('Could not save card orientation preferences.');
+          console.error('Failed to save card orientation preferences:', error);
+        });
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [orientationByType]);
 
   useEffect(() => {
     if (!preferencesLoadedRef.current) return;
@@ -540,39 +649,28 @@ useEffect(() => {
 
   const cardOrientation = typeFilter ? orientationByType[typeFilter] || 'portrait' : 'portrait';
   const useLandscapeCards = cardOrientation === 'landscape';
-  const renderGroupItems = (group: (typeof groupedItems)[number], horizontal = false) => {
+  const cardWidth = getMediaCardWidth(cardOrientation);
+  const renderGroupItems = (group: (typeof groupedItems)[number]) => {
     const cards = group.items.map(media => (
-        <div
-          key={`${group.key}:${media.id}`}
-          className={horizontal
-            ? `shrink-0 ${useLandscapeCards
-              ? 'w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(30%-12px)] lg:w-[calc(25%-12px)] xl:w-[calc(22%-12px)]'
-              : 'w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(15%-12px)]'
-            }`
-            : undefined
-          }
-        >
-          <MediaCard
-            media={media}
-            state={stateByMediaId[media.id]}
-            score={scoreByMediaId[media.id]}
-            landscape={useLandscapeCards}
-            landscapeImage={landscapeImageByMediaId[media.id]}
-            onClick={onSelectMedia}
-            onPreviewStart={onPreviewStart}
-            onPreviewEnd={onPreviewEnd}
-          />
-        </div>
-    ));
-
-    return horizontal ? (
-      <HorizontalDragScroll className="mt-2 flex gap-1 overflow-x-auto pb-4 pt-1 scrollbar-none">
-        {cards}
-      </HorizontalDragScroll>
-    ) : (
-      <div className="mt-2 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 sm:gap-4 md:gap-5">
-        {cards}
+      <div
+        key={`${group.key}:${media.id}`}
+        className="min-w-0"
+        style={{ flex: `1 1 ${cardWidth}` }}
+      >
+        <MediaCard
+          media={media}
+          state={stateByMediaId[media.id]}
+          score={scoreByMediaId[media.id]}
+          landscape={useLandscapeCards}
+          landscapeImage={landscapeImageByMediaId[media.id]}
+          onClick={onSelectMedia}
+          onPreviewStart={onPreviewStart}
+          onPreviewEnd={onPreviewEnd}
+        />
       </div>
+    ));
+    return (
+      <div className="mt-2 flex flex-wrap gap-2 sm:gap-4 md:gap-5">{cards}</div>
     );
   };
 
@@ -643,7 +741,7 @@ useEffect(() => {
         </button>
       )}
 
-      <div className="sticky top-0 z-30 -mx-1 bg-[#101116]/95 px-1 py-2">
+      <div className="relative -mx-1 px-1 py-2">
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1 rounded-lg border border-[#343744] bg-[#191a20] focus-within:border-[#E27D12] focus-within:ring-1 focus-within:ring-[#E27D12]/40">
             <Search className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
@@ -867,7 +965,13 @@ useEffect(() => {
                   </button>
                 </div>
                 <div className="mt-2 border-t border-white/5 pt-3 sm:hidden">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500">Organize</p>
+                  <div className="mb-2 flex items-center">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500">Organize</p>
+                    <CardDisplayMenu
+                      orientation={typeFilter ? cardOrientation : undefined}
+                      onOrientationChange={typeFilter ? orientation => setOrientationByType(current => ({ ...current, [typeFilter]: orientation })) : undefined}
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <label className="space-y-1 text-xs text-gray-400">
                       <span className="block">Sort by</span>
@@ -984,11 +1088,30 @@ useEffect(() => {
               <span className="hidden sm:inline">{gridPreferences.groupDescending ? 'Groups ↓' : 'Groups ↑'}</span>
             </button>
           )}
+          <CardDisplayMenu
+            orientation={typeFilter ? cardOrientation : undefined}
+            onOrientationChange={typeFilter ? orientation => setOrientationByType(current => ({ ...current, [typeFilter]: orientation })) : undefined}
+          />
         </div>
       </div>
 
       {preferenceError && (
         <p role="status" className="text-xs text-[#E27D12]">{preferenceError}</p>
+      )}
+      {orientationPreferenceError && (
+        <p role="status" className="text-xs text-[#E27D12]">{orientationPreferenceError}</p>
+      )}
+
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={() => scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label="Back to top"
+          title="Back to top"
+          className="fixed bottom-[calc(9rem+var(--sab,0px))] right-4 z-30 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#191a20]/70 text-white/80 opacity-80 shadow-lg shadow-black/30 backdrop-blur-md transition-opacity hover:bg-[#191a20]/90 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E27D12] sidebar:bottom-6"
+        >
+          <ChevronUp className="h-4 w-4" />
+        </button>
       )}
 
       {/* Grid */}
@@ -1015,7 +1138,7 @@ useEffect(() => {
                 <span className="text-xs font-normal text-gray-500">{group.items.length}</span>
               </div>
             </summary>
-          {renderGroupItems(group, true)}
+          {renderGroupItems(group)}
         </details>
       ) : (
         <div key={group.key} className="mb-6">

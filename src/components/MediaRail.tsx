@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Media, MediaCardOrientation, MediaType } from '../types/media';
 import type { HomeRailPage } from '../services/DatabaseService';
 import { getLastWatchedEpisodeArtwork } from '../helper/episodeProgress';
-import { useSidebarPadding } from '../hooks/useSidebarPadding';
+import { getMediaCardWidth } from '../helper/mediaCardSizing';
 import { HorizontalDragScroll } from './HorizontalDragScroll';
 import { MediaCard } from './MediaCard';
 
@@ -33,7 +33,6 @@ export const MediaRail: React.FC<MediaRailProps> = ({
   onPreviewStart,
   onPreviewEnd
 }) => {
-  const { isDesktop } = useSidebarPadding();
   const sectionRef = useRef<HTMLElement>(null);
   const entriesRef = useRef<HomeRailPage['entries']>([]);
   const loadingRef = useRef(false);
@@ -109,7 +108,7 @@ export const MediaRail: React.FC<MediaRailProps> = ({
         >
           {entries.map(({ media, state, history }) => {
             const orientation = cardOrientation || cardOrientationByType[media.type] || 'portrait';
-            const landscape = forceLandscape || (isDesktop && orientation === 'landscape');
+            const landscape = forceLandscape || orientation === 'landscape';
             const lastEpisodeStill = getLastWatchedEpisodeArtwork(media, history).still;
             const image = media.type === 'TV Series'
               ? lastEpisodeStill || media.backdrop
@@ -117,11 +116,8 @@ export const MediaRail: React.FC<MediaRailProps> = ({
             return (
               <div
                 key={media.id}
-                className={`shrink-0 ${
-                  landscape
-                    ? 'w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(30%-12px)] lg:w-[calc(25%-12px)] xl:w-[calc(22%-12px)]'
-                    : 'w-[calc(40%-12px)] sm:w-[calc(28%-12px)] md:w-[calc(15%-12px)]'
-                }`}
+                className="shrink-0"
+                style={{ width: getMediaCardWidth(landscape ? 'landscape' : 'portrait') }}
               >
                 <MediaCard
                   media={media}

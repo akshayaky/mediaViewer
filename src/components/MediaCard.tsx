@@ -263,11 +263,17 @@ export const MediaCard = React.memo<MediaCardProps>(({
                   src={media.logo}
                   alt={media.title}
                   onError={() => setLogoFailed(true)}
-                  className="h-10 max-w-[75%] object-contain object-left drop-shadow-lg"
+                  className="max-w-[75%] object-contain object-left drop-shadow-lg"
+                  style={{ height: 'clamp(24px, 2.4vw, 40px)' }}
                   loading="lazy"
                 />
               ) : (
-                <p className=" text-xl font-extrabold uppercase text-white drop-shadow">{media.title}</p>
+                <p
+                  className="font-extrabold uppercase text-white drop-shadow"
+                  style={{ fontSize: 'clamp(16px, 1.2vw, 24px)' }}
+                >
+                  {media.title}
+                </p>
               )}
             </div>
           )}

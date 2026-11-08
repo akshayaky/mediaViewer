@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HeroShowcase } from '../components/HeroShowcase';
 import { MediaRail } from '../components/MediaRail';
-import { Media, MediaHistory, MediaState } from '../types/media';
+import { Media, MediaCardOrientation, MediaHistory, MediaState } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { getAccentRgb, parseColor } from '../helper/mediaDetailTheme';
 import { useDominantColor } from '../helper/useDominantColour';
@@ -124,6 +124,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
     loadError: boolean;
   }>({ media: [], history: [], states: [], hasMedia: false, loaded: false, loadError: false });
   const [libraryRevision, setLibraryRevision] = useState(0);
+  const [cardOrientationByType, setCardOrientationByType] = useState<Partial<Record<Media['type'], MediaCardOrientation>>>({});
 
   useEffect(() => {
     const handleLibraryUpdate = () => setLibraryRevision(revision => revision + 1);
@@ -131,6 +132,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
     return () => {
       window.removeEventListener('library-scanned', handleLibraryUpdate);
     };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    dbService.getSettings().then(settings => {
+      if (!isMounted) return;
+      setCardOrientationByType(settings.ui_preferences?.card_orientation_by_type || {});
+    }).catch(error => console.error('Failed to load home card preferences:', error));
+    return () => { isMounted = false; };
   }, []);
 
   useEffect(() => {
@@ -326,7 +336,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           loadPage={loadRecent}
           onSelectMedia={onSelectMedia}
           onPlayMedia={onPlayMedia}
-          cardOrientation="portrait"
+          cardOrientationByType={cardOrientationByType}
         />
 
         <MediaRail
@@ -336,7 +346,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           loadPage={loadRewatch}
           onSelectMedia={onSelectMedia}
           onPlayMedia={onPlayMedia}
-          cardOrientation="portrait"
+          cardOrientationByType={cardOrientationByType}
         />
 
         <MediaRail
@@ -346,7 +356,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           loadPage={loadLocal}
           onSelectMedia={onSelectMedia}
           onPlayMedia={onPlayMedia}
-          cardOrientation="portrait"
+          cardOrientationByType={cardOrientationByType}
         />
 
         <MediaRail
@@ -356,7 +366,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           loadPage={loadAbandoned}
           onSelectMedia={onSelectMedia}
           onPlayMedia={onPlayMedia}
-          cardOrientation="portrait"
+          cardOrientationByType={cardOrientationByType}
         />
       </div>
       </div>

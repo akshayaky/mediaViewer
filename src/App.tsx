@@ -406,6 +406,7 @@ export function App() {
             onPreviewEnd={enableHoverPreview ? handlePreviewEnd : undefined}
             isCollapsed={isCollapsed}
             isDetailsOpen={selectedMedia!=null}
+            scrollContainerRef={gridScrollRef}
           />
         );
       case 'tv':
@@ -419,6 +420,7 @@ export function App() {
             onPreviewEnd={enableHoverPreview ? handlePreviewEnd : undefined}
             isCollapsed={isCollapsed}
             isDetailsOpen={selectedMedia!=null}
+            scrollContainerRef={gridScrollRef}
           />
         );
       case 'games':
@@ -432,6 +434,7 @@ export function App() {
             onPreviewEnd={enableHoverPreview ? handlePreviewEnd : undefined}
             isCollapsed={isCollapsed}
             isDetailsOpen={selectedMedia!=null}
+            scrollContainerRef={gridScrollRef}
           />
         );
       default:
