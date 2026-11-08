@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Star, Calendar } from 'lucide-react';
 import { Media, MediaState } from '../types/media';
 import { Film, Tv, Gamepad2, Play, RefreshCw, PauseCircle } from 'lucide-react';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
@@ -89,6 +90,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     });
   };
 
+  const [isHovered, setIsHovered] = useState(false);
+
   const getTypeIcon = () => {
     switch (media.type) {
       case 'Film':
@@ -104,9 +107,13 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
   const renderBadge = () => {
     if (!state) return null;
+    
+    // Only show badges on hover
+    if (!isHovered) return null;
+    
     if (state.currently_watching_playing) {
       return (
-        <span className="absolute top-2 left-2 bg-emerald-600/90 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-md">
+        <span className="absolute top-2 left-2 bg-emerald-600/90 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-md transition-opacity duration-200">
           <Play className="w-3 h-3 fill-current" />
           <span>Active</span>
         </span>
@@ -114,7 +121,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     }
     if (state.rewatch_count > 0) {
       return (
-        <span className="absolute top-2 left-2 bg-[#E27D12]/90 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-md">
+        <span className="absolute top-2 left-2 bg-[#E27D12]/90 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-md transition-opacity duration-200">
           <RefreshCw className="w-3 h-3" />
           <span>{state.rewatch_count > 1 ? `${state.rewatch_count}x Rewatched` : 'Rewatched'}</span>
         </span>
@@ -122,7 +129,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     }
     if (state.current_status === 'Abandoned') {
       return (
-        <span className="absolute top-2 left-2 bg-amber-600/90 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-md">
+        <span className="absolute top-2 left-2 bg-amber-600/90 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-md transition-opacity duration-200">
           <PauseCircle className="w-3 h-3" />
           <span>Paused/Abandoned</span>
         </span>
@@ -140,12 +147,14 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         onClick(media, rect);
       }}
       onMouseEnter={event => {
+        setIsHovered(true);
         if (isFinePointer) {
           const rect = event.currentTarget.getBoundingClientRect();
           onPreviewStart?.(media, rect);
         }
       }}
       onMouseLeave={() => {
+        setIsHovered(false);
         if (isFinePointer) {
           onPreviewEnd?.();
         }
@@ -196,7 +205,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
           {/* Subtle Bottom Progress Bar */}
           {progressPct > 0 && (
-            <div className="absolute bottom-0 inset-x-0 bg-black/60 h-1.5 z-10">
+            <div className="absolute bottom-0 inset-x-0 bg-black/60 h-0.5 z-10">
               <div
                 className="bg-[#E27D12] h-full transition-all duration-300 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
                 style={{ width: `${progressPct}%` }}

@@ -325,7 +325,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
             <img
               src={displayedMedia.logo}
               alt={displayedMedia.title}
-              className="h-16 max-w-md object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
+              className="h-35 max-w-md object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
               onError={event => {
                 event.currentTarget.style.display = 'none';
                 const titleElement = document.getElementById(`hero-title-text-${displayedMedia.id}`);
