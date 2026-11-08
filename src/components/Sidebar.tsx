@@ -12,7 +12,8 @@ import {
   MoreHorizontal,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Search
 } from 'lucide-react';
 import { dbService } from '../services/DatabaseService';
 import { getSidebarAccentColors } from '../helper/mediaDetailTheme';
@@ -25,9 +26,17 @@ interface SidebarProps {
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
   accentColor?: string;
+  onOpenUniversalSearch: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isCollapsed, setIsCollapsed, accentColor }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  onSelectTab,
+  isCollapsed,
+  setIsCollapsed,
+  accentColor,
+  onOpenUniversalSearch
+}) => {
   const [unmatchedCount, setUnmatchedCount] = useState(0);
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false);
   const accentColors = accentColor ? getSidebarAccentColors(accentColor) : null;
@@ -279,33 +288,47 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, isColl
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
-            <button
-              key={item.id}
-              onClick={() => handleMobileTabSelect(item.id)}
-              className={`flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all touch-target cursor-pointer ${
-                isActive ? 'text-[#E27D12] font-semibold' : 'text-gray-400 hover:text-white'
-              }`}
-              style={isActive ? {
-                    backgroundColor: accentColors ? accentColors.activeBackground : 'rgba(255, 255, 255, 0.08)',
-                  } : {
-                    backgroundColor: 'transparent',
-                    color: accentColors?.inactiveForeground,
-                  }}
-            >
-              <Icon className={`w-5 h-5 mb-1 ${isActive ? 'text-[#E27D12] scale-110' : 'text-gray-400'}`}
-                style={accentColors
-                  ? { color: isActive ? '#FFFFFF' : accentColors.inactiveForeground }
-                  : undefined}
-              />
-              <span 
-                className="text-[10px] tracking-tight truncate max-w-[60px] text-center"
-                style={accentColors
-                  ? { color: isActive ? '#FFFFFF' : accentColors.inactiveForeground }
-                  : undefined}
+            <React.Fragment key={item.id}>
+              <button
+                onClick={() => handleMobileTabSelect(item.id)}
+                className={`flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all touch-target cursor-pointer ${
+                  isActive ? 'text-[#E27D12] font-semibold' : 'text-gray-400 hover:text-white'
+                }`}
+                style={isActive ? {
+                      backgroundColor: accentColors ? accentColors.activeBackground : 'rgba(255, 255, 255, 0.08)',
+                    } : {
+                      backgroundColor: 'transparent',
+                      color: accentColors?.inactiveForeground,
+                    }}
+              >
+                <Icon className={`w-5 h-5 mb-1 ${isActive ? 'text-[#E27D12] scale-110' : 'text-gray-400'}`}
+                  style={accentColors
+                    ? { color: isActive ? '#FFFFFF' : accentColors.inactiveForeground }
+                    : undefined}
+                />
+                <span
+                  className="text-[10px] tracking-tight truncate max-w-[60px] text-center"
+                  style={accentColors
+                    ? { color: isActive ? '#FFFFFF' : accentColors.inactiveForeground }
+                    : undefined}
                 >
-                {item.label}
-              </span>
-            </button>
+                  {item.label}
+                </span>
+              </button>
+              {item.id === 'games' && (
+                <button
+                  type="button"
+                  onClick={onOpenUniversalSearch}
+                  aria-label="Search all media"
+                  title="Search all media"
+                  className="flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all touch-target cursor-pointer text-gray-400 hover:text-white"
+                  style={{ backgroundColor: 'transparent', color: accentColors?.inactiveForeground }}
+                >
+                  <Search className="w-5 h-5 mb-1" />
+                  <span className="text-[10px] tracking-tight truncate max-w-[60px] text-center">Search</span>
+                </button>
+              )}
+            </React.Fragment>
           );
         })}
 

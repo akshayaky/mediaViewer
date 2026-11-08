@@ -537,6 +537,7 @@ export function App() {
         isCollapsed={isCollapsed}
         setIsCollapsed={setIsCollapsed}
         accentColor={pageAccentColor}
+        onOpenUniversalSearch={() => setIsUniversalSearchOpen(true)}
       />
 
       {/* Main View Area */}

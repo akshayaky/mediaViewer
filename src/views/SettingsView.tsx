@@ -1082,7 +1082,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
           <span>UI</span>
         </h2>
         <p className="text-xs text-gray-400">
-          Configure desktop navigation and library card layouts. Home page rails use fixed layouts.
+          Configure desktop navigation and library card layouts across screen sizes. Home page rails use fixed layouts.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -1107,7 +1107,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
             </label>
           </div>
 
-          {isDesktop && ([
+          {([
             { type: 'Film', label: 'Movies' },
             { type: 'TV Series', label: 'TV Shows' },
             { type: 'VideoGame', label: 'Games' }

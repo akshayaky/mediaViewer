@@ -539,7 +539,7 @@ useEffect(() => {
   })();
 
   const cardOrientation = typeFilter ? orientationByType[typeFilter] || 'portrait' : 'portrait';
-  const useLandscapeCards = isDesktop && cardOrientation === 'landscape';
+  const useLandscapeCards = cardOrientation === 'landscape';
   const renderGroupItems = (group: (typeof groupedItems)[number], horizontal = false) => {
     const cards = group.items.map(media => (
         <div
@@ -613,7 +613,7 @@ useEffect(() => {
           <p className="text-xs sm:text-sm text-gray-400 font-medium mt-1">{subtitle}</p>
         </div>
 
-        {(onAddNewMedia || typeFilter) && (
+        {(onAddNewMedia || typeFilter) && isDesktop && (
           <button
             onClick={() => {
               handleAddButtonClick();
@@ -627,6 +627,21 @@ useEffect(() => {
           </button>
         )}
       </div>
+
+      {(onAddNewMedia || typeFilter) && !isDesktop && (
+        <button
+          type="button"
+          onClick={() => {
+            handleAddButtonClick();
+            navigator.vibrate(15);
+          }}
+          aria-label="Add Entry"
+          title="Add Entry"
+          className="fixed bottom-[calc(5.25rem+var(--sab,0px))] right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-[#E27D12]/40 bg-[#E27D12] text-white shadow-lg shadow-black/40 transition-colors hover:bg-[#f08a1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E27D12] cursor-pointer touch-target"
+        >
+          <Plus className="h-5 w-5" />
+        </button>
+      )}
 
       <div className="sticky top-0 z-30 -mx-1 bg-[#101116]/95 px-1 py-2">
         <div className="flex items-center gap-2">
