@@ -1,10 +1,11 @@
-import { Media, LocalFile, Availability, Wishlist, MediaType } from '../types/media';
+import { Media, LocalFile, Availability, Wishlist, MediaType, CastMember } from '../types/media';
 
 export interface MetadataSearchResult {
   title: string;
   original_title?: string;
   release_year?: number;
   language?: string;
+  cast?: CastMember[];
   type: MediaType;
   description?: string;
   poster?: string;
@@ -16,6 +17,8 @@ export interface MetadataSearchResult {
 export interface MetadataSearchOptions {
   releaseYear?: number;
   language?: string;
+  originalLanguage?: string;
+  cast?: string;
 }
 
 export interface MetadataProvider {
@@ -56,6 +59,9 @@ export interface NotionColumnMapping {
   languageField: string;
   thoughtsField: string;
   publisherField: string;
+  originalTitleField?: string;
+  tmdbIdField?: string;
+  igdbIdField?: string;
 }
 
 export interface NotionImportResult {

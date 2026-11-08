@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Media, MediaType } from '../types/media';
 import { MetadataSearchOptions, MetadataSearchResult } from '../providers/interfaces';
-import { searchMediaMetadata, getMetadataSearchKey, addMetadataResultToLibrary } from '../services/MediaSearchService';
+import { searchMediaMetadata, getMetadataSearchKey, getMetadataSearchOptions, addMetadataResultToLibrary } from '../services/MediaSearchService';
 import { MetadataSearchFilters } from './MetadataSearchFilters';
 import { Search, Loader2, X, Plus, CheckCircle2, Film, Tv, Gamepad2 } from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
@@ -41,16 +41,17 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   const { pagePadding } = useSidebarPadding(isCollapsed);
   const handleSearch = async (searchQuery: string, options: MetadataSearchOptions = searchOptions) => {
     const parsed = parseMediaTextFilter(searchQuery);
-    if (!parsed.query.trim()) {
+    const requestOptions = getMetadataSearchOptions(searchQuery, options);
+    if (!parsed.query.trim() && !requestOptions.cast) {
       setResults(prev => ({ ...prev, [type]: [] }));
       return;
     }
 
-    setLastSearchedKey(getMetadataSearchKey(parsed.query, options));
+    setLastSearchedKey(getMetadataSearchKey(searchQuery, requestOptions));
     setIsSearching(true);
 
     try {
-      const searchResults = await searchMediaMetadata(parsed.query, type, options);
+      const searchResults = await searchMediaMetadata(parsed.query, type, requestOptions);
       setResults(prev => ({ ...prev, [type]: searchResults }));
     } catch (err) {
       console.error('Failed to search external provider:', err);
@@ -61,7 +62,8 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (getMetadataSearchKey(parsedQuery.query, searchOptions) !== lastSearchedKey) {
+    const requestOptions = getMetadataSearchOptions(searchQuery, searchOptions);
+    if (getMetadataSearchKey(searchQuery, requestOptions) !== lastSearchedKey) {
       handleSearch(searchQuery, searchOptions);
     }
   };
@@ -102,9 +104,10 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   }, [searchQuery]);
 
   useEffect(() => {
-    const parsedDebouncedQuery = parseMediaTextFilter(debouncedQuery).query;
-    if (!parsedDebouncedQuery.trim() || debouncedQuery.trim() !== searchQuery.trim()) return;
-    if (getMetadataSearchKey(parsedDebouncedQuery, searchOptions) === lastSearchedKey) return;
+    const parsedDebounced = parseMediaTextFilter(debouncedQuery);
+    const requestOptions = getMetadataSearchOptions(debouncedQuery, searchOptions);
+    if ((!parsedDebounced.query.trim() && !requestOptions.cast) || debouncedQuery.trim() !== searchQuery.trim()) return;
+    if (getMetadataSearchKey(debouncedQuery, requestOptions) === lastSearchedKey) return;
 
     const handler = setTimeout(() => {
       handleSearch(debouncedQuery, searchOptions);

@@ -3,7 +3,7 @@ import { Media } from '../types/media';
 import { MetadataSearchOptions, MetadataSearchResult } from '../providers/interfaces';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
-import { searchMediaMetadata, getMetadataSearchKey } from '../services/MediaSearchService';
+import { searchMediaMetadata, getMetadataSearchKey, getMetadataSearchOptions } from '../services/MediaSearchService';
 import { dbService } from '../services/DatabaseService';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { Search, Loader2, X, RefreshCw, CheckCircle2, Film, Tv, Gamepad2 } from 'lucide-react';
@@ -84,9 +84,10 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
     }, [query]);
   
     useEffect(() => {
-      const parsedDebouncedQuery = parseMediaTextFilter(debouncedQuery).query;
-      if (!parsedDebouncedQuery.trim() || debouncedQuery.trim() !== query.trim()) return;
-      if (getMetadataSearchKey(parsedDebouncedQuery, searchOptions) === lastSearchedKey) return;
+      const parsedDebounced = parseMediaTextFilter(debouncedQuery);
+      const requestOptions = getMetadataSearchOptions(debouncedQuery, searchOptions);
+      if ((!parsedDebounced.query.trim() && !requestOptions.cast) || debouncedQuery.trim() !== query.trim()) return;
+      if (getMetadataSearchKey(debouncedQuery, requestOptions) === lastSearchedKey) return;
 
       const handler = setTimeout(() => handleSearch(debouncedQuery, searchOptions), 400);
       return () => clearTimeout(handler);
@@ -96,19 +97,20 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
 
   const handleSearch = async (searchQuery: string, options: MetadataSearchOptions = searchOptions) => {
       const parsed = parseMediaTextFilter(searchQuery);
-      if (!parsed.query.trim()) {
+      const requestOptions = getMetadataSearchOptions(searchQuery, options);
+      if (!parsed.query.trim() && !requestOptions.cast) {
         setResults([]);
         return;
       }
 
-      setLastSearchedKey(getMetadataSearchKey(parsed.query, options));
+      setLastSearchedKey(getMetadataSearchKey(searchQuery, requestOptions));
       setIsSearching(true);
       setResults([]);
       setSelectedResult(null);
       setPreviewDetails(null);
 
       try {
-        const searchResults = await searchMediaMetadata(parsed.query, media.type, options);
+        const searchResults = await searchMediaMetadata(parsed.query, media.type, requestOptions);
         setResults(searchResults);
       } catch (err) {
         console.error('Failed to search external provider for match correction:', err);
@@ -119,7 +121,8 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (getMetadataSearchKey(parsedQuery.query, searchOptions) !== lastSearchedKey) {
+    const requestOptions = getMetadataSearchOptions(query, searchOptions);
+    if (getMetadataSearchKey(query, requestOptions) !== lastSearchedKey) {
       handleSearch(query, searchOptions);
     }
   };

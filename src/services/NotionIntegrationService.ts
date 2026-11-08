@@ -8,6 +8,11 @@ import { dbService } from '../services/DatabaseService';
 import { Media, MediaHistory, NotionRawRecord, MediaType, MediaStatus } from '../types/media';
 import { NotionDatabase, NotionPropertySchema, NotionPage } from '../types/notion';
 import { isTauri } from '../services/LocalScannerService';
+import { tmdbProvider } from '../providers/TMDBProvider';
+import { igdbProvider } from '../providers/IGDBProvider';
+import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
+import { searchMediaMetadata } from './MediaSearchService';
+import { MetadataSearchResult } from '../providers/interfaces';
 
 export class NotionIntegrationService implements NotionProvider {
   /**
@@ -374,6 +379,185 @@ export class NotionIntegrationService implements NotionProvider {
     return { completedAt: raw };
   }
 
+  private getMappedField(
+    row: NotionImportRow,
+    mappedField: string | undefined,
+    aliases: string[]
+  ): string | undefined {
+    const normalize = (field: string) => field.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const mappedValue = mappedField ? row[mappedField] : undefined;
+    if (typeof mappedValue === 'string' && mappedValue.trim()) return mappedValue.trim();
+
+    const field = Object.keys(row).find(key => aliases.includes(normalize(key)));
+    const value = field ? row[field] : undefined;
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private makeCsvHistoryId(history: MediaHistory): string {
+    const identity = encodeURIComponent(JSON.stringify([
+      history.media_id,
+      history.started_at || '',
+      history.completed_at || '',
+      history.status,
+      history.score ?? '',
+      history.thoughts || '',
+      history.context || ''
+    ]));
+    return `history_notion_csv_${identity}`;
+  }
+
+  private normalizeTmdbId(value: string | undefined, type: MediaType): string | undefined {
+    if (!value?.trim()) return undefined;
+    const raw = value.trim();
+    const prefixedId = raw.match(/(?:^|\/)(movie|tv)[:/](\d+)(?:\/|$)/i);
+    if (prefixedId) return `${prefixedId[1].toLowerCase()}:${prefixedId[2]}`;
+    const numericId = raw.match(/\d+/)?.[0];
+    if (!numericId) return undefined;
+    return `${type === 'TV Series' ? 'tv' : 'movie'}:${numericId}`;
+  }
+
+  private normalizeIgdbId(value: string | undefined): string | undefined {
+    if (!value?.trim()) return undefined;
+    const raw = value.trim();
+    const numericId = raw.match(/(?:igdb:)?(\d+)/i)?.[1];
+    return numericId ? `igdb:${numericId}` : undefined;
+  }
+
+  private async findMediaByProviderIds(
+    tmdbId: string | undefined,
+    igdbId: string | undefined,
+    mediaType: MediaType
+  ): Promise<{ media?: Media; ambiguous: boolean }> {
+    const matches = await Promise.all([
+      tmdbId ? dbService.getMediaByExternalId('TMDB', tmdbId) : Promise.resolve(null),
+      igdbId ? dbService.getMediaByExternalId('IGDB', igdbId) : Promise.resolve(null)
+    ]);
+    const linkedMedia = matches.filter((media): media is Media => Boolean(media));
+    const uniqueMatches = [...new Map(linkedMedia.map(media => [media.id, media])).values()];
+    if (uniqueMatches.length > 1) return { ambiguous: true };
+    if (uniqueMatches.length === 1 && uniqueMatches[0].type !== mediaType) {
+      return { ambiguous: true };
+    }
+    return { media: uniqueMatches[0], ambiguous: false };
+  }
+
+  private async refreshImportedMediaMetadata(
+    media: Media,
+    preferredExternalId?: string,
+    knownSearchResult?: MetadataSearchResult,
+    searchAlreadyPerformed = false
+  ): Promise<Media> {
+    const provider = media.type === 'VideoGame' ? igdbProvider : tmdbProvider;
+    const expectedProvider = media.type === 'VideoGame' ? 'IGDB' : 'TMDB';
+    const expectedPrefixes = media.type === 'VideoGame' ? ['igdb:', 'rawg:'] : ['movie:', 'tv:'];
+    const linkedExternalId = media.external_ids?.find(externalId =>
+      externalId.provider === expectedProvider &&
+      expectedPrefixes.some(prefix => externalId.external_id.startsWith(prefix))
+    )?.external_id;
+    let externalId = preferredExternalId || linkedExternalId;
+    let matchedResult = knownSearchResult;
+    let details: Partial<Media>;
+
+    try {
+      if (!externalId || !expectedPrefixes.some(prefix => externalId?.startsWith(prefix))) {
+        if (!matchedResult && !searchAlreadyPerformed) {
+          const results = await searchMediaMetadata(media.title, media.type, {
+            releaseYear: media.release_year
+          });
+          matchedResult = results[0];
+        }
+        externalId = matchedResult?.external_id;
+      }
+
+      details = await provider.getMediaDetails(externalId || media.title);
+    } catch (error) {
+      console.warn(`Provider metadata refresh failed while importing "${media.title}":`, error);
+      return media;
+    }
+
+    if (!Object.keys(details).length) {
+      console.warn(`No provider metadata found while importing "${media.title}".`);
+      return media;
+    }
+
+    const now = new Date().toISOString();
+    const externalIds = [...(media.external_ids || [])];
+    if (
+      matchedResult &&
+      !externalIds.some(item =>
+        item.provider === matchedResult?.provider &&
+        item.external_id === matchedResult?.external_id
+      )
+    ) {
+      const linkedMedia = await dbService.getMediaByExternalId(
+        matchedResult.provider,
+        matchedResult.external_id
+      );
+      if (!linkedMedia || linkedMedia.id === media.id) {
+        externalIds.push({
+          id: `ext_${matchedResult.provider.toLowerCase()}_${media.id}`,
+          media_id: media.id,
+          provider: matchedResult.provider,
+          external_id: matchedResult.external_id
+        });
+      }
+    }
+
+    const refreshedMedia: Media = {
+      ...media,
+      ...details,
+      id: media.id,
+      type: media.type,
+      external_ids: externalIds,
+      metadata_source: details.metadata_source || matchedResult?.provider || media.metadata_source,
+      metadata_refreshed_at: now,
+      updated_at: now
+    };
+    await dbService.saveMedia(refreshedMedia);
+    if (refreshedMedia.poster || refreshedMedia.backdrop || refreshedMedia.logo) {
+      artworkCacheProvider.setCachedArtwork(
+        media.id,
+        {
+          poster: refreshedMedia.poster,
+          backdrop: refreshedMedia.backdrop,
+          logo: refreshedMedia.logo
+        },
+        'metadata_provider'
+      );
+    }
+    return refreshedMedia;
+  }
+
+  private async mergeImportedEntities(survivor: Media, duplicate: Media): Promise<Media> {
+    const overrides: Partial<Media> = {
+      original_title: survivor.original_title || duplicate.original_title,
+      release_year: survivor.release_year || duplicate.release_year,
+      language: survivor.language || duplicate.language,
+      description: survivor.description || duplicate.description,
+      genres: [...new Set([...survivor.genres, ...duplicate.genres])],
+      runtime: survivor.runtime || duplicate.runtime,
+      poster: survivor.poster || duplicate.poster,
+      backdrop: survivor.backdrop || duplicate.backdrop,
+      logo: survivor.logo || duplicate.logo,
+      publisher: survivor.publisher || duplicate.publisher,
+      developer: survivor.developer || duplicate.developer,
+      cast: [
+        ...(survivor.cast || []),
+        ...(duplicate.cast || []).filter(member =>
+          !survivor.cast?.some(existing => existing.name.toLowerCase() === member.name.toLowerCase())
+        )
+      ],
+      seasons: [
+        ...(survivor.seasons || []),
+        ...(duplicate.seasons || []).filter(season =>
+          !survivor.seasons?.some(existing => existing.season_number === season.season_number)
+        )
+      ]
+    };
+    await dbService.mergeMediaEntities(survivor.id, duplicate.id, overrides);
+    return (await dbService.getMediaById(survivor.id)) || { ...survivor, ...overrides };
+  }
+
   public async importFromRows(
     rows: NotionImportRow[],
     mapping?: Partial<NotionColumnMapping>
@@ -395,10 +579,7 @@ export class NotionIntegrationService implements NotionProvider {
     const errors: string[] = [];
 
     const existingMediaList = await dbService.getAllMedia();
-    const mediaMap = new Map<string, Media>();
-    for (const m of existingMediaList) {
-      mediaMap.set(`${m.title.toLowerCase()}_${m.type}`, m);
-    }
+    const mediaById = new Map(existingMediaList.map(media => [media.id, media]));
 
     const now = new Date().toISOString();
 
@@ -415,7 +596,20 @@ export class NotionIntegrationService implements NotionProvider {
         const rawStatus = row[defaultMapping.statusField] || row['Status'];
         const rawLanguage = row[defaultMapping.languageField] || row['Language'];
         const rawThoughts = row[defaultMapping.thoughtsField] || row['Thoughts'];
-        const rawPublisher = row[defaultMapping.publisherField] || row['Publisher'];
+        const rawPublisher = this.getMappedField(
+          row,
+          defaultMapping.publisherField,
+          ['publisher', 'publishinghouse', 'platform']
+        );
+        const { cleanTitle, contextNote } = this.parseTitle(rawName);
+        const mediaType = this.parseType(rawType);
+        const tmdbId = this.normalizeTmdbId(
+          this.getMappedField(row, mapping?.tmdbIdField, ['tmdb', 'tmdbid', 'themoviedbdatabaseid']),
+          mediaType
+        );
+        const igdbId = this.normalizeIgdbId(
+          this.getMappedField(row, mapping?.igdbIdField, ['igdb', 'igdbid', 'internetgamesdatabaseid'])
+        );
 
         // Save raw Notion record first
         const notionRaw: NotionRawRecord = {
@@ -432,17 +626,65 @@ export class NotionIntegrationService implements NotionProvider {
         };
 
         // Parse clean title and context note
-        const { cleanTitle, contextNote } = this.parseTitle(rawName);
-        const mediaType = this.parseType(rawType);
         const parsedStatus = this.parseStatus(rawStatus);
-        const mediaKey = `${cleanTitle.toLowerCase()}_${mediaType}`;
+        const normalizedTitles = new Set(
+          [cleanTitle].filter((title): title is string => Boolean(title?.trim()))
+            .map(title => title.toLowerCase().replace(/[\W_]+/g, ' ').trim())
+        );
+        const matchingMedia = [...mediaById.values()].filter(media => {
+          if (media.type !== mediaType) return false;
+          const existingTitles = [media.title, media.original_title]
+            .filter((title): title is string => Boolean(title))
+            .map(title => title.toLowerCase().replace(/[\W_]+/g, ' ').trim());
+          return existingTitles.some(title => normalizedTitles.has(title));
+        });
+        const exactTitleMatches = matchingMedia.filter(media =>
+          normalizedTitles.has(media.title.toLowerCase().replace(/[\W_]+/g, ' ').trim())
+        );
+        const uniqueMatches = exactTitleMatches.length ? exactTitleMatches : matchingMedia;
+        const providerMatch = await this.findMediaByProviderIds(tmdbId, igdbId, mediaType);
+        let targetMedia = providerMatch.media;
+        const hasProviderId = Boolean(tmdbId || igdbId);
+        if (!targetMedia && !hasProviderId) {
+          targetMedia = uniqueMatches.length === 1 ? uniqueMatches[0] : undefined;
+        }
 
-        let targetMedia = mediaMap.get(mediaKey);
+        let providerSearchResult: MetadataSearchResult | undefined;
+        let providerSearchPerformed = false;
+        const providerName = mediaType === 'VideoGame' ? 'IGDB' : 'TMDB';
+        const providerPrefixes = mediaType === 'VideoGame' ? ['igdb:', 'rawg:'] : ['movie:', 'tv:'];
+        const targetHasProviderId = targetMedia?.external_ids?.some(externalId =>
+          externalId.provider === providerName &&
+          providerPrefixes.some(prefix => externalId.external_id.startsWith(prefix))
+        );
+        if (!hasProviderId && !targetHasProviderId) {
+          try {
+            const results = await searchMediaMetadata(cleanTitle, mediaType);
+            providerSearchPerformed = true;
+            providerSearchResult = results[0];
+            if (providerSearchResult) {
+              const providerLinkedMedia = await dbService.getMediaByExternalId(
+                providerSearchResult.provider,
+                providerSearchResult.external_id
+              );
+              if (providerLinkedMedia) {
+                if (targetMedia && targetMedia.id !== providerLinkedMedia.id) {
+                  const duplicateId = targetMedia.id;
+                  targetMedia = await this.mergeImportedEntities(providerLinkedMedia, targetMedia);
+                  mediaById.delete(duplicateId);
+                  mediaById.set(targetMedia.id, targetMedia);
+                } else {
+                  targetMedia = providerLinkedMedia;
+                }
+              }
+            }
+          } catch (error) {
+            console.warn(`Provider search failed while matching imported "${cleanTitle}":`, error);
+          }
+        }
 
         // Check for suspected duplicates / uncertain matches
-        const suspectedDuplicates = await dbService.findSuspectedDuplicates(cleanTitle);
-
-        if (!targetMedia && suspectedDuplicates.length > 1) {
+        if (!targetMedia && (providerMatch.ambiguous || (!hasProviderId && matchingMedia.length > 1))) {
           // Flag as uncertain match in Notion Raw Record
           notionRaw.parsed_media_id = undefined;
           await dbService.saveNotionRawRecord(notionRaw);
@@ -456,30 +698,36 @@ export class NotionIntegrationService implements NotionProvider {
             id: newMediaId,
             type: mediaType,
             title: cleanTitle,
-            language: rawLanguage?.trim(),
-            publisher: rawPublisher?.trim(),
+            original_title: rawName,
             genres: [],
             created_at: now,
             updated_at: now,
-            metadata_source: 'Notion Import'
+            metadata_source: 'Notion Import',
+            external_ids: []
           };
           await dbService.saveMedia(targetMedia);
-          mediaMap.set(mediaKey, targetMedia);
           importedMediaCount++;
-        } else {
-          // Update language or publisher if missing
-          let updated = false;
-          if (!targetMedia.language && rawLanguage) {
-            targetMedia.language = rawLanguage.trim();
-            updated = true;
-          }
-          if (!targetMedia.publisher && rawPublisher) {
-            targetMedia.publisher = rawPublisher.trim();
-            updated = true;
-          }
-          if (updated) {
-            targetMedia.updated_at = now;
-            await dbService.saveMedia(targetMedia);
+        }
+
+        const providerExternalId = mediaType === 'VideoGame' ? igdbId : tmdbId;
+        targetMedia = await this.refreshImportedMediaMetadata(
+          targetMedia,
+          providerExternalId,
+          providerSearchResult,
+          providerSearchPerformed
+        );
+        mediaById.set(targetMedia.id, targetMedia);
+
+        for (const [provider, externalId] of [['TMDB', tmdbId], ['IGDB', igdbId]] as const) {
+          if (!externalId) continue;
+          const linkedMedia = await dbService.getMediaByExternalId(provider, externalId);
+          if (!linkedMedia) {
+            await dbService.saveExternalId({
+              id: `ext_${provider.toLowerCase()}_${externalId.replace(/[^a-zA-Z0-9]/g, '_')}`,
+              media_id: targetMedia.id,
+              provider,
+              external_id: externalId
+            });
           }
         }
 
@@ -497,9 +745,8 @@ export class NotionIntegrationService implements NotionProvider {
         const { startedAt, completedAt } = this.parseDates(rawWatchedOn, parsedStatus);
 
         // Create MediaHistory interaction record
-        const historyId = pageId ? `history_notion_${pageId}` : `history_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const historyRecord: MediaHistory = {
-          id: historyId,
+          id: '',
           media_id: targetMedia.id,
           started_at: startedAt,
           completed_at: completedAt,
@@ -512,12 +759,28 @@ export class NotionIntegrationService implements NotionProvider {
           created_at: row['_last_edited_time'] || now
         };
 
-        await dbService.saveHistory(historyRecord);
-        importedHistoryCount++;
+        const duplicateCsvHistory = pageId
+          ? undefined
+          : (await dbService.getHistoryForMedia(targetMedia.id)).find(history =>
+              history.source === 'Notion' &&
+              history.started_at === historyRecord.started_at &&
+              history.completed_at === historyRecord.completed_at &&
+              history.status === historyRecord.status &&
+              history.score === historyRecord.score &&
+              history.thoughts === historyRecord.thoughts &&
+              history.context === historyRecord.context
+            );
+        historyRecord.id = pageId
+          ? `history_notion_${pageId}`
+          : duplicateCsvHistory?.id || this.makeCsvHistoryId(historyRecord);
+        if (!duplicateCsvHistory) {
+          await dbService.saveHistory(historyRecord);
+          importedHistoryCount++;
+        }
 
         // Update NotionRawRecord with parsed links
         notionRaw.parsed_media_id = targetMedia.id;
-        notionRaw.parsed_history_id = historyId;
+        notionRaw.parsed_history_id = historyRecord.id;
         await dbService.saveNotionRawRecord(notionRaw);
         rawRecordsSaved++;
 

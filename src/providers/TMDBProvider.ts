@@ -91,7 +91,7 @@ export class TMDBProvider implements MetadataProvider {
     // Strip file extension if present
     q = q.replace(/\.(mkv|mp4|avi|mov|m4v|webm|ts|flv)$/i, '');
     // Strip common release noise
-    const noiseRegex = /\b(1080p|720p|480p|2160p|4k|uhd|webrip|web-dl|webdl|bluray|blu-ray|remux|x264|x265|hevc|h264|h265|av1|10bit|hdr|hdr10|dv|aac|dts|dd5\.1|5\.1|dvdrip|hdrip|hdtv|proper|repack|yify|rarbg|eztv|sva|fleet|shortcut|game|dual|multi|audio|subbed|dubbed|esub|eng|sub|hindi|telugu|tamil|malayalam|kannada|directors|director|cut|uncut|extended|edition|version)\b/gi;
+    const noiseRegex = /\b(1080p|720p|480p|2160p|4k|uhd|webrip|web-dl|webdl|bluray|blu-ray|remux|x264|x265|hevc|h264|h265|av1|10bit|hdr|hdr10|dv|aac|dts|dd5\.1|5\.1|dvdrip|hdrip|hdtv|proper|repack|yify|rarbg|eztv|sva|fleet|shortcut|game|dual|multi|audio|subbed|dubbed|esub|eng|sub|directors|director|cut|uncut|extended|edition|version)\b/gi;
     q = q.replace(noiseRegex, ' ');
     q = q.replace(/[\._\-]/g, ' ').replace(/\s+/g, ' ').trim();
     return q;
@@ -106,7 +106,7 @@ export class TMDBProvider implements MetadataProvider {
     const initialClean = this.cleanQueryString(rawQuery);
     if (!initialClean) return [];
 
-    const languageCode = options.language?.split('-')[0].toLowerCase();
+    const languageCode = (options.originalLanguage || options.language?.split('-')[0])?.toLowerCase();
     const locale = options.language;
     const releaseYear = options.releaseYear;
 
@@ -138,6 +138,7 @@ export class TMDBProvider implements MetadataProvider {
                   title: endpoint === '/search/movie' ? item.title : item.name,
                   original_title: endpoint === '/search/movie' ? item.original_title : item.original_name,
                   release_year: yearNum && !isNaN(yearNum) ? yearNum : undefined,
+                  language: item.original_language,
                   type: mediaType,
                   description: item.overview,
                   poster: item.poster_path ? `${this.imageBaseUrl}/w500${item.poster_path}` : undefined,
@@ -166,6 +167,10 @@ export class TMDBProvider implements MetadataProvider {
     const results: MetadataSearchResult[] = [];
 
     try {
+      if (options.cast) {
+        return await this.searchMediaByCast(query, type, options);
+      }
+
       if (!type || type === 'Film') {
         const movieResults = await this.searchSingleTypeWithProgressiveTrim(query, '/search/movie', 'Film', options);
         results.push(...movieResults);
@@ -181,6 +186,77 @@ export class TMDBProvider implements MetadataProvider {
     }
 
     return results;
+  }
+
+  private async searchMediaByCast(
+    query: string,
+    type: MediaType | undefined,
+    options: MetadataSearchOptions
+  ): Promise<MetadataSearchResult[]> {
+    if (type === 'VideoGame') return [];
+
+    const { url, headers } = await this.getFetchConfig('/search/person', {
+      query: options.cast || '',
+      include_adult: 'false'
+    });
+    const personResponse = await fetch(url, { headers });
+    if (!personResponse.ok) {
+      throw new Error(`TMDB person search returned ${personResponse.status}`);
+    }
+
+    const people = await personResponse.json() as { results?: Array<{ id: number; name: string }> };
+    const matchingPeople = (people.results || [])
+      .filter(person => person.name.toLocaleLowerCase().includes((options.cast || '').toLocaleLowerCase()))
+      .slice(0, 5);
+    const queryText = query.trim().toLocaleLowerCase();
+    const languageCode = (options.originalLanguage || options.language?.split('-')[0])?.toLowerCase();
+    const results: MetadataSearchResult[] = [];
+
+    for (const person of matchingPeople) {
+      const mediaTypes: MediaType[] = [];
+      if (!type || type === 'Film') mediaTypes.push('Film');
+      if (!type || type === 'TV Series') mediaTypes.push('TV Series');
+
+      for (const mediaType of mediaTypes) {
+        const creditType = mediaType === 'Film' ? 'movie_credits' : 'tv_credits';
+        const creditConfig = await this.getFetchConfig(`/person/${person.id}/${creditType}`);
+        const creditResponse = await fetch(creditConfig.url, { headers: creditConfig.headers });
+        if (!creditResponse.ok) {
+          throw new Error(`TMDB cast credits returned ${creditResponse.status}`);
+        }
+
+        const credits = await creditResponse.json() as { cast?: Array<Record<string, any>> };
+        for (const credit of credits.cast || []) {
+          const title = String(mediaType === 'Film' ? credit.title || '' : credit.name || '');
+          const originalTitle = String(mediaType === 'Film'
+            ? credit.original_title || ''
+            : credit.original_name || '');
+          if (queryText && !`${title} ${originalTitle}`.toLocaleLowerCase().includes(queryText)) continue;
+          if (languageCode && String(credit.original_language || '').toLowerCase() !== languageCode) continue;
+
+          const externalId = `${mediaType === 'Film' ? 'movie' : 'tv'}:${credit.id}`;
+          if (results.some(result => result.external_id === externalId)) continue;
+          const date = mediaType === 'Film' ? credit.release_date : credit.first_air_date;
+          const year = date ? Number.parseInt(String(date).split('-')[0], 10) : undefined;
+          if (options.releaseYear && year !== options.releaseYear) continue;
+          results.push({
+            title,
+            original_title: originalTitle,
+            release_year: year && !Number.isNaN(year) ? year : undefined,
+            language: credit.original_language,
+            type: mediaType,
+            description: credit.overview,
+            poster: credit.poster_path ? `${this.imageBaseUrl}/w500${credit.poster_path}` : undefined,
+            backdrop: credit.backdrop_path ? `${this.imageBaseUrl}/w1280${credit.backdrop_path}` : undefined,
+            external_id: externalId,
+            provider: this.name,
+            cast: [{ id: `cast_${person.id}`, name: person.name }]
+          });
+        }
+      }
+    }
+
+    return results.slice(0, 30);
   }
 
   public async getRelatedMedia(externalId: string): Promise<MetadataSearchResult[]> {

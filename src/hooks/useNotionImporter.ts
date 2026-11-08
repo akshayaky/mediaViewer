@@ -21,18 +21,37 @@ export function useNotionImporter() {
           setCsvRows(results.data);
 
           const fields = results.meta.fields;
-          const guessField = (keywords: string[]) =>
-            fields.find(f => keywords.some(k => f.toLowerCase().includes(k))) || fields[0];
+          const guessField = (keywords: string[], fallback: string) => {
+            const normalizedFields = fields.map(field => ({
+              field,
+              normalized: field.toLowerCase().replace(/[^a-z0-9]/g, '')
+            }));
+            for (const keyword of keywords) {
+              const normalizedKeyword = keyword.replace(/[^a-z0-9]/g, '');
+              const exactMatch = normalizedFields.find(item => item.normalized === normalizedKeyword);
+              if (exactMatch) return exactMatch.field;
+            }
+            for (const keyword of keywords) {
+              const normalizedKeyword = keyword.replace(/[^a-z0-9]/g, '');
+              const match = normalizedFields.find(item =>
+                item.normalized === normalizedKeyword || item.normalized.includes(normalizedKeyword)
+              );
+              if (match) return match.field;
+            }
+            return fallback;
+          };
 
           setMapping({
-            typeField: guessField(['type']),
-            nameField: guessField(['name', 'title']),
-            watchedOnField: guessField(['watched', 'completed', 'date']),
-            scoreField: guessField(['score', 'rating', 'star']),
-            statusField: guessField(['status', 'state']),
-            languageField: guessField(['language', 'lang']),
-            thoughtsField: guessField(['thought', 'note', 'review']),
-            publisherField: guessField(['publisher', 'platform', 'developer'])
+            typeField: guessField(['type', 'category'], 'Type'),
+            nameField: guessField(['name', 'title'], 'Name'),
+            watchedOnField: guessField(['watched', 'completed', 'date'], 'Watched On/Completed Watching'),
+            scoreField: guessField(['score', 'rating', 'star'], 'Score /5'),
+            statusField: guessField(['status', 'state'], 'Status'),
+            languageField: guessField(['language', 'lang'], 'Language'),
+            thoughtsField: guessField(['thought', 'note', 'review'], 'Thoughts'),
+            publisherField: guessField(['publisher', 'publishing house', 'platform'], 'Publisher'),
+            tmdbIdField: guessField(['tmdb id', 'tmdb'], ''),
+            igdbIdField: guessField(['igdb id', 'igdb'], '')
           });
         }
       }

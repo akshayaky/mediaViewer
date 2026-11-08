@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dbService } from '../services/DatabaseService';
 import { IGDBProvider } from '../providers/IGDBProvider';
 import { TMDBProvider } from '../providers/TMDBProvider';
+import { getMetadataSearchOptions } from '../services/MediaSearchService';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -9,6 +10,55 @@ afterEach(() => {
 });
 
 describe('metadata search filters', () => {
+  it('keeps Malayalam in TMDB title queries and exposes the original language', async () => {
+    vi.spyOn(dbService, 'getSettings').mockResolvedValue({ tmdb_api_key: 'test-key' });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [{
+          id: 1,
+          title: 'Traffic',
+          original_title: 'Traffic',
+          original_language: 'ml',
+          release_date: '2011-01-01'
+        }]
+      })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const results = await new TMDBProvider().searchMedia('Traffic in Malayalam', 'Film');
+
+    expect(new URL(fetchMock.mock.calls[0][0]).searchParams.get('query')).toBe('Traffic in Malayalam');
+    expect(results[0].language).toBe('ml');
+  });
+
+  it('searches cast credits with a cast-only filter and applies language filtering', async () => {
+    vi.spyOn(dbService, 'getSettings').mockResolvedValue({ tmdb_api_key: 'test-key' });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ results: [{ id: 7, name: 'Jane Doe' }] })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          cast: [
+            { id: 10, title: 'Malayalam Film', original_title: 'Malayalam Film', original_language: 'ml', release_date: '2020-01-01' },
+            { id: 11, title: 'English Film', original_title: 'English Film', original_language: 'en', release_date: '2020-01-01' }
+          ]
+        })
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const filters = getMetadataSearchOptions('cast:Jane-Doe lang:ml');
+    const results = await new TMDBProvider().searchMedia('', 'Film', filters);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(results.map(result => result.external_id)).toEqual(['movie:10']);
+    expect(results[0].cast?.[0].name).toBe('Jane Doe');
+    expect(results[0].language).toBe('ml');
+  });
+
   it('sends movie year and language to TMDB and keeps only matching original languages', async () => {
     vi.spyOn(dbService, 'getSettings').mockResolvedValue({ tmdb_api_key: 'test-key' });
     const fetchMock = vi.fn().mockResolvedValue({

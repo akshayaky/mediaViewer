@@ -3,6 +3,7 @@ import { MetadataSearchOptions, MetadataSearchResult } from '../providers/interf
 import { igdbProvider } from '../providers/IGDBProvider';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { dbService } from './DatabaseService';
+import { parseMediaTextFilter } from './MediaTextFilter';
 
 export async function searchMediaMetadata(
   query: string,
@@ -16,8 +17,31 @@ export async function searchMediaMetadata(
   return tmdbProvider.searchMedia(query, type, options);
 }
 
+export function getMetadataSearchOptions(
+  searchText: string,
+  options: MetadataSearchOptions = {}
+): MetadataSearchOptions {
+  const filters = parseMediaTextFilter(searchText).filters;
+  const castFilter = filters.find(filter => filter.kind === 'cast');
+  const languageFilter = filters.find(filter => filter.kind === 'language');
+
+  return {
+    ...options,
+    cast: castFilter?.kind === 'cast' ? castFilter.cast : undefined,
+    originalLanguage: languageFilter?.kind === 'language'
+      ? languageFilter.language
+      : options.originalLanguage
+  };
+}
+
 export function getMetadataSearchKey(query: string, options: MetadataSearchOptions): string {
-  return JSON.stringify([query.trim(), options.releaseYear ?? null, options.language?.toLowerCase() ?? null]);
+  return JSON.stringify([
+    query.trim(),
+    options.releaseYear ?? null,
+    options.language?.toLowerCase() ?? null,
+    options.originalLanguage?.toLowerCase() ?? null,
+    options.cast?.toLocaleLowerCase() ?? null
+  ]);
 }
 
 export async function addMetadataResultToLibrary(candidate: MetadataSearchResult): Promise<Media> {

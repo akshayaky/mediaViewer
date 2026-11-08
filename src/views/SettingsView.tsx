@@ -741,6 +741,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                   ))}
                 </select>
               </div>
+
             </div>
 
             {/* Sync Action Buttons */}
@@ -1493,6 +1494,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                     ))}
                   </select>
                 </div>
+
+                {([
+                  ['tmdbIdField', 'TMDB ID Field'],
+                  ['igdbIdField', 'IGDB ID Field']
+                ] as const).map(([field, label]) => (
+                  <div key={field}>
+                    <label className="text-gray-400 font-medium block mb-1">{label}</label>
+                    <select
+                      value={csvMapping[field] || ''}
+                      onChange={e => setCsvMapping({ ...csvMapping, [field]: e.target.value })}
+                      className="w-full bg-[#13151f] border border-[#2f3448] rounded p-2 text-gray-200"
+                    >
+                      <option value="">Not mapped</option>
+                      {csvHeaders.map(h => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
               </div>
 
               <div className="pt-2">
