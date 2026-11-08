@@ -3,6 +3,7 @@ import React, { PointerEvent, ReactNode, useRef } from 'react';
 interface HorizontalDragScrollProps {
   children: ReactNode;
   className: string;
+  onScroll?: React.UIEventHandler<HTMLDivElement>;
 }
 
 interface DragState {
@@ -14,7 +15,7 @@ interface DragState {
   userSelect: string;
 }
 
-export const HorizontalDragScroll: React.FC<HorizontalDragScrollProps> = ({ children, className }) => {
+export const HorizontalDragScroll: React.FC<HorizontalDragScrollProps> = ({ children, className, onScroll }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const suppressClickRef = useRef(false);
@@ -89,6 +90,7 @@ export const HorizontalDragScroll: React.FC<HorizontalDragScrollProps> = ({ chil
       onPointerUp={handlePointerUp}
       onPointerCancel={event => handlePointerUp(event, true)}
       onClickCapture={handleClickCapture}
+      onScroll={onScroll}
     >
       {children}
     </div>

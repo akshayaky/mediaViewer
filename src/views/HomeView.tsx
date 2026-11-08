@@ -116,17 +116,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [uiPreferences, setUiPreferences] = useState<UiPreferences>({
     card_orientation_by_type: {}
   });
-
-  const [homeData, setHomeData] = useState<{
-    allMedia: Media[];
-    allHistory: MediaHistory[];
-    mediaStates: MediaState[];
-    continueWatching: Media[];
-    recentlyWatched: Media[];
-    rewatchCandidates: Media[];
-    abandonedList: Media[];
-    localLibraryList: Media[];
-  }>({ allMedia: [], allHistory: [], mediaStates: [], continueWatching: [], recentlyWatched: [], rewatchCandidates: [], abandonedList: [], localLibraryList: [] });
+  const [heroData, setHeroData] = useState<{
+    media: Media[];
+    history: MediaHistory[];
+    states: MediaState[];
+    hasMedia: boolean;
+    loaded: boolean;
+    loadError: boolean;
+  }>({ media: [], history: [], states: [], hasMedia: false, loaded: false, loadError: false });
+  const [libraryRevision, setLibraryRevision] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -136,40 +134,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       })
       .catch(error => console.error('Failed to load home UI preferences:', error));
 
-    const loadHomeData = async () => {
-      const [allMedia, allHistory, localFiles] = await Promise.all([
-        dbService.getAllMedia(),
-        dbService.getAllHistory(),
-        dbService.getAllLocalFiles()
-      ]);
-      const states = await Promise.all(allMedia.map(media => dbService.getMediaState(media.id)));
-      const stateById = new Map(states.map(mediaState => [mediaState.media_id, mediaState]));
-      const historyByMediaId = new Map<string, typeof allHistory>();
-      for (const history of allHistory) {
-        const histories = historyByMediaId.get(history.media_id) || [];
-        histories.push(history);
-        historyByMediaId.set(history.media_id, histories);
-      }
-      const localMediaIds = new Set(localFiles.map(file => file.media_id));
-      if (!isMounted) return;
-      setHomeData({
-        allMedia,
-        allHistory,
-        mediaStates: states,
-        continueWatching: allMedia.filter(media => stateById.get(media.id)?.currently_watching_playing),
-        recentlyWatched: allMedia.filter(media => historyByMediaId.get(media.id)?.some(history =>
-          history.status === 'Finished' || history.status === 'Watched Episode'
-        )),
-        rewatchCandidates: allMedia.filter(media =>
-          (stateById.get(media.id)?.rewatch_count || 0) > 0 ||
-          historyByMediaId.get(media.id)?.some(history => history.context?.toLowerCase().includes('rewatch'))
-        ),
-        abandonedList: allMedia.filter(media => stateById.get(media.id)?.current_status === 'Abandoned'),
-        localLibraryList: allMedia.filter(media => localMediaIds.has(media.id))
-      });
-    };
-    const handleLibraryUpdate = () => { void loadHomeData(); };
-    void loadHomeData().catch(err => console.error('Failed to load home view:', err));
+    const handleLibraryUpdate = () => setLibraryRevision(revision => revision + 1);
     window.addEventListener('library-scanned', handleLibraryUpdate);
     return () => {
       isMounted = false;
@@ -177,11 +142,42 @@ export const HomeView: React.FC<HomeViewProps> = ({
     };
   }, []);
 
-  const { allMedia, allHistory, mediaStates, continueWatching, recentlyWatched, rewatchCandidates, abandonedList, localLibraryList } = homeData;
+  useEffect(() => {
+    let isMounted = true;
+    setHeroData(current => ({ ...current, loaded: false, loadError: false }));
+    dbService.getHomeHeroData()
+      .then(data => {
+        if (!isMounted) return;
+        setHeroData({
+          media: data.entries.map(entry => entry.media),
+          history: data.entries.flatMap(entry => entry.history),
+          states: data.entries.map(entry => entry.state),
+          hasMedia: data.hasMedia,
+          loaded: true,
+          loadError: false
+        });
+      })
+      .catch(error => {
+        console.error('Failed to load home hero data:', error);
+        if (isMounted) setHeroData(current => ({ ...current, loaded: true, loadError: true }));
+      });
+    return () => { isMounted = false; };
+  }, [libraryRevision]);
+
   const heroItems = useMemo(
-    () => getHeroCandidates(allMedia, allHistory, mediaStates),
-    [allMedia, allHistory, mediaStates]
+    () => getHeroCandidates(heroData.media, heroData.history, heroData.states),
+    [heroData.media, heroData.history, heroData.states]
   );
+  const loadContinue = useCallback((offset: number, limit: number) =>
+    dbService.getHomeRailPage('continue', limit, offset), []);
+  const loadRecent = useCallback((offset: number, limit: number) =>
+    dbService.getHomeRailPage('recent', limit, offset), []);
+  const loadRewatch = useCallback((offset: number, limit: number) =>
+    dbService.getHomeRailPage('rewatch', limit, offset), []);
+  const loadLocal = useCallback((offset: number, limit: number) =>
+    dbService.getHomeRailPage('local', limit, offset), []);
+  const loadAbandoned = useCallback((offset: number, limit: number) =>
+    dbService.getHomeRailPage('abandoned', limit, offset), []);
   const [activeHeroId, setActiveHeroId] = useState<string>();
   const hasInitializedHeroAccent = useRef(false);
   const activeHero = heroItems.find(media => media.id === activeHeroId) || heroItems[0];
@@ -283,7 +279,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
     return () => cancelAnimationFrame(frame);
   }, [activeHero, dominantColor, heroAccentColor, onAccentColorChange]);
 
-  if (allMedia.length === 0) {
+  if (heroData.loaded && !heroData.hasMedia && !heroData.loadError) {
     return (
       <div className="p-8 text-center text-gray-400">
         <p>No media found in library.</p>
@@ -298,6 +294,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
       backgroundImage: 'radial-gradient(ellipse 85% 48% at 50% 0%, rgba(var(--hero-accent-rgb), 0.11), transparent 78%)'
     }}>
       <div className="relative z-10 space-y-6">
+      {heroData.loadError && (
+        <p role="alert" className="px-4 pt-4 text-sm text-gray-400">
+          Featured media could not be loaded.
+        </p>
+      )}
       {/* Featured Hero Banner */}
       {activeHero && (
         <HeroShowcase
@@ -318,41 +319,46 @@ export const HomeView: React.FC<HomeViewProps> = ({
         }}
       >
         <MediaRail
+          key={`continue-${libraryRevision}`}
           title="Continue Watching / Playing"
           subtitle="Pick up where you left off"
-          items={continueWatching}
+          loadPage={loadContinue}
           onSelectMedia={onSelectMedia}
           cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
         />
 
         <MediaRail
+          key={`recent-${libraryRevision}`}
           title="Recently Completed"
           subtitle="Your latest logged watches and plays"
-          items={recentlyWatched}
+          loadPage={loadRecent}
           onSelectMedia={onSelectMedia}
           cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
         />
 
         <MediaRail
+          key={`rewatch-${libraryRevision}`}
           title="Rewatch Candidates"
           subtitle="Personal favorites revisited multiple times"
-          items={rewatchCandidates}
+          loadPage={loadRewatch}
           onSelectMedia={onSelectMedia}
           cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
         />
 
         <MediaRail
+          key={`local-${libraryRevision}`}
           title="Local Library Files"
           subtitle="Detected media files on local system"
-          items={localLibraryList}
+          loadPage={loadLocal}
           onSelectMedia={onSelectMedia}
           cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
         />
 
         <MediaRail
+          key={`abandoned-${libraryRevision}`}
           title="Paused & Abandoned"
           subtitle="Sessions currently on hold"
-          items={abandonedList}
+          loadPage={loadAbandoned}
           onSelectMedia={onSelectMedia}
           cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
         />

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Calendar } from 'lucide-react';
 import { Media, MediaState } from '../types/media';
 import { Film, Tv, Gamepad2, Play, RefreshCw, PauseCircle } from 'lucide-react';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
@@ -16,7 +15,7 @@ interface MediaCardProps {
   onPreviewEnd?: () => void;
 }
 
-export const MediaCard: React.FC<MediaCardProps> = ({
+export const MediaCard = React.memo<MediaCardProps>(({
   media,
   state,
   landscape = false,
@@ -25,24 +24,47 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   onPreviewStart,
   onPreviewEnd
 }) => {
+  const cardRef = React.useRef<HTMLDivElement>(null);
   const [posterUrl, setPosterUrl] = useState<string | undefined>(media.poster);
   const [imgFailed, setImgFailed] = useState<boolean>(false);
   const [usePosterFallback, setUsePosterFallback] = useState(false);
   const [progressPct, setProgressPct] = useState<number>(0);
-  const cardImageUrl = imgFailed
+  const [isNearViewport, setIsNearViewport] = useState(false);
+  const cardImageUrl = !isNearViewport
+    ? undefined
+    : imgFailed
     ? undefined
     : landscape && !usePosterFallback
       ? landscapeImage || media.backdrop || posterUrl
       : posterUrl;
 
   useEffect(() => {
+    const card = cardRef.current;
+    if (!card || isNearViewport) return;
+    if (!('IntersectionObserver' in window)) {
+      setIsNearViewport(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      setIsNearViewport(true);
+      observer.disconnect();
+    }, { rootMargin: '250px' });
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [isNearViewport]);
+
+  useEffect(() => {
     setUsePosterFallback(false);
   }, [media.id, landscapeImage]);
 
   useEffect(() => {
+    if (!isNearViewport) return;
     let isMounted = true;
     setPosterUrl(media.poster);
     setImgFailed(false);
+    setProgressPct(0);
 
     dbService.getAllPlaybackProgressForMedia(media.id).then(progs => {
       if (!isMounted || progs.length === 0) return;
@@ -52,9 +74,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         const pct = Math.min(100, Math.round((active.position_seconds / active.duration_seconds) * 100));
         if (pct > 1 && pct < 90) setProgressPct(pct);
       }
-    }).catch(() => {});
+    }).catch(error => console.warn(`Failed to load playback progress for "${media.title}":`, error));
 
-    // If media.poster is missing, resolve artwork asynchronously via ArtworkCacheProvider
     if (!media.poster) {
       artworkCacheProvider.resolveArtworkForMedia(media).then(res => {
         if (isMounted && res.poster) {
@@ -72,13 +93,13 @@ export const MediaCard: React.FC<MediaCardProps> = ({
             }
           }
         }
-      });
+      }).catch(error => console.warn(`Failed to resolve artwork for "${media.title}":`, error));
     }
 
     return () => {
       isMounted = false;
     };
-  }, [media]);
+  }, [isNearViewport, media]);
 
   const handleImageError = () => {
     setImgFailed(true);
@@ -87,7 +108,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         setPosterUrl(res.poster);
         setImgFailed(false);
       }
-    });
+    }).catch(error => console.warn(`Failed to recover artwork for "${media.title}":`, error));
   };
 
   const [isHovered, setIsHovered] = useState(false);
@@ -142,6 +163,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
   return (
     <div
+      ref={cardRef}
       onClick={event => {
         const rect = event.currentTarget.getBoundingClientRect();
         onClick(media, rect);
@@ -253,4 +275,4 @@ export const MediaCard: React.FC<MediaCardProps> = ({
       </div> */}
     </div>
   );
-};
+});

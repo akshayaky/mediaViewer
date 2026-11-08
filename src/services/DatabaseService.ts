@@ -13,6 +13,24 @@ import {
 } from '../types/media';
 import { isEpisodeCompletionStatus } from '../helper/episodeProgress';
 
+export type HomeRailSection = 'continue' | 'recent' | 'rewatch' | 'local' | 'abandoned';
+
+export interface HomeRailEntry {
+  media: Media;
+  state: MediaState;
+  history: MediaHistory[];
+}
+
+export interface HomeRailPage {
+  entries: HomeRailEntry[];
+  hasMore: boolean;
+}
+
+export interface HomeHeroData {
+  entries: HomeRailEntry[];
+  hasMedia: boolean;
+}
+
 export class DatabaseService {
   private db: DatabaseTauri | null = null;
   private initialized = false;
@@ -231,6 +249,8 @@ export class DatabaseService {
     } catch {
       // Index already exists
     }
+    await this.db.execute('CREATE INDEX IF NOT EXISTS idx_media_history_media_created ON media_history(media_id, created_at DESC);');
+    await this.db.execute('CREATE INDEX IF NOT EXISTS idx_local_file_media ON local_file(media_id);');
 
   }
 
@@ -264,7 +284,7 @@ export class DatabaseService {
     return null;
   }
 
-  private async mapMediaObject(row: Record<string, any>): Promise<Media> {
+  private async mapMediaObject(row: Record<string, any>, includeExternalIds = true): Promise<Media> {
     let genres: string[] = [];
     try {
       genres = typeof row.genres === 'string' ? JSON.parse(row.genres) : row.genres || [];
@@ -313,7 +333,142 @@ export class DatabaseService {
       updated_at: row.updated_at as string,
       accent_color: (row.accent_color as string) || undefined,
       manually_matched: Boolean(row.manually_matched),
-      external_ids: await this.getExternalIdsForMedia(row.id as string)
+      external_ids: includeExternalIds ? await this.getExternalIdsForMedia(row.id as string) : []
+    };
+  }
+
+  public async getHomeHeroData(limit = 40): Promise<HomeHeroData> {
+    if (!this.db) {
+      const media = await this.getAllMedia();
+      return {
+        entries: await this.mapHomeMediaEntries(media.slice(0, limit).map(item => item as unknown as Record<string, any>)),
+        hasMedia: media.length > 0
+      };
+    }
+
+    const [{ count }, rows] = await Promise.all([
+      this.db.select<{ count: number }[]>('SELECT COUNT(*) AS count FROM media').then(result => result[0] || { count: 0 }),
+      this.db.select<Record<string, any>[]>(`
+        SELECT m.*
+        FROM media m
+        WHERE m.backdrop IS NOT NULL
+          AND LENGTH(TRIM(m.backdrop)) >= 8
+          AND COALESCE(m.backdrop, '') <> COALESCE(m.poster, '')
+        ORDER BY
+          CASE
+            WHEN (SELECT h.status FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1) = 'Currently' THEN 0
+            WHEN (SELECT h.status FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1)
+              IN ('Currently', 'Watched Episode', 'Finished')
+              AND JULIANDAY('now') - JULIANDAY(COALESCE(
+                (SELECT COALESCE(h.completed_at, h.started_at, h.created_at)
+                 FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1),
+                m.created_at
+              )) <= 30 THEN 1
+            WHEN JULIANDAY('now') - JULIANDAY(m.created_at) <= 90 THEN 2
+            WHEN (SELECT h.status FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1) = 'Finished' THEN 3
+            WHEN EXISTS (SELECT 1 FROM media_history h WHERE h.media_id = m.id AND h.score >= 4) THEN 4
+            ELSE 5
+          END,
+          COALESCE(
+            (SELECT MAX(COALESCE(h.completed_at, h.started_at, h.created_at)) FROM media_history h WHERE h.media_id = m.id),
+            m.created_at
+          ) DESC,
+          m.id
+        LIMIT ?
+      `, [limit])
+    ]);
+
+    return {
+      entries: await this.mapHomeMediaEntries(rows),
+      hasMedia: Number(count) > 0
+    };
+  }
+
+  public async getHomeRailPage(
+    section: HomeRailSection,
+    limit = 12,
+    offset = 0
+  ): Promise<HomeRailPage> {
+    if (!this.db) return { entries: [], hasMore: false };
+
+    const filters: Record<HomeRailSection, string> = {
+      continue: `(SELECT h.status FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1) = 'Currently'`,
+      recent: `EXISTS (SELECT 1 FROM media_history h WHERE h.media_id = m.id AND h.status IN ('Finished', 'Watched Episode'))`,
+      rewatch: `(
+        (SELECT COUNT(*) FROM media_history h WHERE h.media_id = m.id AND h.status = 'Finished') > 1
+        OR EXISTS (SELECT 1 FROM media_history h WHERE h.media_id = m.id AND LOWER(COALESCE(h.context, '')) LIKE '%rewatch%')
+      )`,
+      local: `EXISTS (SELECT 1 FROM local_file f WHERE f.media_id = m.id)`,
+      abandoned: `(SELECT h.status FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1) = 'Abandoned'`
+    };
+    const rows = await this.db.select<Record<string, any>[]>(`
+      SELECT m.*
+      FROM media m
+      WHERE ${filters[section]}
+      ORDER BY
+        COALESCE(
+          (SELECT MAX(COALESCE(h.completed_at, h.started_at, h.created_at)) FROM media_history h WHERE h.media_id = m.id),
+          m.created_at
+        ) DESC,
+        m.title COLLATE NOCASE ASC,
+        m.id ASC
+      LIMIT ? OFFSET ?
+    `, [limit + 1, offset]);
+    const hasMore = rows.length > limit;
+    const entries = await this.mapHomeMediaEntries(rows.slice(0, limit));
+    return { entries, hasMore };
+  }
+
+  private async mapHomeMediaEntries(rows: Record<string, any>[]): Promise<HomeRailEntry[]> {
+    const media = await Promise.all(rows.map(row => this.mapMediaObject(row, false)));
+    if (!media.length || !this.db) {
+      return media.map(item => ({
+        media: item,
+        state: this.deriveMediaState(item.id, []),
+        history: []
+      }));
+    }
+
+    const ids = media.map(item => item.id);
+    const historyRows = await this.db.select<Record<string, any>[]>(
+      `SELECT id, media_id, started_at, completed_at, status, score, context, source, created_at
+       FROM media_history
+       WHERE media_id IN (${ids.map(() => '?').join(', ')})
+       ORDER BY created_at DESC`,
+      ids
+    );
+    const historyByMediaId = new Map<string, MediaHistory[]>();
+    for (const row of historyRows) {
+      const history = this.mapMediaHistoryObject(row);
+      const entries = historyByMediaId.get(history.media_id) || [];
+      entries.push(history);
+      historyByMediaId.set(history.media_id, entries);
+    }
+
+    return media.map(item => {
+      const history = historyByMediaId.get(item.id) || [];
+      return {
+        media: item,
+        state: this.deriveMediaState(item.id, history),
+        history
+      };
+    });
+  }
+
+  private mapMediaHistoryObject(row: Record<string, any>): MediaHistory {
+    return {
+      id: row.id as string,
+      media_id: row.media_id as string,
+      started_at: (row.started_at as string) || undefined,
+      completed_at: (row.completed_at as string) || undefined,
+      status: row.status as MediaHistory['status'],
+      score: row.score ? Number(row.score) : undefined,
+      thoughts: (row.thoughts as string) || undefined,
+      context: (row.context as string) || undefined,
+      source: row.source as string,
+      original_source_record_id: (row.original_source_record_id as string) || undefined,
+      created_at: row.created_at as string,
+      updated_at: (row.updated_at as string) || (row.created_at as string)
     };
   }
 
@@ -653,6 +808,10 @@ export class DatabaseService {
 
   public async getMediaState(media_id: string): Promise<MediaState> {
     const histories = await this.getHistoryForMedia(media_id);
+    return this.deriveMediaState(media_id, histories);
+  }
+
+  private deriveMediaState(media_id: string, histories: MediaHistory[]): MediaState {
     if (!histories.length) {
       return {
         media_id,
@@ -666,7 +825,6 @@ export class DatabaseService {
 
     const sorted = [...histories].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     const latest = sorted[sorted.length - 1];
-
     let totalCount = 0;
     let finishedCount = 0;
     let rewatchCount = 0;
