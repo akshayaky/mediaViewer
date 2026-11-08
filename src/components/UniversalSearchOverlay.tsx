@@ -15,6 +15,7 @@ type SearchResult =
 
 interface UniversalSearchOverlayProps {
   isOpen: boolean;
+  initialQuery?: string;
   onClose: () => void;
   onOpenMedia: (media: Media, options?: { autoPlayFileId?: string; play?: boolean }) => void;
 }
@@ -35,6 +36,7 @@ function getTypeIcon(type: MediaType) {
 
 export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
   isOpen,
+  initialQuery = '',
   onClose,
   onOpenMedia
 }) => {
@@ -56,7 +58,7 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
     if (!isOpen) return;
     externalSearchQueries.current.clear();
     externalResultsCache.current.clear();
-    setQuery('');
+    setQuery(initialQuery);
     setExternalResults([]);
     setErrorMessage('');
     setActiveIndex(0);
@@ -79,7 +81,7 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen]);
+  }, [initialQuery, isOpen]);
 
   const localResults = useMemo(() => {
     const normalizedQuery = parsedQuery.query.trim().toLocaleLowerCase();

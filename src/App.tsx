@@ -52,6 +52,7 @@ export function App() {
   const [selectedAccentColor, setSelectedAccentColor] = useState<string>();
   const [homeAccentColor, setHomeAccentColor] = useState<string>();
   const [isUniversalSearchOpen, setIsUniversalSearchOpen] = useState(false);
+  const [universalSearchQuery, setUniversalSearchQuery] = useState('');
   const [autoPlayFileId, setAutoPlayFileId] = useState<string | null>(null);
   const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -486,6 +487,10 @@ export function App() {
         media={selectedMedia}
         onBack={handleBackToTab}
         isCollapsed={isCollapsed}
+        onSearchCast={castName => {
+          setUniversalSearchQuery(`cast:${castName.trim().replace(/\s+/g, '-')}`);
+          setIsUniversalSearchOpen(true);
+        }}
         onAccentColorChange={setSelectedAccentColor}
         accentColorOverride={selectedAccentColor}
         autoPlayFileId={autoPlayFileId || undefined}
@@ -592,7 +597,11 @@ export function App() {
       </main>
       <UniversalSearchOverlay
         isOpen={isUniversalSearchOpen}
-        onClose={() => setIsUniversalSearchOpen(false)}
+        initialQuery={universalSearchQuery}
+        onClose={() => {
+          setIsUniversalSearchOpen(false);
+          setUniversalSearchQuery('');
+        }}
         onOpenMedia={handleUniversalSearchOpenMedia}
       />
     </div>

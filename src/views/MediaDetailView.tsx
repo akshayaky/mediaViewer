@@ -55,6 +55,7 @@ interface MediaDetailViewProps {
   onBack: () => void;
   isCollapsed: boolean;
   onSelectMedia?: (media: Media) => void;
+  onSearchCast?: (castName: string) => void;
   onAccentColorChange?: (color: string) => void;
   accentColorOverride?: string;
   autoPlayFileId?: string;
@@ -103,7 +104,7 @@ function getFileQualityLabel(file: LocalFile): string {
   return 'SD / Default';
 }
 
-export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isCollapsed, onSelectMedia, onAccentColorChange, accentColorOverride, autoPlayFileId, autoPlayOnOpen, onAutoPlayHandled }) => {
+export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isCollapsed, onSelectMedia, onSearchCast, onAccentColorChange, accentColorOverride, autoPlayFileId, autoPlayOnOpen, onAutoPlayHandled }) => {
   const {
     currentMedia,
     historyList,
@@ -847,7 +848,12 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
               <div className="mdv-cast-rail">
                 {currentMedia.cast.map(member => (
-                  <div key={member.id} className="mdv-cast-member">
+                  <div
+                    key={member.id}
+                    className="mdv-cast-member"
+                    title="Double-click to find media with this actor"
+                    onDoubleClick={() => onSearchCast?.(member.name)}
+                  >
                     <div className="mdv-cast-avatar">
                       {member.profile_path ? (
                         <img src={member.profile_path} alt={member.name} />

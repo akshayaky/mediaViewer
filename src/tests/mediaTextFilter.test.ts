@@ -40,6 +40,16 @@ describe('advanced media text filters', () => {
     expect(matchesMediaTextFilter(media('Film', 2005), parseMediaTextFilter('y:2010-2000').filters)).toBe(true);
   });
 
+  it('matches cast filters with actor names containing spaces', () => {
+    const film = {
+      ...media('Film', 2020),
+      cast: [{ id: 'actor-1', name: 'Jane Doe' }]
+    };
+
+    expect(matchesMediaTextFilter(film, parseMediaTextFilter('cast:Jane-Doe').filters)).toBe(true);
+    expect(matchesMediaTextFilter(film, parseMediaTextFilter('cast:John-Smith').filters)).toBe(false);
+  });
+
   it('classifies valid, invalid, unsupported, and ordinary query tokens for highlighting', () => {
     const parsed = parseMediaTextFilter('Dune y:2008 type:book status:finished');
 
