@@ -260,6 +260,12 @@ export function App() {
     }, 710);
   };
 
+  const handlePlayMedia = (media: Media) => {
+    setAutoPlayFileId(null);
+    setAutoPlayOnOpen(true);
+    handleSelectMedia(media);
+  };
+
   const handleBackToTab = () => {
     setAutoPlayFileId(null);
     setAutoPlayOnOpen(false);
@@ -435,7 +441,8 @@ export function App() {
   const renderHomeView = () => (
     <HomeView
       onSelectMedia={handleSelectMedia}
-    onAccentColorChange={setHomeAccentColor}
+      onPlayMedia={handlePlayMedia}
+      onAccentColorChange={setHomeAccentColor}
       isCollapsed={isCollapsed}
     />
   );
@@ -464,6 +471,7 @@ export function App() {
         return (
           <HomeView
             onSelectMedia={handleSelectMedia}
+            onPlayMedia={handlePlayMedia}
             onAccentColorChange={setHomeAccentColor}
           />
         );

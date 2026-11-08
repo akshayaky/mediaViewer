@@ -13,7 +13,9 @@ interface MediaRailProps {
   subtitle?: string;
   loadPage: (offset: number, limit: number) => Promise<HomeRailPage>;
   onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
+  onPlayMedia: (media: Media) => void;
   cardOrientation?: MediaCardOrientation;
+  forceLandscape?: boolean;
   cardOrientationByType?: Partial<Record<MediaType, MediaCardOrientation>>;
   onPreviewStart?: (media: Media, rect: DOMRect) => void;
   onPreviewEnd?: () => void;
@@ -24,7 +26,9 @@ export const MediaRail: React.FC<MediaRailProps> = ({
   subtitle,
   loadPage,
   onSelectMedia,
+  onPlayMedia,
   cardOrientation,
+  forceLandscape = false,
   cardOrientationByType = {},
   onPreviewStart,
   onPreviewEnd
@@ -105,7 +109,7 @@ export const MediaRail: React.FC<MediaRailProps> = ({
         >
           {entries.map(({ media, state, history }) => {
             const orientation = cardOrientation || cardOrientationByType[media.type] || 'portrait';
-            const landscape = isDesktop && orientation === 'landscape';
+            const landscape = forceLandscape || (isDesktop && orientation === 'landscape');
             const lastEpisodeStill = getLastWatchedEpisodeArtwork(media, history).still;
             const image = media.type === 'TV Series'
               ? lastEpisodeStill || media.backdrop
@@ -126,6 +130,7 @@ export const MediaRail: React.FC<MediaRailProps> = ({
                   landscape={landscape}
                   landscapeImage={image}
                   onClick={onSelectMedia}
+                  onPlayMedia={onPlayMedia}
                   onPreviewStart={onPreviewStart}
                   onPreviewEnd={onPreviewEnd}
                 />

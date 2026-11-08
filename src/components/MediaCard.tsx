@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Media, MediaState } from '../types/media';
+import { LocalFile, Media, MediaState } from '../types/media';
 import { Film, Tv, Gamepad2, Play, RefreshCw, PauseCircle } from 'lucide-react';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { dbService } from '../services/DatabaseService';
@@ -10,6 +10,7 @@ interface MediaCardProps {
   score?: number;
   landscape?: boolean;
   landscapeImage?: string;
+  onPlayMedia?: (media: Media) => void;
   onClick: (media: Media, clickedCardRect?: DOMRect) => void;
   onPreviewStart?: (media: Media, rect: DOMRect) => void;
   onPreviewEnd?: () => void;
@@ -20,6 +21,7 @@ export const MediaCard = React.memo<MediaCardProps>(({
   state,
   landscape = false,
   landscapeImage,
+  onPlayMedia,
   onClick,
   onPreviewStart,
   onPreviewEnd
@@ -28,7 +30,9 @@ export const MediaCard = React.memo<MediaCardProps>(({
   const [posterUrl, setPosterUrl] = useState<string | undefined>(media.poster);
   const [imgFailed, setImgFailed] = useState<boolean>(false);
   const [usePosterFallback, setUsePosterFallback] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
   const [progressPct, setProgressPct] = useState<number>(0);
+  const [hasPlayableFile, setHasPlayableFile] = useState(false);
   const [isNearViewport, setIsNearViewport] = useState(false);
   const cardImageUrl = !isNearViewport
     ? undefined
@@ -57,7 +61,12 @@ export const MediaCard = React.memo<MediaCardProps>(({
 
   useEffect(() => {
     setUsePosterFallback(false);
+    setLogoFailed(false);
   }, [media.id, landscapeImage]);
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [media.logo]);
 
   useEffect(() => {
     if (!isNearViewport) return;
@@ -65,6 +74,7 @@ export const MediaCard = React.memo<MediaCardProps>(({
     setPosterUrl(media.poster);
     setImgFailed(false);
     setProgressPct(0);
+    setHasPlayableFile(false);
 
     dbService.getAllPlaybackProgressForMedia(media.id).then(progs => {
       if (!isMounted || progs.length === 0) return;
@@ -75,6 +85,12 @@ export const MediaCard = React.memo<MediaCardProps>(({
         if (pct > 1 && pct < 90) setProgressPct(pct);
       }
     }).catch(error => console.warn(`Failed to load playback progress for "${media.title}":`, error));
+
+    if (onPlayMedia) {
+      dbService.getLocalFilesForMedia(media.id).then((files: LocalFile[]) => {
+        if (isMounted) setHasPlayableFile(files.some(file => file.exists));
+      }).catch(error => console.warn(`Failed to load local files for "${media.title}":`, error));
+    }
 
     if (!media.poster) {
       artworkCacheProvider.resolveArtworkForMedia(media).then(res => {
@@ -181,7 +197,7 @@ export const MediaCard = React.memo<MediaCardProps>(({
           onPreviewEnd?.();
         }
       }}
-      className="group relative cursor-pointer flex flex-col bg-[#151720] rounded-sm transition-all duration-300 transform hover:-translate-y-1 touch-target"
+      className={`group relative cursor-pointer flex flex-col bg-[#151720] ${landscape ? 'rounded-[10px]' : 'rounded-sm'} transition-all duration-300 transform hover:-translate-y-1 touch-target`}
     >
       {/* Backlight Glow Effect */}
       <div className="absolute -inset-4 opacity-0 group-hover:opacity-70 transition-opacity duration-500 blur-3xl pointer-events-none z-0">
@@ -196,9 +212,9 @@ export const MediaCard = React.memo<MediaCardProps>(({
       </div>
 
       {/* Main Card Content */}
-      <div className="relative flex flex-col bg-[#151720] rounded-sm overflow-hidden border border-transparent group-hover:border-white/10 hover:shadow-xl hover:shadow-black/50 transition-all duration-300 z-10">
+      <div className={`relative flex flex-col bg-[#151720] ${landscape ? 'rounded-[10px]' : 'rounded-sm'} overflow-hidden border border-transparent group-hover:border-white/10 hover:shadow-xl hover:shadow-black/50 transition-all duration-300 z-10`}>
         {/* Poster Image Container */}
-        <div className={`relative w-full bg-[#1b1e2b] overflow-hidden ${landscape ? 'aspect-[2/3] sidebar:aspect-video' : 'aspect-[2/3]'}`}>
+        <div className={`relative w-full bg-[#1b1e2b] overflow-hidden ${landscape ? 'aspect-[16/10]' : 'aspect-[2/3]'}`}>
           {cardImageUrl ? (
             <img
               src={cardImageUrl}
@@ -219,8 +235,9 @@ export const MediaCard = React.memo<MediaCardProps>(({
               <span className="text-sm font-medium text-gray-300 mt-2 line-clamp-2">{media.title}</span>
             </div>
           )}
-          {/* Gradient Overlay on Hover */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d10] via-transparent to-black/20 opacity-80 group-hover:opacity-90 transition-opacity" />
+          {!landscape && (
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d10] via-transparent to-black/20 opacity-80 group-hover:opacity-90 transition-opacity" />
+          )}
 
           {/* Status Badge */}
           {renderBadge()}
@@ -235,10 +252,38 @@ export const MediaCard = React.memo<MediaCardProps>(({
             </div>
           )}
           {landscape && (
-            <div className="absolute inset-x-0 bottom-0 z-10 hidden bg-gradient-to-t from-black/90 via-black/45 to-transparent px-3 pb-3 pt-10 sidebar:block">
-              <p className="truncate text-sm font-bold text-white drop-shadow">{media.title}</p>
-              <p className="mt-0.5 text-[11px] text-gray-300">{media.release_year || media.type}</p>
+            <div
+              className="absolute inset-0 z-10 flex items-end px-3 pb-3 pt-10"
+              style={{
+                background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)'
+              }}
+            >
+              {media.logo && !logoFailed ? (
+                <img
+                  src={media.logo}
+                  alt={media.title}
+                  onError={() => setLogoFailed(true)}
+                  className="h-10 max-w-[75%] object-contain object-left drop-shadow-lg"
+                  loading="lazy"
+                />
+              ) : (
+                <p className=" text-xl font-extrabold uppercase text-white drop-shadow">{media.title}</p>
+              )}
             </div>
+          )}
+          {hasPlayableFile && onPlayMedia && (
+            <button
+              type="button"
+              aria-label={`Play ${media.title} from saved progress`}
+              title="Play from saved progress"
+              onClick={event => {
+                event.stopPropagation();
+                onPlayMedia(media);
+              }}
+              className="absolute bottom-3 right-3 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-[#E27D12] text-white shadow-lg transition hover:scale-105 hover:bg-[#f08b1e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+            >
+              <Play className="h-5 w-5 fill-current" />
+            </button>
           )}
         </div>
         {/* Score Badge */}

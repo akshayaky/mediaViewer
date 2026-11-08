@@ -337,7 +337,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
 
         <h1
           id={`hero-title-text-${displayedMedia.id}`}
-          className={`hero-title-text text-4xl font-extrabold text-white tracking-tight drop-shadow-md leading-none ${displayedMedia.logo ? 'hidden' : ''}`}
+          className={`hero-title-text text-6xl font-extrabold uppercase text-white tracking-tight drop-shadow-md leading-none ${displayedMedia.logo ? 'hidden' : ''}`}
         >
           {displayedMedia.title}
         </h1>

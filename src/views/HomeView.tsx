@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HeroShowcase } from '../components/HeroShowcase';
 import { MediaRail } from '../components/MediaRail';
-import { Media, MediaHistory, MediaState, UiPreferences } from '../types/media';
+import { Media, MediaHistory, MediaState } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { getAccentRgb, parseColor } from '../helper/mediaDetailTheme';
 import { useDominantColor } from '../helper/useDominantColour';
@@ -103,19 +103,18 @@ function getHeroCandidates(
 
 interface HomeViewProps {
   onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
+  onPlayMedia: (media: Media) => void;
   onAccentColorChange: (color?: string) => void;
   isCollapsed?: boolean;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
    onSelectMedia,
+   onPlayMedia,
    onAccentColorChange,
    isCollapsed
   }) => {
   const { pagePadding } = useSidebarPadding(isCollapsed);
-  const [uiPreferences, setUiPreferences] = useState<UiPreferences>({
-    card_orientation_by_type: {}
-  });
   const [heroData, setHeroData] = useState<{
     media: Media[];
     history: MediaHistory[];
@@ -127,17 +126,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [libraryRevision, setLibraryRevision] = useState(0);
 
   useEffect(() => {
-    let isMounted = true;
-    dbService.getSettings()
-      .then(settings => {
-        if (isMounted) setUiPreferences(settings.ui_preferences || { card_orientation_by_type: {} });
-      })
-      .catch(error => console.error('Failed to load home UI preferences:', error));
-
     const handleLibraryUpdate = () => setLibraryRevision(revision => revision + 1);
     window.addEventListener('library-scanned', handleLibraryUpdate);
     return () => {
-      isMounted = false;
       window.removeEventListener('library-scanned', handleLibraryUpdate);
     };
   }, []);
@@ -324,7 +315,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Pick up where you left off"
           loadPage={loadContinue}
           onSelectMedia={onSelectMedia}
-          cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
+          onPlayMedia={onPlayMedia}
+          forceLandscape
         />
 
         <MediaRail
@@ -333,7 +325,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Your latest logged watches and plays"
           loadPage={loadRecent}
           onSelectMedia={onSelectMedia}
-          cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
+          onPlayMedia={onPlayMedia}
+          cardOrientation="portrait"
         />
 
         <MediaRail
@@ -342,7 +335,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Personal favorites revisited multiple times"
           loadPage={loadRewatch}
           onSelectMedia={onSelectMedia}
-          cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
+          onPlayMedia={onPlayMedia}
+          cardOrientation="portrait"
         />
 
         <MediaRail
@@ -351,7 +345,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Detected media files on local system"
           loadPage={loadLocal}
           onSelectMedia={onSelectMedia}
-          cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
+          onPlayMedia={onPlayMedia}
+          cardOrientation="portrait"
         />
 
         <MediaRail
@@ -360,7 +355,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
           subtitle="Sessions currently on hold"
           loadPage={loadAbandoned}
           onSelectMedia={onSelectMedia}
-          cardOrientation={uiPreferences.home_card_orientation || 'landscape'}
+          onPlayMedia={onPlayMedia}
+          cardOrientation="portrait"
         />
       </div>
       </div>
