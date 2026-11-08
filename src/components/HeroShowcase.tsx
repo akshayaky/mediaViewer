@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Media, MediaHistory, MediaState } from '../types/media';
 import { dbService } from '../services/DatabaseService';
-import { Play, Info, Star, Calendar, Clock, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface HeroShowcaseProps {
   media: Media;
@@ -111,6 +111,8 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
 
   useEffect(() => {
     setLatestHistory(undefined);
+    console.log(latestHistory);
+    console.log(state);
     setState(undefined);
     let isMounted = true;
     Promise.all([dbService.getHistoryForMedia(media.id), dbService.getMediaState(media.id)])

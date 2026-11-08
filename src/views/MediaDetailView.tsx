@@ -329,6 +329,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
   // Season accordion state
   const [expandedSeason, setExpandedSeason] = useState<number | null>(1);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
 
   // Local launcher & modals state
   const [showAddHistoryModal, setShowAddHistoryModal] = useState(false);
@@ -1126,80 +1127,99 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 <History className="mdv-icon-lg mdv-icon-accent" />
                 <span>Interaction Journal ({historyList.length})</span>
               </h2>
-              <button
-                onClick={() => openHistoryModal()}
-                className="mdv-btn mdv-btn-accent mdv-btn-log"
-              >
-                <Plus className="mdv-icon-sm" />
-                <span>Log Session</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openHistoryModal()}
+                  className="mdv-btn mdv-btn-accent mdv-btn-log"
+                >
+                  <Plus className="mdv-icon-sm" />
+                  <span>Log Session</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryCollapsed(collapsed => !collapsed)}
+                  aria-expanded={!isHistoryCollapsed}
+                  aria-label={isHistoryCollapsed ? 'Expand log history' : 'Collapse log history'}
+                  title={isHistoryCollapsed ? 'Expand log history' : 'Collapse log history'}
+                  className="mdv-btn mdv-btn-glass"
+                  style={{ padding: '0.375rem' }}
+                >
+                  {isHistoryCollapsed
+                    ? <ChevronDown className="mdv-icon-sm" />
+                    : <ChevronUp className="mdv-icon-sm" />}
+                </button>
+              </div>
             </div>
 
-            {historyError && <p role="alert" className="text-sm text-red-400">{historyError}</p>}
+            {!isHistoryCollapsed && (
+              <>
+                {historyError && <p role="alert" className="text-sm text-red-400">{historyError}</p>}
 
-            {historyList.length === 0 ? (
-              <p className="mdv-empty">No history sessions recorded yet.</p>
-            ) : (
-              <div className="mdv-history-list">
-                {historyList.map(h => (
-                  <div key={h.id} className="mdv-tile mdv-history-item">
-                    <div className="mdv-history-row">
-                      <div className="mdv-history-tags">
-                        <span className="mdv-chip mdv-chip--status">
-                          {h.status}
-                        </span>
-                        {h.context && (
-                          <span className="mdv-chip mdv-chip--context">
-                            Context: {h.context}
-                          </span>
+                {historyList.length === 0 ? (
+                  <p className="mdv-empty">No history sessions recorded yet.</p>
+                ) : (
+                  <div className="mdv-history-list">
+                    {historyList.map(h => (
+                      <div key={h.id} className="mdv-tile mdv-history-item">
+                        <div className="mdv-history-row">
+                          <div className="mdv-history-tags">
+                            <span className="mdv-chip mdv-chip--status">
+                              {h.status}
+                            </span>
+                            {h.context && (
+                              <span className="mdv-chip mdv-chip--context">
+                                Context: {h.context}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mdv-history-meta">
+                            {h.score && (
+                              <span className="mdv-score">
+                                <Star className="mdv-icon-sm" />
+                                <span>{h.score} / 5</span>
+                              </span>
+                            )}
+                            <span>{h.completed_at || h.started_at || h.created_at.split('T')[0]}</span>
+                          </div>
+                        </div>
+
+                        {h.thoughts && (
+                          <p className="mdv-thoughts">
+                            "{h.thoughts}"
+                          </p>
                         )}
-                      </div>
 
-                      <div className="mdv-history-meta">
-                        {h.score && (
-                          <span className="mdv-score">
-                            <Star className="mdv-icon-sm" />
-                            <span>{h.score} / 5</span>
-                          </span>
-                        )}
-                        <span>{h.completed_at || h.started_at || h.created_at.split('T')[0]}</span>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="mdv-source">
+                            Source: {h.source} {h.original_source_record_id ? `(ID: ${h.original_source_record_id})` : ''}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openHistoryModal(h)}
+                              aria-label={`Edit ${h.status} log`}
+                              title="Edit log"
+                              className="text-gray-400 hover:text-white"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteHistory(h)}
+                              aria-label={`Delete ${h.status} log`}
+                              title="Delete log"
+                              className="text-gray-400 hover:text-red-400"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-
-                    {h.thoughts && (
-                      <p className="mdv-thoughts">
-                        "{h.thoughts}"
-                      </p>
-                    )}
-
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="mdv-source">
-                        Source: {h.source} {h.original_source_record_id ? `(ID: ${h.original_source_record_id})` : ''}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openHistoryModal(h)}
-                          aria-label={`Edit ${h.status} log`}
-                          title="Edit log"
-                          className="text-gray-400 hover:text-white"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteHistory(h)}
-                          aria-label={`Delete ${h.status} log`}
-                          title="Delete log"
-                          className="text-gray-400 hover:text-red-400"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </section>
         </div>
