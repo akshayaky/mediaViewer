@@ -1,4 +1,4 @@
-package com.jules.tauri_app
+package com.akymaster.veyview
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

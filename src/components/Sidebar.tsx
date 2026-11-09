@@ -150,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                className={`w-10 h-10 min-w-10 rounded-xl flex items-center justify-center shadow-lg ring-1 ring-white/20 transition-transform
  duration-300 ${accentColors ? '' : ''}`}
              >
-               <img src = "src-tauri\icons\Square310x310Logo.png" />
+               <img src = "/img-logo.png" />
 
              </div>
 
