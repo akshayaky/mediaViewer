@@ -336,6 +336,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           loadPage={loadRecent}
           onSelectMedia={onSelectMedia}
           onPlayMedia={onPlayMedia}
+          cardOrientation="portrait"
           cardOrientationByType={cardOrientationByType}
         />
 
@@ -346,6 +347,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           loadPage={loadRewatch}
           onSelectMedia={onSelectMedia}
           onPlayMedia={onPlayMedia}
+          cardOrientation="portrait"
           cardOrientationByType={cardOrientationByType}
         />
 
@@ -356,6 +358,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           loadPage={loadLocal}
           onSelectMedia={onSelectMedia}
           onPlayMedia={onPlayMedia}
+          cardOrientation="portrait"
           cardOrientationByType={cardOrientationByType}
         />
 
@@ -366,6 +369,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           loadPage={loadAbandoned}
           onSelectMedia={onSelectMedia}
           onPlayMedia={onPlayMedia}
+          cardOrientation="portrait"
           cardOrientationByType={cardOrientationByType}
         />
       </div>

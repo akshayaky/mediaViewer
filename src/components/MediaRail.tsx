@@ -95,7 +95,7 @@ export const MediaRail: React.FC<MediaRailProps> = ({
   if (hasLoaded && entries.length === 0 && !loading) return null;
 
   return (
-    <section ref={sectionRef} className="space-y-3 my-6 min-h-[280px]">
+    <section ref={sectionRef} className="space-y-3 min-h-[280px]">
       <div className="flex items-baseline space-x-3 px-1">
         <h2 className="text-xl font-bold tracking-tight text-white">{title}</h2>
         {subtitle && <span className="text-xs text-[#E27D12]/80 font-medium">{subtitle}</span>}
