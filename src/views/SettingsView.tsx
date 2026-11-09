@@ -22,11 +22,6 @@ import {
   Loader2,
   Lock,
   ShieldCheck,
-  ExternalLink,
-  Layers,
-  ArrowRightLeft,
-  Check,
-  Plus,
   Trash2
 } from 'lucide-react';
 
@@ -87,24 +82,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
   const {
     token: notionToken,
     databaseId: notionDbId,
-    databases,
-    schema,
     mapping: notionApiMapping,
-    setMapping: setNotionApiMapping,
-    isLoadingDatabases,
-    isLoadingSchema,
-    isCreatingDatabase,
-    isSyncing,
-    syncResult,
-    conflicts,
-    lastSyncTime,
-    syncErrors,
-    connectNotionOAuth,
-    createDatabaseInNotion,
     saveNotionConfig,
-    triggerImportFromApi,
-    triggerSync,
-    resolveConflict
   } = useNotionSync();
 
   const [tokenInput, setTokenInput] = useState(notionToken);
@@ -374,8 +353,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
       parseCsvFile(file);
     }
   };
-
-  const schemaKeys = Object.keys(schema);
 
   return (
     <div
