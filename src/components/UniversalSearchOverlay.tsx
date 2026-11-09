@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Film, Gamepad2, Loader2, Search, Tv, X } from 'lucide-react';
+import { Film, Gamepad2, Globe, Loader2, Search, Tv, X } from 'lucide-react';
 import { Media, LocalFile, MediaType } from '../types/media';
 import { MetadataSearchResult } from '../providers/interfaces';
 import { dbService } from '../services/DatabaseService';
@@ -40,6 +40,7 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
   onClose,
   onOpenMedia
 }) => {
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const [query, setQuery] = useState('');
   const [media, setMedia] = useState<Media[]>([]);
   const [files, setFiles] = useState<LocalFile[]>([]);
@@ -239,7 +240,7 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.key === 'Enter' && event.ctrlKey) {
+    if (!isAndroid && event.key === 'Enter' && event.ctrlKey) {
       event.preventDefault();
       void runExternalSearch(query);
     } else if (event.key === 'ArrowDown') {
@@ -289,6 +290,17 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
             highlightStyle={{ fontFamily: 'inherit', fontSize: '1.125rem', lineHeight: '1.75rem', letterSpacing: 'normal' }}
           />
           {(isLoadingLibrary || isSearchingApi) && <Loader2 className="h-4 w-4 animate-spin text-white/45" />}
+          {isAndroid && (
+            <button
+              onClick={() => void runExternalSearch(query)}
+              aria-label="Search online"
+              title="Search online"
+              disabled={!parsedQuery.query.trim() || isSearchingApi}
+              className="rounded-lg p-2 text-white/45 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              <Globe className="h-4 w-4" />
+            </button>
+          )}
           <button onClick={onClose} aria-label="Close search" className="rounded-lg p-2 text-white/45 hover:bg-white/10 hover:text-white">
             <X className="h-4 w-4" />
           </button>
@@ -354,7 +366,11 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
           })}
         </div>
         <div className="flex items-center gap-4 border-t border-white/10 px-5 py-3 text-[11px] text-white/35">
-          <span>↑↓ Navigate</span><span>↵ Open</span><span>Ctrl+↵ Search online</span><span>Esc Close</span>
+          {!isAndroid && (
+            <>
+              <span>↑↓ Navigate</span><span>↵ Open</span><span>Ctrl+↵ Search online</span><span>Esc Close</span>
+            </>
+          )}
           <span className="ml-auto">Local results first · API fallback</span>
         </div>
       </section>

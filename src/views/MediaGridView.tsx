@@ -7,7 +7,7 @@ import { ArrowDownUp, Search, Filter, Plus, X, RotateCcw, ChevronRight, MoreHori
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
 import { getLastWatchedEpisodeArtwork } from '../helper/episodeProgress';
 import { matchesMediaTextFilter, parseMediaTextFilter } from '../services/MediaTextFilter';
-import { getMediaCardWidth } from '../helper/mediaCardSizing';
+import { getMediaCardMaxWidth, getMediaCardWidth, getPortraitGridColumnCount } from '../helper/mediaCardSizing';
 
 const DEFAULT_GRID_PREFERENCES: MediaGridPreferences = {
   sortBy: 'created_at',
@@ -153,6 +153,8 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
 }) => {
   const { isDesktop, pagePadding } = useSidebarPadding(isCollapsed);
 
+  const mediaGridRef = useRef<HTMLDivElement>(null);
+  const [mediaGridWidth, setMediaGridWidth] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -561,6 +563,23 @@ useEffect(() => {
   };
 
   const sortedItems = [...items].sort(compareMedia);
+  useEffect(() => {
+    const grid = mediaGridRef.current;
+    if (!grid) return;
+
+    const updateWidth = () => setMediaGridWidth(grid.getBoundingClientRect().width);
+    updateWidth();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateWidth);
+      return () => window.removeEventListener('resize', updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [sortedItems.length]);
+
   const groupedItems = (() => {
     if (gridPreferences.groupBy === 'none') return [{ key: 'all', label: '', items: sortedItems }];
 
@@ -650,12 +669,28 @@ useEffect(() => {
   const cardOrientation = typeFilter ? orientationByType[typeFilter] || 'portrait' : 'portrait';
   const useLandscapeCards = cardOrientation === 'landscape';
   const cardWidth = getMediaCardWidth(cardOrientation);
+  const cardMaxWidth = getMediaCardMaxWidth(cardOrientation);
+  const rowGap = typeof window !== 'undefined' && window.innerWidth >= 768
+    ? 20
+    : typeof window !== 'undefined' && window.innerWidth >= 640
+      ? 16
+      : 8;
+  const portraitGridColumnCount = getPortraitGridColumnCount(
+    mediaGridWidth,
+    rowGap,
+    typeof window !== 'undefined' ? window.innerWidth : 0
+  );
   const renderGroupItems = (group: (typeof groupedItems)[number]) => {
     const cards = group.items.map(media => (
       <div
         key={`${group.key}:${media.id}`}
         className="min-w-0"
-        style={{ flex: `1 1 ${cardWidth}` }}
+        style={{
+          flex: useLandscapeCards ? `1 1 ${cardWidth}` : undefined,
+          maxWidth: useLandscapeCards
+            ? `min(${cardMaxWidth}, calc(50% - 0.625rem))`
+            : undefined
+        }}
       >
         <MediaCard
           media={media}
@@ -670,7 +705,16 @@ useEffect(() => {
       </div>
     ));
     return (
-      <div className="mt-2 flex flex-wrap gap-2 sm:gap-4 md:gap-5">{cards}</div>
+      <div
+        className={`mt-2 gap-2 sm:gap-4 md:gap-5 ${
+          useLandscapeCards ? 'flex flex-wrap justify-start' : 'grid'
+        }`}
+        style={useLandscapeCards
+          ? undefined
+          : { gridTemplateColumns: `repeat(${portraitGridColumnCount}, minmax(0, 1fr))` }}
+      >
+        {cards}
+      </div>
     );
   };
 
@@ -1121,6 +1165,7 @@ useEffect(() => {
       </div>
     ) : (
       <div
+        ref={mediaGridRef}
         className="space-y-7 will-change-transform"
         style={{
           transform: `translateY(${pullOffset}px)`,

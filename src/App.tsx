@@ -47,6 +47,7 @@ function getDetailTransitionCenter(centerX: number, centerY: number, container: 
 }
 
 export function App() {
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [selectedMedia, setSelectedMedia] = useState<Media | null>(null);
   const [selectedAccentColor, setSelectedAccentColor] = useState<string>();
@@ -144,14 +145,14 @@ export function App() {
 
   useEffect(() => {
     const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      if (!isAndroid && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setIsUniversalSearchOpen(true);
       }
     };
     window.addEventListener('keydown', handleGlobalSearchShortcut);
     return () => window.removeEventListener('keydown', handleGlobalSearchShortcut);
-  }, []);
+  }, [isAndroid]);
 
   const handleSelectTab = (tab: NavTab) => {
     setAutoPlayFileId(null);
