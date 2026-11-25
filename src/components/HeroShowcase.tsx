@@ -1,15 +1,35 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Media, MediaHistory, MediaState } from '../types/media';
+import { Media } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { Play, ChevronLeft, ChevronRight } from 'lucide-react';
+import { calculateResumeTarget, MediaResumeTarget } from '../helper/episodeProgress';
 
 interface HeroShowcaseProps {
   media: Media;
   mediaItems: Media[];
   onActiveMediaChange: (media: Media) => void;
   onSwipeAccentChange: (media: Media | null, progress: number) => void;
-  onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
+  onSelectMedia: (
+    media: Media,
+    clickedCardRect?: DOMRect,
+    options?: {
+      type?: 'container' | 'circle';
+      clickPoint?: { x: number; y: number };
+      titleRect?: DOMRect;
+      autoPlay?: boolean;
+    }
+  ) => void;
+  onPlayMedia?: (
+    media: Media,
+    clickedCardRect?: DOMRect,
+    options?: {
+      type?: 'container' | 'circle';
+      clickPoint?: { x: number; y: number };
+      titleRect?: DOMRect;
+    }
+  ) => void;
   contentPaddingLeft: string;
+  isDetailsOpen?: boolean;
 }
 
 interface HeroSwipe {
@@ -31,13 +51,14 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
   onActiveMediaChange,
   onSwipeAccentChange,
   onSelectMedia,
-  contentPaddingLeft
+  onPlayMedia,
+  contentPaddingLeft,
+  isDetailsOpen
 }) => {
   const [displayedMedia, setDisplayedMedia] = useState(media);
   const [outgoingMedia, setOutgoingMedia] = useState<Media | null>(null);
   const [skipArtworkEnterId, setSkipArtworkEnterId] = useState<string | null>(null);
-  const [latestHistory, setLatestHistory] = useState<MediaHistory>();
-  const [state, setState] = useState<MediaState>();
+  const [resumeTarget, setResumeTarget] = useState<MediaResumeTarget | null>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [isManuallyPaused, setIsManuallyPaused] = useState(false);
@@ -110,30 +131,29 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
   }, [media, onActiveMediaChange]);
 
   useEffect(() => {
-    setLatestHistory(undefined);
-    console.log(latestHistory);
-    console.log(state);
-    setState(undefined);
+    setResumeTarget(null);
     let isMounted = true;
-    Promise.all([dbService.getHistoryForMedia(media.id), dbService.getMediaState(media.id)])
-      .then(([history, mediaState]) => {
+    Promise.all([
+      dbService.getLocalFilesForMedia(displayedMedia.id),
+      dbService.getAllPlaybackProgressForMedia(displayedMedia.id)
+    ])
+      .then(([files, progress]) => {
         if (!isMounted) return;
-        setLatestHistory(history[0]);
-        setState(mediaState);
+        setResumeTarget(calculateResumeTarget(displayedMedia, files, progress));
       })
       .catch(err => console.error('Failed to load featured media state:', err));
     return () => {
       isMounted = false;
     };
-  }, [media.id]);
+  }, [displayedMedia.id]);
 
   useEffect(() => {
-    if (!canNavigate || isHovered || isFocused || isManuallyPaused) return;
+    if (!canNavigate || isHovered || isFocused || isManuallyPaused || isDetailsOpen) return;
     const timeout = setTimeout(() => {
       onActiveMediaChange(mediaItems[(activeIndex + 1) % mediaItems.length]);
     }, 7000);
     return () => clearTimeout(timeout);
-  }, [activeIndex, canNavigate, isFocused, isHovered, isManuallyPaused, mediaItems, onActiveMediaChange]);
+  }, [activeIndex, canNavigate, isDetailsOpen, isFocused, isHovered, isManuallyPaused, mediaItems, onActiveMediaChange]);
 
   useEffect(() => () => {
     if (manualPauseTimeout.current) clearTimeout(manualPauseTimeout.current);
@@ -141,9 +161,53 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
     if (accentAnimationFrame.current !== null) cancelAnimationFrame(accentAnimationFrame.current);
   }, []);
 
+  const handleHeroClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    const heroRect = event.currentTarget.getBoundingClientRect();
+    const titleEl = event.currentTarget.querySelector<HTMLElement>('.hero-title-lockup:not(.hidden)');
+    const titleRect = titleEl?.getBoundingClientRect();
+    onSelectMedia(displayedMedia, heroRect, {
+      type: 'circle',
+      clickPoint: { x: event.clientX, y: event.clientY },
+      titleRect
+    });
+  };
+
   const handleSelectFeaturedMedia = (event: React.MouseEvent<HTMLButtonElement>) => {
-    const heroRect = event.currentTarget.closest('.hero-showcase')?.getBoundingClientRect();
-    onSelectMedia(media, heroRect || event.currentTarget.getBoundingClientRect());
+    event.stopPropagation();
+    const btnRect = event.currentTarget.getBoundingClientRect();
+    const heroEl = event.currentTarget.closest<HTMLElement>('.hero-showcase');
+    const heroRect = heroEl?.getBoundingClientRect();
+    const titleEl = heroEl?.querySelector<HTMLElement>('.hero-title-lockup:not(.hidden)');
+    const titleRect = titleEl?.getBoundingClientRect();
+    onSelectMedia(displayedMedia, heroRect || btnRect, {
+      type: 'circle',
+      clickPoint: { x: btnRect.left + btnRect.width / 2, y: btnRect.top + btnRect.height / 2 },
+      titleRect
+    });
+  };
+
+  const handlePlayFeaturedMedia = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    const btnRect = event.currentTarget.getBoundingClientRect();
+    const heroEl = event.currentTarget.closest<HTMLElement>('.hero-showcase');
+    const heroRect = heroEl?.getBoundingClientRect();
+    const titleEl = heroEl?.querySelector<HTMLElement>('.hero-title-lockup:not(.hidden)');
+    const titleRect = titleEl?.getBoundingClientRect();
+    if (onPlayMedia) {
+      onPlayMedia(displayedMedia, heroRect || btnRect, {
+        type: 'circle',
+        clickPoint: { x: btnRect.left + btnRect.width / 2, y: btnRect.top + btnRect.height / 2 },
+        titleRect
+      });
+    } else {
+      onSelectMedia(displayedMedia, heroRect || btnRect, {
+        type: 'circle',
+        clickPoint: { x: btnRect.left + btnRect.width / 2, y: btnRect.top + btnRect.height / 2 },
+        autoPlay: true,
+        titleRect
+      });
+    }
   };
 
   const navigate = (direction: -1 | 1) => {
@@ -239,32 +303,40 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
   const renderArtwork = (item: Media, outgoing = false, dragStyle?: React.CSSProperties) => (
     <div
       key={`${item.id}-${outgoing ? 'outgoing' : 'active'}`}
-      className={`absolute inset-0 ${item.poster ? 'hero-artwork-has-poster' : ''} ${dragStyle || (!outgoing && item.id === skipArtworkEnterId) ? 'hero-artwork-dragging' : outgoing ? 'z-0 hero-artwork-exit' : 'z-[1] hero-artwork-enter'}`}
+      className={`absolute inset-0 ${dragStyle || (!outgoing && item.id === skipArtworkEnterId) ? 'hero-artwork-dragging' : outgoing ? 'z-0 hero-artwork-exit' : 'z-[1] hero-artwork-enter'}`}
       aria-hidden="true"
       style={dragStyle}
     >
-      {item.backdrop && (
+      {item.backdrop ? (
         <>
           <img src={item.backdrop} alt="" className="hero-backdrop-fill" />
           <img
             src={item.backdrop}
             alt={outgoing ? '' : item.title}
-            className="hero-backdrop-img absolute inset-0 w-full h-full object-cover object-top opacity-75"
+            className={`hero-backdrop-img absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 ease-out ${
+              isDetailsOpen ? 'scale-105' : 'group-hover:scale-105'
+            }`}
           />
         </>
-      )}
-      {item.poster && (
-        <img src={item.poster} alt="" className="hero-poster-img absolute inset-0 w-full h-full object-cover" />
-      )}
+      ) : item.poster ? (
+        <img
+          src={item.poster}
+          alt={outgoing ? '' : item.title}
+          className={`hero-backdrop-img absolute inset-0 w-full h-full object-cover object-center transition-transform duration-700 ease-out ${
+            isDetailsOpen ? 'scale-105' : 'group-hover:scale-105'
+          }`}
+        />
+      ) : null}
     </div>
   );
 
   return (
     <div
-      className="hero-showcase relative w-full h-[75vh] min-h-[50vh] sm:min-h-[80px] overflow-hidden group"
+      className="hero-showcase relative w-full overflow-hidden group cursor-pointer"
       style={{
         backgroundColor: 'var(--hero-accent, #E27D12)'
       } as React.CSSProperties}
+      onClick={handleHeroClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onPointerDown={handleSwipePointerDown}
@@ -299,7 +371,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
       )}
 
       <div className="absolute inset-0 z-10" style={{
-        background: 'linear-gradient(to top, var(--hero-accent) 0%, var(--hero-accent) 0%, rgba(var(--hero-accent-rgb), 0) 36%, rgba(0, 0, 0, 0.4) 100%)'
+        background: 'linear-gradient(to top, var(--hero-accent) 0%, var(--hero-accent) 0%, rgba(var(--hero-accent-rgb), 0.0) 30%, rgba(0, 0, 0, 0.0) 100%)'
       }} />
 
       <div
@@ -323,11 +395,11 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
         </div> */}
 
         {displayedMedia.logo ? (
-          <div className="hero-title-lockup py-1">
+          <div className="hero-title-lockup py-1" style={{ willChange: 'transform' }}>
             <img
               src={displayedMedia.logo}
               alt={displayedMedia.title}
-              className="h-35 max-w-md object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
+              className="h-24 sm:h-35 max-w-md object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
               onError={event => {
                 event.currentTarget.style.display = 'none';
                 const titleElement = document.getElementById(`hero-title-text-${displayedMedia.id}`);
@@ -339,7 +411,10 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
 
         <h1
           id={`hero-title-text-${displayedMedia.id}`}
-          className={`hero-title-text text-6xl font-extrabold uppercase text-white tracking-tight drop-shadow-md leading-none ${displayedMedia.logo ? 'hidden' : ''}`}
+          className={`hero-title-lockup hero-title-text text-4xl sm:text-6xl font-extrabold uppercase text-white tracking-tight drop-shadow-md leading-none ${
+            displayedMedia.logo ? 'hidden' : ''
+          }`}
+          style={{ willChange: 'transform' }}
         >
           {displayedMedia.title}
         </h1>
@@ -382,18 +457,31 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
         </p>
 
         <div className="flex items-center space-x-3 pt-2">
-          <button
-            onClick={handleSelectFeaturedMedia}
-          className="flex items-center space-x-2 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-transform transform hover:-translate-y-0.5 cursor-pointer"
-            style={{
-              backgroundColor: 'var(--hero-accent)',
-              boxShadow: '0 12px 28px rgba(var(--hero-accent-rgb), 0.24)'
-            }}
-          >
-            <Play className="w-4 h-4 fill-current" />
-            <span>View Details</span>
-          </button>
-
+          {resumeTarget ? (
+            <button
+              onClick={handlePlayFeaturedMedia}
+              className="flex items-center space-x-2 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-transform transform hover:-translate-y-0.5 cursor-pointer shadow-lg"
+              style={{
+                backgroundColor: 'var(--hero-accent)',
+                boxShadow: '0 12px 28px rgba(var(--hero-accent-rgb), 0.24)'
+              }}
+            >
+              <Play className="w-4 h-4 fill-current" />
+              <span>{resumeTarget.label.toUpperCase()}</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleSelectFeaturedMedia}
+              className="flex items-center space-x-2 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-transform transform hover:-translate-y-0.5 cursor-pointer"
+              style={{
+                backgroundColor: 'var(--hero-accent)',
+                boxShadow: '0 12px 28px rgba(var(--hero-accent-rgb), 0.24)'
+              }}
+            >
+              <Play className="w-4 h-4 fill-current" />
+              <span>View Details</span>
+            </button>
+          )}
         </div>
       </div>
 

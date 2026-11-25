@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Film, Gamepad2, Globe, Loader2, Search, Tv, X } from 'lucide-react';
-import { Media, LocalFile, MediaType } from '../types/media';
+import { Media, LocalFile, MediaType, MediaHistory } from '../types/media';
 import { MetadataSearchResult } from '../providers/interfaces';
 import { dbService } from '../services/DatabaseService';
 import { searchMediaMetadata, addMetadataResultToLibrary } from '../services/MediaSearchService';
@@ -44,6 +44,7 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
   const [query, setQuery] = useState('');
   const [media, setMedia] = useState<Media[]>([]);
   const [files, setFiles] = useState<LocalFile[]>([]);
+  const [historyByMediaId, setHistoryByMediaId] = useState<Map<string, MediaHistory>>(new Map());
   const [externalResults, setExternalResults] = useState<MetadataSearchResult[]>([]);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
   const [isSearchingApi, setIsSearchingApi] = useState(false);
@@ -66,11 +67,18 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
     inputRef.current?.focus();
     let isMounted = true;
     setIsLoadingLibrary(true);
-    Promise.all([dbService.getAllMedia(), dbService.getAllLocalFiles()])
-      .then(([loadedMedia, loadedFiles]) => {
+    Promise.all([dbService.getAllMedia(), dbService.getAllLocalFiles(), dbService.getAllHistory()])
+      .then(([loadedMedia, loadedFiles, loadedHistory]) => {
         if (!isMounted) return;
         setMedia(loadedMedia);
         setFiles(loadedFiles);
+        const histMap = new Map<string, MediaHistory>();
+        for (const h of loadedHistory) {
+          if (!histMap.has(h.media_id)) {
+            histMap.set(h.media_id, h);
+          }
+        }
+        setHistoryByMediaId(histMap);
       })
       .catch(error => {
         console.error('Failed to load local search data:', error);
@@ -99,7 +107,24 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
 
     const matchingMedia: SearchResult[] = [];
     for (const item of media) {
-      if (!matchesMediaTextFilter(item, parsedQuery.filters)) continue;
+      const hist = historyByMediaId.get(item.id);
+      const itemFiles = filesByMedia.get(item.id) || [];
+      const availableFile = itemFiles.find(file => file.exists);
+      const local_status: 'available' | 'missing' | 'none' = availableFile
+        ? 'available'
+        : itemFiles.length > 0
+          ? 'missing'
+          : 'none';
+      const enriched = {
+        ...item,
+        status: hist?.status,
+        score: hist?.score,
+        rating: hist?.score,
+        last_watched: hist?.completed_at || hist?.created_at,
+        local_files: itemFiles,
+        local_status
+      };
+      if (!matchesMediaTextFilter(enriched, parsedQuery.filters)) continue;
       const titleScore = getMatchScore(item.title, normalizedQuery);
       const originalTitleScore = item.original_title
         ? getMatchScore(item.original_title, normalizedQuery)
@@ -108,7 +133,6 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
         ? Math.min(...[titleScore, originalTitleScore].filter(value => value >= 0))
         : 0;
       if (Number.isFinite(score)) {
-        const availableFile = filesByMedia.get(item.id)?.find(file => file.exists);
         matchingMedia.push({ kind: 'media', media: item, score, file: availableFile });
       }
     }
@@ -121,8 +145,21 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
           ? 'TV Series'
           : 'Film';
       const associatedMedia = file.media_id ? mediaById.get(file.media_id) : undefined;
+      const fileLocalStatus: 'available' | 'missing' = file.exists ? 'available' : 'missing';
+      const fileFilterTarget = associatedMedia
+        ? {
+            ...associatedMedia,
+            local_files: [file],
+            local_status: fileLocalStatus
+          }
+        : {
+            type: fileType,
+            release_year: file.parsed_year,
+            local_files: [file],
+            local_status: fileLocalStatus
+          };
       if (!matchesMediaTextFilter(
-        associatedMedia || { type: fileType, release_year: file.parsed_year },
+        fileFilterTarget,
         parsedQuery.filters
       )) continue;
       const score = normalizedQuery ? Math.min(...[
@@ -141,7 +178,7 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
     return [...matchingMedia, ...matchingFiles]
       .sort((a, b) => a.score - b.score)
       .slice(0, 30);
-  }, [files, media, parsedQuery]);
+  }, [files, media, historyByMediaId, parsedQuery]);
 
   const runExternalSearch = useCallback(async (searchQuery: string) => {
     const normalizedQuery = parseMediaTextFilter(searchQuery).query.trim();
@@ -191,10 +228,12 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
 
   const externalEntries = externalResults
     .filter(candidate => matchesMediaTextFilter(candidate, parsedQuery.filters))
-    .filter(candidate => !localResults.some(result =>
-      result.kind === 'media'
-      && result.media.type === candidate.type
-      && result.media.title.localeCompare(candidate.title, undefined, { sensitivity: 'base' }) === 0
+    .filter(candidate => !media.some(item =>
+      (candidate.external_id && item.external_ids?.some(ext => ext.external_id === candidate.external_id))
+      || (
+        item.type === candidate.type
+        && item.title.localeCompare(candidate.title, undefined, { sensitivity: 'base' }) === 0
+      )
     ))
     .map(candidate => ({
         kind: 'external',
@@ -273,21 +312,22 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
         aria-modal="true"
         aria-label="Universal search"
         onKeyDown={handleKeyDown}
-        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-[#15171f] shadow-2xl shadow-black/60"
+        className="relative w-full max-w-2xl overflow-visible rounded-2xl border border-white/10 bg-[#15171f] shadow-2xl shadow-black/60"
       >
-        <div className="flex items-center gap-3 border-b border-white/10 px-5">
+        <div className="flex items-center gap-3 border-b border-white/10 px-5 rounded-t-2xl">
           <Search className="h-5 w-5 shrink-0 text-white/45" />
           <HighlightedFilterInput
             ref={inputRef}
             value={query}
             onChange={setQuery}
-            placeholder="Search your library..."
+            placeholder="Search your library (type / for filters)..."
             aria-label="Search your library"
             autoFocus
             wrapperClassName="flex-1"
             inputClassName="h-16 w-full bg-transparent text-lg outline-none placeholder:text-white/35"
             highlightClassName="text-lg"
             highlightStyle={{ fontFamily: 'inherit', fontSize: '1.125rem', lineHeight: '1.75rem', letterSpacing: 'normal' }}
+            scope="library"
           />
           {(isLoadingLibrary || isSearchingApi) && <Loader2 className="h-4 w-4 animate-spin text-white/45" />}
           {isAndroid && (
@@ -307,8 +347,10 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
         </div>
         <div className="max-h-[60vh] overflow-y-auto p-2">
           {errorMessage && <p role="alert" className="px-4 py-3 text-sm text-rose-300">{errorMessage}</p>}
-          {!query.trim() && <p className="px-4 py-6 text-sm text-white/45">Search titles or filter with y:2008, y:2000-2010, type:game.</p>}
-          {query.trim() && !isLoadingLibrary && !localResults.length && !isSearchingApi && !externalEntries.length && !errorMessage && (
+          {(!query.trim() || (!parsedQuery.query.trim() && !parsedQuery.filters.length)) && (
+            <p className="px-4 py-6 text-sm text-white/45">Search titles or type / for filters (type:movie, genre:Action, year:2024)...</p>
+          )}
+          {Boolean(parsedQuery.query.trim() || parsedQuery.filters.length) && !isLoadingLibrary && !localResults.length && !isSearchingApi && !externalEntries.length && !errorMessage && (
             <p className="px-4 py-6 text-sm text-white/45">No matches found.</p>
           )}
           {results.map((result, index) => {
@@ -365,7 +407,7 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
             );
           })}
         </div>
-        <div className="flex items-center gap-4 border-t border-white/10 px-5 py-3 text-[11px] text-white/35">
+        <div className="flex items-center gap-4 border-t border-white/10 px-5 py-3 text-[11px] text-white/35 rounded-b-2xl">
           {!isAndroid && (
             <>
               <span>↑↓ Navigate</span><span>↵ Open</span><span>Ctrl+↵ Search online</span><span>Esc Close</span>

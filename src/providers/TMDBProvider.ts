@@ -537,6 +537,51 @@ export class TMDBProvider implements MetadataProvider {
       return {};
     }
   }
+
+  public async getExternalIds(
+    mediaType: 'movie' | 'tv',
+    tmdbId: string,
+    season?: number,
+    episode?: number
+  ): Promise<{ imdb_id?: string; tvdb_id?: number }> {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) return {};
+
+    const cleanId = tmdbId.replace(/^(movie|tv):/, '');
+    if (!/^\d+$/.test(cleanId)) return {};
+
+    try {
+      let endpoint = `/${mediaType}/${cleanId}/external_ids`;
+      if (mediaType === 'tv' && typeof season === 'number' && typeof episode === 'number' && season > 0 && episode > 0) {
+        endpoint = `/tv/${cleanId}/season/${season}/episode/${episode}/external_ids`;
+      }
+      const { url, headers } = await this.getFetchConfig(endpoint);
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        // If episode-specific external_ids fails, try show-level external_ids
+        if (mediaType === 'tv' && endpoint !== `/tv/${cleanId}/external_ids`) {
+          const showConfig = await this.getFetchConfig(`/tv/${cleanId}/external_ids`);
+          const showRes = await fetch(showConfig.url, { headers: showConfig.headers });
+          if (showRes.ok) {
+            const showData = await showRes.json();
+            return {
+              imdb_id: showData.imdb_id || undefined,
+              tvdb_id: showData.tvdb_id ? Number(showData.tvdb_id) : undefined
+            };
+          }
+        }
+        return {};
+      }
+      const data = await res.json();
+      return {
+        imdb_id: data.imdb_id || undefined,
+        tvdb_id: data.tvdb_id ? Number(data.tvdb_id) : undefined
+      };
+    } catch (err) {
+      console.warn('TMDB getExternalIds failed:', err);
+      return {};
+    }
+  }
 }
 
 export const tmdbProvider = new TMDBProvider();

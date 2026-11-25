@@ -4587,6 +4587,11 @@ dependencies = [
 name = "tauri-app"
 version = "0.1.0"
 dependencies = [
+ "jni",
+ "libloading",
+ "ndk-context",
+ "ndk-sys",
+ "raw-window-handle",
  "rusqlite",
  "serde",
  "serde_json",

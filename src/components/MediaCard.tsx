@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LocalFile, Media, MediaState } from '../types/media';
+import { LocalFile, Media, MediaState, SelectMediaOptions } from '../types/media';
 import { Film, Tv, Gamepad2, Play, RefreshCw, PauseCircle } from 'lucide-react';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { dbService } from '../services/DatabaseService';
@@ -11,7 +11,7 @@ interface MediaCardProps {
   landscape?: boolean;
   landscapeImage?: string;
   onPlayMedia?: (media: Media) => void;
-  onClick: (media: Media, clickedCardRect?: DOMRect) => void;
+  onClick: (media: Media, clickedCardRect?: DOMRect, options?: SelectMediaOptions) => void;
   onPreviewStart?: (media: Media, rect: DOMRect) => void;
   onPreviewEnd?: () => void;
 }
@@ -73,16 +73,20 @@ export const MediaCard = React.memo<MediaCardProps>(({
     let isMounted = true;
     setPosterUrl(media.poster);
     setImgFailed(false);
-    setProgressPct(0);
-    setHasPlayableFile(false);
 
     dbService.getAllPlaybackProgressForMedia(media.id).then(progs => {
-      if (!isMounted || progs.length === 0) return;
+      if (!isMounted) return;
+      if (progs.length === 0) {
+        setProgressPct(0);
+        return;
+      }
       // Find latest or in-progress
       const active = progs.find(p => !p.is_completed && p.position_seconds > 10) || progs[0];
       if (active && !active.is_completed && active.duration_seconds > 0) {
         const pct = Math.min(100, Math.round((active.position_seconds / active.duration_seconds) * 100));
-        if (pct > 1 && pct < 90) setProgressPct(pct);
+        setProgressPct(pct > 1 && pct < 90 ? pct : 0);
+      } else {
+        setProgressPct(0);
       }
     }).catch(error => console.warn(`Failed to load playback progress for "${media.title}":`, error));
 
@@ -115,7 +119,7 @@ export const MediaCard = React.memo<MediaCardProps>(({
     return () => {
       isMounted = false;
     };
-  }, [isNearViewport, media]);
+  }, [isNearViewport, media.id, media.poster, onPlayMedia]);
 
   const handleImageError = () => {
     setImgFailed(true);
@@ -180,9 +184,13 @@ export const MediaCard = React.memo<MediaCardProps>(({
   return (
     <div
       ref={cardRef}
+      data-card-media-id={media.id}
       onClick={event => {
         const rect = event.currentTarget.getBoundingClientRect();
-        onClick(media, rect);
+        onClick(media, rect, {
+          cardElement: event.currentTarget,
+          initialBackdrop: landscapeImage
+        });
       }}
       onMouseEnter={event => {
         setIsHovered(true);
@@ -197,7 +205,7 @@ export const MediaCard = React.memo<MediaCardProps>(({
           onPreviewEnd?.();
         }
       }}
-      className={`group relative cursor-pointer flex flex-col bg-[#151720] ${landscape ? 'rounded-[10px]' : 'rounded-sm'} transition-all duration-300 transform hover:-translate-y-1 touch-target`}
+      className={`group relative cursor-pointer flex flex-col bg-[#151720] ${landscape ? 'rounded-[10px]' : 'rounded-sm'} transition-transform duration-300 hover:-translate-y-1 touch-target`}
     >
       {/* Backlight Glow Effect */}
       <div className="absolute -inset-4 opacity-0 group-hover:opacity-70 transition-opacity duration-500 blur-3xl pointer-events-none z-0">
@@ -206,13 +214,12 @@ export const MediaCard = React.memo<MediaCardProps>(({
             src={cardImageUrl}
             alt=""
             className="w-full h-full object-cover saturate-200"
-            loading="lazy"
           />
         )}
       </div>
 
       {/* Main Card Content */}
-      <div className={`relative flex flex-col bg-[#151720] ${landscape ? 'rounded-[10px]' : 'rounded-sm'} overflow-hidden border border-transparent group-hover:border-white/10 hover:shadow-xl hover:shadow-black/50 transition-all duration-300 z-10`}>
+      <div className={`relative flex flex-col bg-[#151720] ${landscape ? 'rounded-[10px]' : 'rounded-sm'} overflow-hidden border border-transparent group-hover:border-white/10 hover:shadow-xl hover:shadow-black/50 transition-[border-color,box-shadow] duration-300 z-10`}>
         {/* Poster Image Container */}
         <div className={`relative w-full bg-[#1b1e2b] overflow-hidden ${landscape ? 'aspect-[16/10]' : 'aspect-[2/3]'}`}>
           {cardImageUrl ? (
@@ -227,7 +234,6 @@ export const MediaCard = React.memo<MediaCardProps>(({
                 handleImageError();
               }}
               className="w-full h-full object-cover transition-transform duration-500"
-              loading="lazy"
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-gradient-to-b from-[#1b1e2b] to-[#12141d]">
@@ -265,7 +271,6 @@ export const MediaCard = React.memo<MediaCardProps>(({
                   onError={() => setLogoFailed(true)}
                   className="max-w-[75%] object-contain object-left drop-shadow-lg"
                   style={{ height: 'clamp(24px, 2.4vw, 40px)' }}
-                  loading="lazy"
                 />
               ) : (
                 <p

@@ -58,7 +58,7 @@ fn handle_connection(stream: &mut TcpStream) {
     let raw_path = parts[1];
 
     // Parse path and query parameters
-    let (endpoint, query_str) = match raw_path.split_once('?') {
+    let (_endpoint, query_str) = match raw_path.split_once('?') {
         Some((ep, q)) => (ep, q),
         None => (raw_path, ""),
     };

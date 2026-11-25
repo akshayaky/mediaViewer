@@ -5,6 +5,8 @@
 }
 
 :root {
+  --titlebar-height: 40px;
+  --titlebar-right-inset: 140px;
   --hero-accent: #E27D12;
   --hero-accent-rgb: 226, 125, 18;
   --sidebar-breakpoint: 900px;
@@ -12,6 +14,26 @@
   --sar: env(safe-area-inset-right, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
+  --mdv-hero-height: 520px;
+
+  /* Clearance needed on the home page below the hero showcase so the first landscaped media rail is completely visible */
+  --hero-showcase-rail-clearance: calc(
+    155px + var(--sab, 0px) + (min(calc(50vw - 10px), clamp(220px, 18vw, 400px)) * 10 / 16)
+  );
+}
+
+@media (max-width: 640px) {
+  :root {
+    --titlebar-right-inset: 1rem;
+  }
+}
+
+@media (min-width: 900px) {
+  :root {
+    --hero-showcase-rail-clearance: calc(
+      108px + (clamp(220px, 18vw, 400px) * 10 / 16)
+    );
+  }
 }
 
 @layer base {
@@ -34,9 +56,32 @@
 }
 
 /* Touch-friendly utility helpers */
+:fullscreen,
+::backdrop {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+html.video-player-active,
+body.video-player-active {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+body.video-player-active #root {
+  visibility: hidden !important;
+}
+body.video-player-active nav.fixed.bottom-0 {
+  display: none !important;
+}
+
 .touch-target {
   min-width: 44px;
   min-height: 44px;
+}
+
+[data-card-hidden="true"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: none !important;
 }
 
 .scrollbar-hide::-webkit-scrollbar {
@@ -47,29 +92,20 @@
   scrollbar-width: none;
 }
 
-.hero-backdrop-fill {
-  display: none;
-}
-
-.hero-poster-img {
-  display: none;
+.hero-showcase {
+  height: calc(100vh - var(--hero-showcase-rail-clearance));
+  height: calc(100dvh - var(--hero-showcase-rail-clearance));
+  min-height: 240px;
 }
 
 @media (max-width: 639px) {
-  .hero-artwork-has-poster .hero-backdrop-fill,
-  .hero-artwork-has-poster .hero-backdrop-img {
-    display: none;
+  .hero-showcase {
+    height: var(--mdv-hero-height, 520px);
   }
+}
 
-  .hero-artwork-has-poster .hero-poster-img {
-    display: block;
-    object-position: center 20%;
-  }
-
-  .hero-title-lockup,
-  .hero-title-text {
-    display: none;
-  }
+.hero-backdrop-fill {
+  display: none;
 }
 
 .hero-artwork-enter {
@@ -158,7 +194,7 @@
   .hero-backdrop-img {
     left: 50%;
     right: auto;
-    width: min(100%, calc(80vh * 16 / 9));
+    width: min(100%, calc((100dvh - var(--hero-showcase-rail-clearance)) * 16 / 9));
     transform: translateX(-50%);
   }
 }

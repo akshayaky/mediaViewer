@@ -1,26 +1,34 @@
-# Developer Guide
+# Developer Workflows Guide
 
-This guide provides step-by-step instructions for common manual development tasks in **My Media Library**.
+Step-by-step instructions for common engineering and extension tasks in **Veyview**.
+
+For high-level system design and schemas, see [ARCHITECTURE.md](./ARCHITECTURE.md). For agent operational rules, see [AGENTS.md](../AGENTS.md).
 
 ---
 
 ## 1. How to Add a New UI View
 
-1. **Create the View Component**:
+1. **Create View Component**:
    Create a new React component under `src/views/MyNewView.tsx`.
    ```tsx
    import React from 'react';
+   import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
-   export const MyNewView: React.FC = () => {
+   interface MyNewViewProps {
+     isCollapsed?: boolean;
+   }
+
+   export const MyNewView: React.FC<MyNewViewProps> = ({ isCollapsed }) => {
+     const { pagePadding } = useSidebarPadding(isCollapsed);
      return (
-       <div className="p-8 text-white">
+       <div className="p-8 text-white" style={{ paddingLeft: pagePadding }}>
          <h1 className="text-2xl font-bold">My New Feature</h1>
        </div>
      );
    };
    ```
 
-2. **Add Tab Type to Sidebar**:
+2. **Register Tab in Sidebar**:
    In `src/components/Sidebar.tsx`, add your new tab identifier to the `NavTab` type and add a corresponding entry to `navItems`:
    ```typescript
    export type NavTab = 'home' | 'movies' | 'tv' | 'games' | 'wishlist' | 'history' | 'inbox' | 'settings' | 'mynewview';
@@ -30,45 +38,48 @@ This guide provides step-by-step instructions for common manual development task
    In `src/App.tsx`, import your new view and add a case in `renderActiveView()`:
    ```tsx
    case 'mynewview':
-     return <MyNewView />;
+     return <MyNewView isCollapsed={isCollapsed} />;
    ```
 
 ---
 
 ## 2. How to Modify or Extend Database Tables
 
-1. **Update Data Types**:
+1. **Update Domain Models**:
    Define new fields or interfaces in `src/types/media.ts`.
 
-2. **Update Database Schema**:
+2. **Add Migration Statement**:
    In `src/services/DatabaseService.ts`, add the column or table to `runMigrations()`:
    ```typescript
-   this.addColumnIfNotExists('media', 'my_new_column', 'TEXT');
+   await this.addColumnIfNotExists('media', 'my_new_column', 'TEXT');
    ```
 
-3. **Update Database Repository Methods**:
-   In `src/services/DatabaseService.ts`, update mapper functions (`mapMediaObject`) and write query functions (`saveMedia`, etc.).
+3. **Update Repository Mappers**:
+   In `src/services/DatabaseService.ts`, update mapper functions (`mapMediaObject`, etc.) and ensure write operations preserve existing fields.
+
+4. **Update Vitest Mock**:
+   If adding a new table, ensure `resetMockTauriDatabase()` in `src/tests/tauriSqlMock.ts` includes the new table in its cleanup array.
 
 ---
 
 ## 3. How to Add a New Metadata Provider
 
 1. **Implement `MetadataProvider` Interface**:
-   Create a new file in `src/providers/MyNewProvider.ts` implementing `MetadataProvider` from `src/providers/interfaces.ts`:
+   Create `src/providers/MyNewProvider.ts` implementing `MetadataProvider` from `src/providers/interfaces.ts`:
    ```typescript
-   import { MetadataProvider, MetadataSearchResult } from './interfaces';
+   import { MetadataProvider, MetadataSearchOptions, MetadataSearchResult } from './interfaces';
    import { Media, MediaType } from '../types/media';
 
    export class MyNewProvider implements MetadataProvider {
      public name = 'MyNewProvider';
 
-     public async searchMedia(query: string, type?: MediaType): Promise<MetadataSearchResult[]> {
-       // Search implementation
+     public async searchMedia(query: string, type?: MediaType, options?: MetadataSearchOptions): Promise<MetadataSearchResult[]> {
+       // Search logic
        return [];
      }
 
      public async getMediaDetails(externalId: string): Promise<Partial<Media>> {
-       // Details implementation
+       // Detail fetching logic
        return {};
      }
    }
@@ -76,35 +87,35 @@ This guide provides step-by-step instructions for common manual development task
    export const myNewProvider = new MyNewProvider();
    ```
 
-2. **Wire Provider into Artwork or Detail Services**:
-   Reference your new provider in `ArtworkCacheProvider.ts` or `useMediaDetail.ts`.
+2. **Route in MediaSearchService**:
+   Update `searchMediaMetadata` and `addMetadataResultToLibrary` in `src/services/MediaSearchService.ts` to route requests to your new provider.
 
 ---
 
-## 4. How to Modify Local File Scanner Rules
+## 4. How to Modify Scanner & Filter Rules
 
 1. **File Extension Lists**:
-   Modify `FILE_EXTENSIONS` in `src/constants/appConstants.ts` to add or update supported video or game file extensions.
+   Modify `FILE_EXTENSIONS` in `src/constants/appConstants.ts` to add or update supported video or game extensions.
 
-2. **Title Parsing Logic**:
-   Update `parseFilePath()` in `src/services/LocalScannerService.ts` to adjust regex patterns for noise stripping, year extraction, or season/episode detection.
+2. **Filename Parsing Logic**:
+   Update `parseFilePath()` in `src/services/LocalScannerService.ts` to adjust regex patterns for noise stripping, year extraction, or season/episode detection. Verify changes against `src/tests/scanner.test.ts`.
 
-3. **Unit Tests**:
-   Add test cases to `src/tests/scanner.test.ts` and run `npm test` to verify your changes.
+3. **Search Token Syntax**:
+   Update `parseFilterToken()` in `src/services/MediaTextFilter.ts` when adding or modifying prefix tokens (`y:`, `cast:`, `lang:`, `type:`). Verify with `src/tests/mediaTextFilter.test.ts`.
 
 ---
 
-## 5. Running & Verifying Changes
+## 5. Verification Commands
 
-* **Run Development Server**:
+* **TypeScript Typechecking**:
   ```bash
-  npm run dev
+  npx tsc --noEmit
   ```
-* **Run Unit Tests**:
-  ```bash
-  npm test
-  ```
-* **Run Production Build Verification**:
+* **Frontend Build**:
   ```bash
   npm run build
+  ```
+* **Unit & Integration Tests**:
+  ```bash
+  npm test
   ```

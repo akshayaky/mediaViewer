@@ -4,7 +4,6 @@ import {
   Film,
   Tv,
   Gamepad2,
-  Heart,
   History,
   Settings,
   Tv2,
@@ -18,7 +17,7 @@ import {
 import { dbService } from '../services/DatabaseService';
 import { getSidebarAccentColors } from '../helper/mediaDetailTheme';
 
-export type NavTab = 'home' | 'movies' | 'tv' | 'games' | 'wishlist' | 'history' | 'inbox' | 'settings';
+export type NavTab = 'home' | 'movies' | 'tv' | 'games' | 'history' | 'inbox' | 'settings';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -81,8 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'home' as NavTab, label: 'Home', icon: Home },
     { id: 'movies' as NavTab, label: 'Movies', icon: Film },
     { id: 'tv' as NavTab, label: 'TV Shows', icon: Tv },
-    { id: 'games' as NavTab, label: 'Games', icon: Gamepad2 },
-    { id: 'wishlist' as NavTab, label: 'Wishlist', icon: Heart }
+    { id: 'games' as NavTab, label: 'Games', icon: Gamepad2 }
   ];
 
   const secondaryNavItems: Array<{ id: NavTab; label: string; icon: React.ElementType; badge?: number }> = [
@@ -100,6 +98,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isSecondaryActive = secondaryNavItems.some(item => item.id === activeTab);
 
+  const sidebarSurfaceStyle: React.CSSProperties | undefined = accentColors
+    ? {
+        backgroundColor: accentColors.background.startsWith('#')
+          ? `${accentColors.background.slice(0, 7)}cc` // Strips existing alpha if present, appends 80%
+          : accentColors.background,
+        backdropFilter: 'blur(40px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+      }
+    : undefined;
+
   return (
     <>
       {/* Desktop Sidebar (>= 900px) */}
@@ -112,27 +120,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
           // Hide sidebar when in detail view unless hovered
           'mdv-sidebar-detail-hidden'
         }`}
-          style={
-            accentColors
-              ? {
-                  // If accentColors.background is already rgba/hsla, use it directly. 
-                  // Otherwise, we ensure a safe fallback color layer with solid contrast.
-                  backgroundColor: accentColors.background.startsWith('#')
-                    ? `${accentColors.background.slice(0, 7)}cc` // Strips existing alpha if present, appends 80%
-                    : accentColors.background,
-                  
-                  // Unified heavy blur to squash background text-checkerboarding completely
-                  backdropFilter: 'blur(40px) saturate(180%)',
-                  WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-                }
-              : undefined
-          }
+          style={sidebarSurfaceStyle}
         >
          {/* Collapse Toggle Button */}
          <button
            onClick={() => setIsCollapsed(!isCollapsed)}
-           className="absolute -right-3 top-7 w-6 h-6 bg-[#1f222e]/80 backdrop-blur-md border border-white/10 rounded-full flex items-center
- justify-center text-white/50 hover:text-white cursor-pointer transition-all duration-200 z-50 shadow-xl hover:scale-110 active:scale-95"
+           data-tauri-drag-region="false"
+           className={`absolute -right-3 top-[52px] w-6 h-6 border border-white/10 rounded-full flex items-center
+ justify-center cursor-pointer transition-all duration-200 z-50 shadow-xl hover:scale-110 active:scale-95 ${
+             accentColors
+               ? 'hover:brightness-125'
+               : 'bg-[#111319]/80 backdrop-blur-xl text-white/60 hover:text-white'
+           }`}
+           style={
+             accentColors
+               ? {
+                   ...sidebarSurfaceStyle,
+                   color: accentColors.inactiveForeground,
+                 }
+               : undefined
+           }
            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
          >
            {isCollapsed ? (

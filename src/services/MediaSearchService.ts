@@ -3,7 +3,7 @@ import { MetadataSearchOptions, MetadataSearchResult } from '../providers/interf
 import { igdbProvider } from '../providers/IGDBProvider';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { dbService } from './DatabaseService';
-import { parseMediaTextFilter } from './MediaTextFilter';
+import { parseMediaTextFilter, toLanguageCode } from './MediaTextFilter';
 
 export async function searchMediaMetadata(
   query: string,
@@ -24,12 +24,14 @@ export function getMetadataSearchOptions(
   const filters = parseMediaTextFilter(searchText).filters;
   const castFilter = filters.find(filter => filter.kind === 'cast');
   const languageFilter = filters.find(filter => filter.kind === 'language');
+  const yearFilter = filters.find(filter => filter.kind === 'year');
 
   return {
     ...options,
+    releaseYear: options.releaseYear ?? (yearFilter && yearFilter.kind === 'year' && yearFilter.operator === 'equal' ? yearFilter.minimum : undefined),
     cast: castFilter?.kind === 'cast' ? castFilter.cast : undefined,
     originalLanguage: languageFilter?.kind === 'language'
-      ? languageFilter.language
+      ? (toLanguageCode(languageFilter.language) || languageFilter.language)
       : options.originalLanguage
   };
 }

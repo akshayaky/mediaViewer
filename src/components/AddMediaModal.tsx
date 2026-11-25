@@ -190,6 +190,7 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
                 highlightStyle={{ fontFamily: 'inherit', fontSize: '0.875rem', lineHeight: '1.25rem', letterSpacing: 'normal' }}
                 ariaLabel={`Search ${type}`}
                 autoFocus
+                scope="external"
               />
             </div>
 

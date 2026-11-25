@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Media, LocalFile, MediaHistory, MediaState, Availability, PlaybackProgress } from '../types/media';
+import { Media, LocalFile, MediaHistory, MediaState, Availability, PlaybackProgress, MediaSkipSegments } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { localLauncherService } from '../services/LocalLauncherService';
 import { tmdbProvider } from '../providers/TMDBProvider';
@@ -7,10 +7,11 @@ import { igdbProvider } from '../providers/IGDBProvider';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { MetadataSearchResult } from '../providers/interfaces';
 import { searchMediaMetadata } from '../services/MediaSearchService';
+import { calculateResumeTarget } from '../helper/episodeProgress';
 
-export function useMediaDetail(initialMedia: Media) {
+export function useMediaDetail(initialMedia: Media, isTransitioning = false, initialHistory?: MediaHistory[]) {
   const [currentMedia, setCurrentMedia] = useState<Media>(initialMedia);
-  const [historyList, setHistoryList] = useState<MediaHistory[]>([]);
+  const [historyList, setHistoryList] = useState<MediaHistory[]>(initialHistory || []);
   const [state, setState] = useState<MediaState>({
     media_id: initialMedia.id,
     current_status: 'Planned',
@@ -22,6 +23,7 @@ export function useMediaDetail(initialMedia: Media) {
   const [localFiles, setLocalFiles] = useState<LocalFile[]>([]);
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [allProgress, setAllProgress] = useState<PlaybackProgress[]>([]);
+  const [allSkipSegments, setAllSkipSegments] = useState<MediaSkipSegments[]>([]);
 
   // Related media state
   const [relatedMedia, setRelatedMedia] = useState<MetadataSearchResult[]>([]);
@@ -56,8 +58,9 @@ export function useMediaDetail(initialMedia: Media) {
   }, []);
 
   useEffect(() => {
+    if (isTransitioning) return;
     void refreshAddedExternalIds();
-  }, [refreshAddedExternalIds, currentMedia]);
+  }, [isTransitioning, refreshAddedExternalIds, currentMedia]);
 
   useEffect(() => {
     let isMounted = true;
@@ -66,14 +69,16 @@ export function useMediaDetail(initialMedia: Media) {
       dbService.getMediaState(currentMedia.id),
       dbService.getLocalFilesForMedia(currentMedia.id),
       dbService.getAvailabilityForMedia(currentMedia.id),
-      dbService.getAllPlaybackProgressForMedia(currentMedia.id)
-    ]).then(([history, mediaState, files, availability, progress]) => {
+      dbService.getAllPlaybackProgressForMedia(currentMedia.id),
+      dbService.getAllSkipSegmentsForMedia(currentMedia.id)
+    ]).then(([history, mediaState, files, availability, progress, skipSegs]) => {
       if (!isMounted) return;
       setHistoryList(history);
       setState(mediaState);
       setLocalFiles(files);
       setAvailabilities(availability);
       setAllProgress(progress);
+      setAllSkipSegments(skipSegs);
     }).catch(err => console.error('Failed to load media details:', err));
     return () => {
       isMounted = false;
@@ -82,6 +87,7 @@ export function useMediaDetail(initialMedia: Media) {
 
   // Fetch related media asynchronously
   useEffect(() => {
+    if (isTransitioning) return;
     let isMounted = true;
     setIsLoadingRelated(true);
 
@@ -111,10 +117,11 @@ export function useMediaDetail(initialMedia: Media) {
     return () => {
       isMounted = false;
     };
-  }, [currentMedia.id, currentMedia.external_ids, currentMedia.type, currentMedia.title]);
+  }, [isTransitioning, currentMedia.id, currentMedia.external_ids, currentMedia.type, currentMedia.title]);
 
   // Resolve artwork
   useEffect(() => {
+    if (isTransitioning) return;
     let isMounted = true;
     artworkCacheProvider.resolveArtworkForMedia(currentMedia).then(res => {
       if (isMounted) {
@@ -128,7 +135,7 @@ export function useMediaDetail(initialMedia: Media) {
     return () => {
       isMounted = false;
     };
-  }, [currentMedia]);
+  }, [isTransitioning, currentMedia]);
 
   const handleAddRelatedToLibrary = async (candidate: MetadataSearchResult): Promise<Media> => {
     // Check if external_id already exists in local DB
@@ -215,8 +222,14 @@ export function useMediaDetail(initialMedia: Media) {
   }, []);
 
   const refreshLocalFiles = async () => {
-    setLocalFiles(await dbService.getLocalFilesForMedia(currentMedia.id));
-    setAllProgress(await dbService.getAllPlaybackProgressForMedia(currentMedia.id));
+    const [files, progress, skipSegs] = await Promise.all([
+      dbService.getLocalFilesForMedia(currentMedia.id),
+      dbService.getAllPlaybackProgressForMedia(currentMedia.id),
+      dbService.getAllSkipSegmentsForMedia(currentMedia.id)
+    ]);
+    setLocalFiles(files);
+    setAllProgress(progress);
+    setAllSkipSegments(skipSegs);
   };
 
   const refreshHistoryAndState = useCallback(async () => {
@@ -437,115 +450,8 @@ export function useMediaDetail(initialMedia: Media) {
   };
 
   const getResumeTarget = useCallback(() => {
-    const activeFiles = localFiles.filter(f => f.exists);
-    if (activeFiles.length === 0) return null;
-
-    if (currentMedia.type === 'TV Series') {
-      // 1. Check for unfinished in-progress episode
-      const inProgress = allProgress.find(p => !p.is_completed && p.position_seconds > 10 && (p.duration_seconds <= 0 || p.position_seconds / p.duration_seconds < 0.9));
-      if (inProgress) {
-        const file = activeFiles.find(f => f.season === inProgress.season && f.episode === inProgress.episode) || activeFiles[0];
-        const padS = String(inProgress.season || 1).padStart(2, '0');
-        const padE = String(inProgress.episode || 1).padStart(2, '0');
-        
-        // Try to find the episode name from media metadata
-        const season = currentMedia.seasons?.find(s => s.season_number === inProgress.season);
-        const episode = season?.episodes?.find(e => e.episode_number === inProgress.episode);
-
-        return {
-          file,
-          season: inProgress.season || 1,
-          episode: inProgress.episode || 1,
-          position: inProgress.position_seconds,
-          label: `Resume S${padS}E${padE}`,
-          hasSavedProgress: true,
-          title: episode?.name
-        };
-      }
-
-      // 2. Check for highest completed episode to find next unwatched
-      const completed = allProgress.filter(p => p.is_completed).sort((a, b) => (b.season || 0) - (a.season || 0) || (b.episode || 0) - (a.episode || 0));
-      if (completed.length > 0) {
-        const lastComp = completed[0];
-        const nextEp = (lastComp.episode || 1) + 1;
-        const nextS = lastComp.season || 1;
-
-        let nextFile = activeFiles.find(f => f.season === nextS && f.episode === nextEp);
-        let targetS = nextS;
-        let targetEp = nextEp;
-
-        if (!nextFile) {
-          targetS = nextS + 1;
-          targetEp = 1;
-          nextFile = activeFiles.find(f => f.season === targetS && f.episode === targetEp);
-        }
-
-        if (nextFile) {
-          const padS = String(targetS).padStart(2, '0');
-          const padE = String(targetEp).padStart(2, '0');
-          
-          const season = currentMedia.seasons?.find(s => s.season_number === targetS);
-          const episode = season?.episodes?.find(e => e.episode_number === targetEp);
-
-          return {
-            file: nextFile,
-            season: targetS,
-            episode: targetEp,
-            position: 0,
-            label: `Play Next S${padS}E${padE}`,
-            hasSavedProgress: false,
-            title: episode?.name
-          };
-        }
-      }
-
-      // 3. First available episode
-      const sorted = [...activeFiles].sort((a, b) => (a.season || 0) - (b.season || 0) || (a.episode || 0) - (b.episode || 0));
-      const first = sorted[0];
-      const s = first.season || 1;
-      const ep = first.episode || 1;
-      const padS = String(s).padStart(2, '0');
-      const padE = String(ep).padStart(2, '0');
-      
-      const season = currentMedia.seasons?.find(season => season.season_number === s);
-      const episode = season?.episodes?.find(e => e.episode_number === ep);
-
-      return {
-        file: first,
-        season: s,
-        episode: ep,
-        position: 0,
-        label: `Play S${padS}E${padE}`,
-        hasSavedProgress: false,
-        title: episode?.name
-      };
-    } else {
-      // Movie / single file
-      const movieProg = allProgress.find(p => p.season === 0 && p.episode === 0) || allProgress[0];
-      const activeFile = activeFiles[0];
-
-      if (movieProg && !movieProg.is_completed && movieProg.position_seconds > 10) {
-        const mins = Math.floor(movieProg.position_seconds / 60);
-        return {
-          file: activeFile,
-          season: 0,
-          episode: 0,
-          position: movieProg.position_seconds,
-          label: `Resume Movie (${mins}m)`,
-          hasSavedProgress: true
-        };
-      }
-
-      return {
-        file: activeFile,
-        season: 0,
-        episode: 0,
-        position: 0,
-        label: 'Play Movie',
-        hasSavedProgress: false
-      };
-    }
-  }, [currentMedia, localFiles, allProgress]);
+    return calculateResumeTarget(currentMedia, localFiles, allProgress, historyList, allSkipSegments);
+  }, [currentMedia, localFiles, allProgress, historyList, allSkipSegments]);
 
   return {
     currentMedia,

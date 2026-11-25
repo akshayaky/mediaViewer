@@ -116,19 +116,6 @@ export interface Availability {
   last_checked: string;
 }
 
-export interface Wishlist {
-  id: string;
-  media_id?: string; // link to canonical Media when matched
-  title: string;
-  type: MediaType;
-  source: 'Google' | 'Notion' | 'Manual' | string;
-  external_url?: string;
-  notes?: string;
-  added_at: string;
-  target_release_date?: string;
-  poster?: string;
-}
-
 export interface NotionRawRecord {
   id: string;
   name_raw: string;
@@ -218,6 +205,30 @@ export interface AppSettings {
     muted: boolean;
   };
   player_subtitle_style?: SubtitleStyleSettings;
+  player_fill_to_screen?: boolean;
+  auto_skip_intro?: boolean;
+  auto_skip_recap?: boolean;
+}
+
+export interface SkipSegmentBounds {
+  start: number;
+  end: number;
+}
+
+export interface MediaSkipSegments {
+  id: string;
+  media_id?: string;
+  external_id: string;
+  provider: string;
+  media_type: 'movie' | 'tv';
+  season: number;
+  episode: number;
+  intro?: SkipSegmentBounds | null;
+  recap?: SkipSegmentBounds | null;
+  outro?: SkipSegmentBounds | null;
+  status: 'found' | 'not_found' | 'error';
+  updated_at: string;
+  raw_data?: string;
 }
 
 export type MediaCardOrientation = 'portrait' | 'landscape';
@@ -235,3 +246,14 @@ export interface SubtitleStyleSettings {
   background: 'none' | 'semi-transparent' | 'solid';
   outline: boolean;
 }
+
+export interface SelectMediaOptions {
+  type?: 'container' | 'circle';
+  clickPoint?: { x: number; y: number };
+  titleRect?: DOMRect;
+  autoPlay?: boolean;
+  cardElement?: HTMLElement;
+  initialBackdrop?: string;
+  initialHistory?: MediaHistory[];
+}
+

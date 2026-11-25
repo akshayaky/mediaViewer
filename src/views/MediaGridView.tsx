@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MediaCard } from '../components/MediaCard';
 import { AddMediaModal } from '../components/AddMediaModal';
-import { Media, MediaCardOrientation, MediaGridGroupField, MediaGridPreferences, MediaGridSortField, MediaType } from '../types/media';
+import { Media, MediaCardOrientation, MediaGridGroupField, MediaGridPreferences, MediaGridSortField, MediaHistory, MediaType, SelectMediaOptions } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { ArrowDownUp, Search, Filter, Plus, X, RotateCcw, ChevronRight, MoreHorizontal, ChevronUp } from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
 import { getLastWatchedEpisodeArtwork } from '../helper/episodeProgress';
 import { matchesMediaTextFilter, parseMediaTextFilter } from '../services/MediaTextFilter';
+import { HighlightedFilterInput } from '../components/HighlightedFilterInput';
 import { getMediaCardMaxWidth, getMediaCardWidth, getPortraitGridColumnCount } from '../helper/mediaCardSizing';
 
 const DEFAULT_GRID_PREFERENCES: MediaGridPreferences = {
@@ -130,7 +131,7 @@ interface MediaGridViewProps {
   typeFilter?: MediaType;
   title: string;
   subtitle: string;
-  onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
+  onSelectMedia: (media: Media, clickedCardRect?: DOMRect, options?: SelectMediaOptions) => void;
   onPreviewStart?: (media: Media, rect: DOMRect) => void;
   onPreviewEnd?: () => void;
   onAddNewMedia?: () => void;
@@ -173,13 +174,14 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   const [mediaList, setMediaList] = useState<Media[]>([]);
   const [stateByMediaId, setStateByMediaId] = useState<Record<string, Awaited<ReturnType<typeof dbService.getMediaState>>>>({});
   const [scoreByMediaId, setScoreByMediaId] = useState<Record<string, number | undefined>>({});
+  const [historyByMediaId, setHistoryByMediaId] = useState<Record<string, MediaHistory[]>>({});
+  const [localFilesByMediaId, setLocalFilesByMediaId] = useState<Record<string, Array<{ exists: boolean }>>>({});
   const [landscapeImageByMediaId, setLandscapeImageByMediaId] = useState<Record<string, string | undefined>>({});
   const [orientationByType, setOrientationByType] = useState<Partial<Record<MediaType, MediaCardOrientation>>>({});
   const [gridPreferences, setGridPreferences] = useState<MediaGridPreferences>(DEFAULT_GRID_PREFERENCES);
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
   const [orientationPreferenceError, setOrientationPreferenceError] = useState<string | null>(null);
   const [pullOffset, setPullOffset] = useState<number>(0);
-  const [searchScrollLeft, setSearchScrollLeft] = useState(0);
   const [showBackToTop, setShowBackToTop] = useState(false);
   //const [crossedThreshold, setCrossedThreshold] = useState<boolean>(false);
   const crossedThresholdRef = useRef<boolean>(false);
@@ -208,14 +210,25 @@ export const MediaGridView: React.FC<MediaGridViewProps> = ({
   };
 
   const refreshList = async () => {
-    const media = await dbService.getAllMedia();
+    const [media, allLocalFiles] = await Promise.all([
+      dbService.getAllMedia(),
+      dbService.getAllLocalFiles()
+    ]);
     const [states, histories] = await Promise.all([
       Promise.all(media.map(item => dbService.getMediaState(item.id))),
       Promise.all(media.map(item => dbService.getHistoryForMedia(item.id)))
     ]);
+    const localMap: Record<string, Array<{ exists: boolean }>> = {};
+    for (const file of allLocalFiles) {
+      if (!file.media_id) continue;
+      if (!localMap[file.media_id]) localMap[file.media_id] = [];
+      localMap[file.media_id].push({ exists: file.exists });
+    }
     setMediaList(media);
+    setLocalFilesByMediaId(localMap);
     setStateByMediaId(Object.fromEntries(states.map(state => [state.media_id, state])));
     setScoreByMediaId(Object.fromEntries(media.map((item, index) => [item.id, histories[index][0]?.score])));
+    setHistoryByMediaId(Object.fromEntries(media.map((item, index) => [item.id, histories[index]])));
     setLandscapeImageByMediaId(Object.fromEntries(media.map((item, index) => [
       item.id,
       item.type === 'TV Series'
@@ -464,7 +477,20 @@ useEffect(() => {
 
   // Apply recognized text operators before the remaining free-text query.
   if (parsedTextFilter.filters.length) {
-    items = items.filter(media => matchesMediaTextFilter(media, parsedTextFilter.filters));
+    items = items.filter(media =>
+      matchesMediaTextFilter(
+        {
+          ...media,
+          status: stateByMediaId[media.id]?.current_status,
+          rating: scoreByMediaId[media.id],
+          score: scoreByMediaId[media.id],
+          last_watched: stateByMediaId[media.id]?.last_watched_played,
+          last_watched_played: stateByMediaId[media.id]?.last_watched_played,
+          local_files: localFilesByMediaId[media.id] || []
+        },
+        parsedTextFilter.filters
+      )
+    );
   }
 
   if (parsedTextFilter.query) {
@@ -698,7 +724,15 @@ useEffect(() => {
           score={scoreByMediaId[media.id]}
           landscape={useLandscapeCards}
           landscapeImage={landscapeImageByMediaId[media.id]}
-          onClick={onSelectMedia}
+          onClick={(clickedMedia, rect, opts) => {
+            const history = historyByMediaId[clickedMedia.id];
+            const lastStill = history ? getLastWatchedEpisodeArtwork(clickedMedia, history).still : undefined;
+            onSelectMedia(clickedMedia, rect, {
+              ...opts,
+              initialBackdrop: lastStill || landscapeImageByMediaId[clickedMedia.id] || opts?.initialBackdrop,
+              initialHistory: history
+            });
+          }}
           onPreviewStart={onPreviewStart}
           onPreviewEnd={onPreviewEnd}
         />
@@ -788,51 +822,25 @@ useEffect(() => {
       <div className="relative -mx-1 px-1 py-2">
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1 rounded-lg border border-[#343744] bg-[#191a20] focus-within:border-[#E27D12] focus-within:ring-1 focus-within:ring-[#E27D12]/40">
-            <Search className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-11 right-11 z-10 flex items-center overflow-hidden whitespace-pre text-sm"
-            >
-              <span
-                className="whitespace-pre"
-                style={{ transform: `translateX(-${searchScrollLeft}px)` }}
-              >
-                {parsedTextFilter.tokens.map((token, index) => (
-                  <span
-                    key={`${index}-${token.text}`}
-                    className={
-                      token.status === 'valid'
-                        ? 'text-emerald-400'
-                        : token.status === 'invalid'
-                          ? 'text-rose-400'
-                          : token.status === 'unsupported'
-                            ? 'text-gray-500'
-                            : 'text-white'
-                    }
-                  >
-                    {token.text}
-                  </span>
-                ))}
-              </span>
-            </div>
-            <input
+            <Search className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 z-30" />
+            <HighlightedFilterInput
               ref={searchInputRef}
-              type="text"
-              placeholder="Search titles, y:2008, y:2000-2010, type:game..."
-              title="Filter with y:2008, y:2000-2010, y:>2015, y:<2010, type:movie|show|game|video"
+              placeholder="Search titles, type / for filters (year:2024, genre:Action, type:game)..."
               value={searchQuery}
-              onChange={event => setSearchQuery(event.target.value)}
-              onScroll={event => setSearchScrollLeft(event.currentTarget.scrollLeft)}
-              className={`relative h-11 w-full rounded-lg bg-transparent pl-11 pr-11 text-sm caret-white placeholder:text-gray-500 focus:outline-none ${
-                searchQuery ? 'text-transparent' : 'text-white'
-              }`}
+              onChange={setSearchQuery}
+              wrapperClassName="w-full"
+              inputClassName="relative h-11 w-full rounded-lg bg-transparent pl-11 pr-11 text-sm caret-white placeholder:text-gray-500 focus:outline-none"
+              highlightClassName="pl-11 pr-11 text-sm h-11"
+              highlightStyle={{ fontSize: '0.875rem', lineHeight: '1.25rem' }}
+              ariaLabel="Search media library"
+              scope="library"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
                 aria-label="Clear search"
-                className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-white/5 hover:text-white"
+                className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-white/5 hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>

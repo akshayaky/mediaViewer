@@ -51,9 +51,9 @@ describe('advanced media text filters', () => {
   });
 
   it('classifies valid, invalid, unsupported, and ordinary query tokens for highlighting', () => {
-    const parsed = parseMediaTextFilter('Dune y:2008 type:book status:finished');
+    const parsed = parseMediaTextFilter('Dune y:2008 type:book format:vhs status:finished');
 
-    expect(parsed.query).toBe('Dune type:book status:finished');
+    expect(parsed.query).toBe('Dune type:book format:vhs');
     expect(parsed.tokens.map(token => [token.text, token.status])).toEqual([
       ['Dune', 'query'],
       [' ', 'query'],
@@ -61,8 +61,47 @@ describe('advanced media text filters', () => {
       [' ', 'query'],
       ['type:book', 'invalid'],
       [' ', 'query'],
-      ['status:finished', 'unsupported']
+      ['format:vhs', 'unsupported'],
+      [' ', 'query'],
+      ['status:finished', 'valid']
     ]);
+  });
+
+  it('supports genre, rating, publisher, developer, runtime, and date filters', () => {
+    const mediaItem: Media = {
+      id: 'test-1',
+      type: 'VideoGame',
+      title: 'Zelda',
+      release_year: 2023,
+      genres: ['Action', 'Adventure'],
+      publisher: 'Nintendo',
+      developer: 'Nintendo EPD',
+      runtime: 120,
+      created_at: '2023-05-12T00:00:00.000Z',
+      updated_at: '2023-05-12T00:00:00.000Z',
+      language: 'ja'
+    };
+
+    expect(matchesMediaTextFilter(mediaItem, parseMediaTextFilter('genre:Adventure').filters)).toBe(true);
+    expect(matchesMediaTextFilter(mediaItem, parseMediaTextFilter('genre:Horror').filters)).toBe(false);
+    expect(matchesMediaTextFilter(mediaItem, parseMediaTextFilter('publisher:Nintendo').filters)).toBe(true);
+    expect(matchesMediaTextFilter(mediaItem, parseMediaTextFilter('developer:Valve').filters)).toBe(false);
+    expect(matchesMediaTextFilter(mediaItem, parseMediaTextFilter('runtime:>100').filters)).toBe(true);
+    expect(matchesMediaTextFilter(mediaItem, parseMediaTextFilter('runtime:<60').filters)).toBe(false);
+    expect(matchesMediaTextFilter(mediaItem, parseMediaTextFilter('year:2023').filters)).toBe(true);
+    expect(matchesMediaTextFilter(mediaItem, parseMediaTextFilter('added:2023').filters)).toBe(true);
+
+    const mediaWithState = {
+      ...mediaItem,
+      status: 'Finished',
+      rating: 5,
+      last_watched: '2024-01-15T00:00:00.000Z'
+    };
+    expect(matchesMediaTextFilter(mediaWithState, parseMediaTextFilter('status:finished').filters)).toBe(true);
+    expect(matchesMediaTextFilter(mediaWithState, parseMediaTextFilter('status:watching').filters)).toBe(false);
+    expect(matchesMediaTextFilter(mediaWithState, parseMediaTextFilter('rating:5').filters)).toBe(true);
+    expect(matchesMediaTextFilter(mediaWithState, parseMediaTextFilter('rating:>3').filters)).toBe(true);
+    expect(matchesMediaTextFilter(mediaWithState, parseMediaTextFilter('watched:2024').filters)).toBe(true);
   });
 
   it('normalizes remaining query spacing when filters are interleaved', () => {
@@ -104,5 +143,29 @@ describe('advanced media text filters', () => {
     // Test invalid language format (should be unsupported)
     const invalidLangFilter = parseMediaTextFilter('lang:english');
     expect(invalidLangFilter.filters).toHaveLength(0); // Should not be parsed as valid
+  });
+
+  it('supports local file availability filters', () => {
+    const availableMedia = { ...media('Film', 2024), local_files: [{ exists: true }] };
+    const missingMedia = { ...media('Film', 2024), local_files: [{ exists: false }] };
+    const noFilesMedia = { ...media('Film', 2024), local_files: [] };
+
+    const availableFilters = parseMediaTextFilter('local:available').filters;
+    expect(matchesMediaTextFilter(availableMedia, availableFilters)).toBe(true);
+    expect(matchesMediaTextFilter(missingMedia, availableFilters)).toBe(false);
+    expect(matchesMediaTextFilter(noFilesMedia, availableFilters)).toBe(false);
+
+    const missingFilters = parseMediaTextFilter('local:missing').filters;
+    expect(matchesMediaTextFilter(availableMedia, missingFilters)).toBe(false);
+    expect(matchesMediaTextFilter(missingMedia, missingFilters)).toBe(true);
+    expect(matchesMediaTextFilter(noFilesMedia, missingFilters)).toBe(false);
+
+    const noneFilters = parseMediaTextFilter('local:none').filters;
+    expect(matchesMediaTextFilter(availableMedia, noneFilters)).toBe(false);
+    expect(matchesMediaTextFilter(missingMedia, noneFilters)).toBe(false);
+    expect(matchesMediaTextFilter(noFilesMedia, noneFilters)).toBe(true);
+
+    expect(matchesMediaTextFilter(availableMedia, parseMediaTextFilter('local:yes').filters)).toBe(true);
+    expect(matchesMediaTextFilter(noFilesMedia, parseMediaTextFilter('local:no').filters)).toBe(true);
   });
 });

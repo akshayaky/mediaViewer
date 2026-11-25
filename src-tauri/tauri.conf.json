@@ -14,7 +14,9 @@
       {
         "title": "Veyview",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "transparent": true,
+        "decorations": false
       }
     ],
     "security": {
@@ -25,6 +27,14 @@
           "windows": ["main"],
           "permissions": [
             "core:default",
+            "core:window:allow-set-fullscreen",
+            "core:window:allow-is-fullscreen",
+            "core:window:allow-minimize",
+            "core:window:allow-maximize",
+            "core:window:allow-unmaximize",
+            "core:window:allow-is-maximized",
+            "core:window:allow-close",
+            "core:window:allow-start-dragging",
             "opener:default",
             "fs:default",
             "fs:allow-read-file",
@@ -43,7 +53,8 @@
                 { "url": "https://images.igdb.com/**" },
                 { "url": "https://api.notion.com/*" },
                 { "url": "https://api.igdb.com/v4/**" },
-                { "url": "https://id.twitch.tv/oauth2/token" }
+                { "url": "https://id.twitch.tv/oauth2/token" },
+                { "url": "https://api.introdb.app/**" }
               ]
             },
             {
@@ -65,6 +76,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "lib/*"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

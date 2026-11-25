@@ -1,0 +1,145 @@
+:root {
+  --titlebar-height: 40px;
+  --titlebar-right-inset: 140px;
+  --mdv-glass-bg: rgba(0, 0, 0, 0.5);
+  --mdv-glass-bg-hover: rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 640px) {
+  :root {
+    --titlebar-right-inset: 1rem;
+  }
+}
+
+.mdv-btn-icon-glass {
+  padding: 0 !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.mdv-back-btn {
+  padding: 0 !important;
+  gap: 0 !important;
+}
+
+.titlebar-drag-region {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--titlebar-height, 40px);
+  z-index: 50;
+  user-select: none;
+  -webkit-user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: auto;
+  -webkit-app-region: drag;
+}
+
+/* Subtle top gradient scrim fading from ~40% black to transparent */
+.titlebar-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.45) 0%,
+    rgba(0, 0, 0, 0.15) 60%,
+    transparent 100%
+  );
+}
+
+/* Left actions slot (e.g. Back button) */
+.titlebar-actions-left {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding-left: 1rem;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+/* Draggable empty area across the middle of the window */
+.titlebar-drag-area {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  -webkit-app-region: drag;
+}
+
+/* Right grouping: Custom actions (3-dot menu) + Window Controls */
+.titlebar-right-group {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+/* Custom right actions slot (immediately to the left of window controls) */
+.titlebar-actions-right {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding-right: 0.5rem;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+/* Windows Caption Controls (minimize, maximize, close) */
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 44px;
+  color: rgba(255, 255, 255, 0.65);
+  transition: background-color 150ms ease, color 150ms ease;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-control-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.titlebar-control-btn:active {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.titlebar-control-btn.btn-close:hover {
+  background-color: #e81123;
+  color: #ffffff;
+}
+
+.titlebar-control-btn.btn-close:active {
+  background-color: #c4101f;
+  color: #ffffff;
+}
+
+.no-drag,
+[data-no-drag] {
+  -webkit-app-region: no-drag !important;
+}

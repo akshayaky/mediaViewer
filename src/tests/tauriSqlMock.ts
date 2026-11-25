@@ -40,10 +40,11 @@ export function resetMockTauriDatabase(): void {
     'media_history',
     'local_file',
     'availability',
-    'wishlist',
     'notion_raw_records',
     'external_ids',
-    'settings'
+    'settings',
+    'playback_progress',
+    'media_skip_segments'
   ]) {
     database.run(`DELETE FROM ${table}`);
   }

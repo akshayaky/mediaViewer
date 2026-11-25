@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { LocalFile, Media, MediaHistory, MediaStatus } from '../types/media';
+import { LocalFile, Media, MediaHistory, MediaStatus, MediaType } from '../types/media';
 import { useMediaDetail } from '../hooks/useMediaDetail';
 import { useDominantColor } from '../helper/useDominantColour';
 import { getMediaTheme } from '../helper/mediaDetailTheme';
 import { getHighQualityBackdropUrl, getLastWatchedEpisodeArtwork, isEpisodeWatched } from '../helper/episodeProgress';
+import { captureVideoFrameAtTime, getCachedVideoFrame } from '../helper/videoFrameCapture';
 import { dbService } from '../services/DatabaseService';
 import { SIDEBAR_BREAKPOINT } from '../constants/appConstants';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
@@ -13,6 +14,9 @@ import { FixMatchModal } from '../components/FixMatchModal';
 import { BackdropPickerModal } from '../components/BackdropPickerModal';
 import { MergeDuplicateModal } from '../components/MergeDuplicateModal';
 import { VideoPlayerModal } from '../components/VideoPlayerModal';
+import { TitleBarPortal } from '../components/TitleBarDragRegion';
+import { HorizontalDragScroll } from '../components/HorizontalDragScroll';
+import { toLanguageCode } from '../services/MediaTextFilter';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
 import {
@@ -50,17 +54,41 @@ import {
   Wallpaper
 } from 'lucide-react';
 
+// ============================================================================
+// PHONE BACKDROP SCROLL & ZOOM CONFIGURATION (Easily editable)
+// ============================================================================
+export const PHONE_BACKDROP_CONFIG = {
+  /** Screen width threshold (in px) below which phone backdrop behavior is active */
+  PHONE_BREAKPOINT: 640,
+  /** Initial backdrop height (in px) on phone screens before scroll */
+  INITIAL_HEIGHT: 520,
+  /** Rate at which backdrop height reduces relative to scroll (e.g. 0.5 = 1px shrink per 2px scroll) */
+  SCROLL_SHRINK_RATE: 0.5,
+  /** Target aspect ratio where image is no longer cropped on the sides (16:9 standard) */
+  TARGET_ASPECT_RATIO: 16 / 9,
+  /** Maximum zoom scale when pulling / overscrolling at the top */
+  MAX_PULL_ZOOM: 1.35,
+  /** Sensitivity of pull-to-zoom (higher = faster zoom per pixel of pull) */
+  PULL_ZOOM_SENSITIVITY: 0.0025,
+  /** Spring-back animation duration (in ms) when pull-zoom is released */
+  SPRING_BACK_DURATION_MS: 300,
+} as const;
+
 interface MediaDetailViewProps {
   media: Media;
   onBack: () => void;
   isCollapsed: boolean;
   onSelectMedia?: (media: Media) => void;
   onSearchCast?: (castName: string) => void;
+  onSearchFilter?: (filterText: string) => void;
   onAccentColorChange?: (color: string) => void;
   accentColorOverride?: string;
   autoPlayFileId?: string;
   autoPlayOnOpen?: boolean;
   onAutoPlayHandled?: () => void;
+  isTransitioning?: boolean;
+  initialBackdrop?: string;
+  initialHistory?: MediaHistory[];
 }
 
 interface DominantColorExtractorProps {
@@ -104,7 +132,22 @@ function getFileQualityLabel(file: LocalFile): string {
   return 'SD / Default';
 }
 
-export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initialMedia, onBack, isCollapsed, onSelectMedia, onSearchCast, onAccentColorChange, accentColorOverride, autoPlayFileId, autoPlayOnOpen, onAutoPlayHandled }) => {
+export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
+  media: initialMedia,
+  onBack,
+  isCollapsed,
+  onSelectMedia,
+  onSearchCast,
+  onSearchFilter,
+  onAccentColorChange,
+  accentColorOverride,
+  autoPlayFileId,
+  autoPlayOnOpen,
+  onAutoPlayHandled,
+  isTransitioning = false,
+  initialBackdrop,
+  initialHistory
+}) => {
   const {
     currentMedia,
     historyList,
@@ -132,25 +175,39 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     linkFileToEpisode,
     refreshLocalFiles,
     refreshHistoryAndState
-  } = useMediaDetail(initialMedia);
+  } = useMediaDetail(initialMedia, isTransitioning, initialHistory);
 
   const [playerModeSetting, setPlayerModeSetting] = useState<'builtin' | 'os_default'>('builtin');
-  const [sidebarHideEnabled, setSidebarHideEnabled] = useState(false);
+  const [sidebarHideEnabled, setSidebarHideEnabled] = useState<boolean>(() =>
+    typeof document !== 'undefined' ? document.body.classList.contains('sidebar-hide-enabled') : true
+  );
   const [activePlayerSession, setActivePlayerSession] = useState<{
     file: LocalFile;
     season: number;
     episode: number;
     position: number;
     title?: string;
+    previewFrame?: string | null;
+    previewSourceRect?: { left: number; top: number; width: number; height: number } | null;
   } | null>(null);
+  const resumeBackdropImgRef = useRef<HTMLImageElement>(null);
   const handledAutoPlayKey = useRef<string | null>(null);
 
-  useEffect(() => {
+  const [fillVideoToScreen, setFillVideoToScreen] = useState<boolean>(false);
+
+  const loadSettings = useCallback(() => {
     dbService.getSettings().then(s => {
       setPlayerModeSetting(s.player_mode || 'builtin');
       setSidebarHideEnabled(s.sidebar_hide_enabled !== false);
+      if (typeof s.player_fill_to_screen === 'boolean') {
+        setFillVideoToScreen(s.player_fill_to_screen);
+      }
     });
   }, []);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   useEffect(() => {
     const updateBodyClass = () => {
@@ -172,6 +229,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [mergePair, setMergePair] = useState<{ mediaA: Media; mediaB: Media } | null>(null);
   const [showBackdropPicker, setShowBackdropPicker] = useState(false);
+  const [customBackdrop, setCustomBackdrop] = useState<string | null>(null);
 
   // Ephemeral preview modal for related items
   const [previewRelatedItem, setPreviewRelatedItem] = useState<MetadataSearchResult | null>(null);
@@ -184,8 +242,27 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const [isPlayButtonStuck, setIsPlayButtonStuck] = useState(false);
   const playButtonRowRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
 
   const lastWatchedEpisodeArtwork = getLastWatchedEpisodeArtwork(currentMedia, historyList);
+
+  const handleTriggerSearch = useCallback(
+    (filterSyntax: string) => {
+      if (onSearchFilter) {
+        onSearchFilter(filterSyntax);
+      } else if (onSearchCast && filterSyntax.startsWith('cast:')) {
+        const rawName = filterSyntax.slice('cast:'.length).replace(/-/g, ' ');
+        onSearchCast(rawName);
+      }
+    },
+    [onSearchFilter, onSearchCast]
+  );
+
+  const getTypeFilter = (type: MediaType) => {
+    if (type === 'Film') return 'type:movie';
+    if (type === 'TV Series') return 'type:show';
+    return 'type:game';
+  };
 
   const handleDeleteMedia = async () => {
     const shouldDelete = window.confirm(
@@ -207,6 +284,48 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
   const [isDesktopLayout, setIsDesktopLayout] = useState(typeof window !== 'undefined' && window.innerWidth >= SIDEBAR_BREAKPOINT);
   const { pagePadding: sidebarPadding } = useSidebarPadding(isCollapsed, sidebarHideEnabled);
+  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+
+  useEffect(() => {
+    let leaveTimer: ReturnType<typeof setTimeout> | null = null;
+    const sidebar = document.querySelector<HTMLElement>('[data-media-sidebar]');
+    const triggerZone = document.querySelector<HTMLElement>('.mdv-sidebar-trigger-zone');
+
+    const handleMouseEnter = () => {
+      if (leaveTimer) {
+        clearTimeout(leaveTimer);
+        leaveTimer = null;
+      }
+      setIsSidebarHovered(true);
+    };
+
+    const handleMouseLeave = () => {
+      if (leaveTimer) clearTimeout(leaveTimer);
+      leaveTimer = setTimeout(() => {
+        setIsSidebarHovered(false);
+        leaveTimer = null;
+      }, 200);
+    };
+
+    sidebar?.addEventListener('mouseenter', handleMouseEnter);
+    sidebar?.addEventListener('mouseleave', handleMouseLeave);
+    triggerZone?.addEventListener('mouseenter', handleMouseEnter);
+    triggerZone?.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      if (leaveTimer) clearTimeout(leaveTimer);
+      sidebar?.removeEventListener('mouseenter', handleMouseEnter);
+      sidebar?.removeEventListener('mouseleave', handleMouseLeave);
+      triggerZone?.removeEventListener('mouseenter', handleMouseEnter);
+      triggerZone?.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, []);
+
+  const backButtonMarginLeft = isDesktopLayout
+    ? (isSidebarHovered
+        ? (isCollapsed ? '5rem' : '17rem')
+        : (sidebarPadding && sidebarPadding !== '1rem' ? `calc(${sidebarPadding} - 1rem)` : '0px'))
+    : '0px';
 
   useEffect(() => {
     const handleResize = () => {
@@ -218,6 +337,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   }, []);
 
   useLayoutEffect(() => {
+    if (isTransitioning) return;
     const page = pageRef.current;
     const sidebar = document.querySelector<HTMLElement>('[data-media-sidebar]');
     if (!page || !sidebar) return;
@@ -225,7 +345,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     let animationFrame = 0;
     const updateContentPositions = () => {
       animationFrame = 0;
-      const sidebarRight = window.innerWidth >= SIDEBAR_BREAKPOINT ? sidebar.getBoundingClientRect().right : 0;
+      const isSidebarVisible = !sidebarHideEnabled || isSidebarHovered;
+      const sidebarRight = window.innerWidth >= SIDEBAR_BREAKPOINT && isSidebarVisible
+        ? Math.max(0, sidebar.getBoundingClientRect().right)
+        : 0;
       const content = page.querySelectorAll<HTMLElement>('[data-sidebar-aware]');
 
       const shifts = Array.from(content, element => {
@@ -257,24 +380,29 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     const resizeObserver = new ResizeObserver(scheduleUpdate);
     resizeObserver.observe(page);
     resizeObserver.observe(sidebar);
+    sidebar.addEventListener('transitionend', scheduleUpdate);
     window.addEventListener('resize', scheduleUpdate);
     updateContentPositions();
 
     return () => {
       resizeObserver.disconnect();
+      sidebar.removeEventListener('transitionend', scheduleUpdate);
       window.removeEventListener('resize', scheduleUpdate);
       if (animationFrame) cancelAnimationFrame(animationFrame);
     };
-  }, []);
+  }, [isTransitioning, sidebarHideEnabled, isSidebarHovered]);
   const [selectedEpFiles, setSelectedEpFiles] = useState<Record<string, string>>({});
   const [activeEpMenu, setActiveEpMenu] = useState<string | null>(null);
   const [linkEpTarget, setLinkEpTarget] = useState<{ season: number; episode: number } | null>(null);
   const [selectedFileToLink, setSelectedFileToLink] = useState<string>('');
 
   const artworkCandidates = [
+    customBackdrop ? (getHighQualityBackdropUrl(customBackdrop) || customBackdrop) : undefined,
+    showBackdropPicker ? (getHighQualityBackdropUrl(artwork.backdrop) || artwork.backdrop) : undefined,
     getHighQualityBackdropUrl(lastWatchedEpisodeArtwork.still),
     getHighQualityBackdropUrl(lastWatchedEpisodeArtwork.seasonPoster),
-    artwork.backdrop,
+    getHighQualityBackdropUrl(artwork.backdrop) || artwork.backdrop,
+    getHighQualityBackdropUrl(initialBackdrop) || initialBackdrop,
     artwork.poster
   ].filter((source): source is string => Boolean(source));
   const artworkSource = artworkCandidates.find(source => !failedBackdropSources.includes(source));
@@ -296,6 +424,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
   useEffect(() => {
     setFailedBackdropSources([]);
+    setCustomBackdrop(null);
   }, [currentMedia.id]);
 
  // Resolve the accent color based on the current artwork source
@@ -349,8 +478,40 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   const isAvailableLocally = localFiles.some(lf => lf.exists);
   const isLocalMissing = localFiles.length > 0 && !isAvailableLocally;
   const resumeTarget = getResumeTarget();
+  const [isHoveringPlay, setIsHoveringPlay] = useState(false);
+  const [hoverResumeFrame, setHoverResumeFrame] = useState<string | null>(null);
+
+  const previewFrameToShow = activePlayerSession?.previewFrame || hoverResumeFrame;
+  const isShowingResumePreview = Boolean(
+    (isHoveringPlay || Boolean(activePlayerSession?.previewFrame)) &&
+    previewFrameToShow &&
+    resumeTarget &&
+    resumeTarget.position > 0
+  );
+
+  useEffect(() => {
+    if (!resumeTarget || !resumeTarget.hasSavedProgress || resumeTarget.position <= 0 || !resumeTarget.file?.path) {
+      setHoverResumeFrame(null);
+      return;
+    }
+    let isCancelled = false;
+    void captureVideoFrameAtTime(resumeTarget.file.path, resumeTarget.position).then(frame => {
+      if (!isCancelled && frame) {
+        setHoverResumeFrame(frame);
+      }
+    });
+    return () => {
+      isCancelled = true;
+    };
+  }, [resumeTarget?.file?.path, resumeTarget?.position, resumeTarget?.hasSavedProgress]);
 
   const handleTriggerPlay = async (targetFile?: LocalFile, startFromBeginning: boolean = false, episodeTitle?: string) => {
+    const targetSeason = targetFile ? (targetFile.season || 0) : (resumeTarget?.season || 0);
+    const targetEpisode = targetFile ? (targetFile.episode || 0) : (resumeTarget?.episode || 0);
+    const matchedSeason = currentMedia.seasons?.find(s => Number(s.season_number) === Number(targetSeason));
+    const matchedEpisode = matchedSeason?.episodes?.find(e => Number(e.episode_number) === Number(targetEpisode));
+    const resolvedFallbackTitle = matchedEpisode?.name;
+
     const target: {
       file: LocalFile;
       season: number;
@@ -366,8 +527,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       position: startFromBeginning ? 0 : 0,
       label: 'Play',
       hasSavedProgress: false,
-      title: episodeTitle
-    } : resumeTarget;
+      title: episodeTitle || resolvedFallbackTitle
+    } : (resumeTarget ? {
+      ...resumeTarget,
+      title: resumeTarget.title || resolvedFallbackTitle
+    } : null);
 
     if (!target) {
       if (activeLocalFile) handlePlayFile(activeLocalFile);
@@ -377,12 +541,21 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
     if (currentMedia.type === 'VideoGame' || playerModeSetting === 'os_default') {
       await handlePlayFile(target.file);
     } else {
+      const frame = startFromBeginning ? null : (hoverResumeFrame || getCachedVideoFrame(target.file.path, target.position));
+      const rawRect = (!fillVideoToScreen && frame)
+        ? (resumeBackdropImgRef.current?.getBoundingClientRect() || backdropRef.current?.getBoundingClientRect() || null)
+        : null;
+      const previewSourceRect = rawRect && rawRect.width > 0 && rawRect.height > 0
+        ? { left: rawRect.left, top: rawRect.top, width: rawRect.width, height: rawRect.height }
+        : null;
       setActivePlayerSession({
         file: target.file,
         season: target.season,
         episode: target.episode,
         position: startFromBeginning ? 0 : target.position,
-        title: target.title || target.file.parsed_title || target.file.filename
+        title: target.title || resolvedFallbackTitle || target.file.parsed_title || target.file.filename,
+        previewFrame: frame,
+        previewSourceRect
       });
     }
   };
@@ -406,6 +579,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
   }, [autoPlayFileId, autoPlayOnOpen, localFiles, onAutoPlayHandled, handleTriggerPlay]);
 
   useEffect(() => {
+    if (isTransitioning) return;
     const playButtonRow = playButtonRowRef.current;
     if (!playButtonRow) return;
 
@@ -436,7 +610,163 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       scrollContainer.removeEventListener('scroll', updateStickyState);
       window.removeEventListener('resize', updateStickyState);
     };
-  }, [activeLocalFile, isAvailableLocally]);
+  }, [isTransitioning, activeLocalFile, isAvailableLocally]);
+
+  // Phone backdrop scroll & zoom effect: reduces height until uncropped, zooms in when trying to scroll past top
+  useEffect(() => {
+    if (isTransitioning) return;
+    const backdropEl = backdropRef.current;
+    const pageEl = pageRef.current;
+    if (!backdropEl || !pageEl) return;
+
+    let scrollContainer: HTMLElement | null = pageEl.parentElement;
+    while (scrollContainer && scrollContainer !== document.body) {
+      const overflowY = window.getComputedStyle(scrollContainer).overflowY;
+      if (overflowY === 'auto' || overflowY === 'scroll') break;
+      scrollContainer = scrollContainer.parentElement;
+    }
+    if (!scrollContainer || scrollContainer === document.body) return;
+
+    let touchStartY = 0;
+    let isTouchingAtTop = false;
+    let wheelPullDistance = 0;
+    let wheelSpringTimeout: ReturnType<typeof setTimeout> | null = null;
+    let rafId: number | null = null;
+
+    const getBackdropImages = () =>
+      backdropEl.querySelectorAll<HTMLElement>('.mdv-backdrop-img');
+
+    const applyBackdropState = (scrollTop: number, pullDistance = 0) => {
+      const isPhone = window.innerWidth < PHONE_BACKDROP_CONFIG.PHONE_BREAKPOINT;
+
+      if (!isPhone) {
+        backdropEl.style.height = '';
+        getBackdropImages().forEach(img => {
+          img.style.transform = '';
+          img.style.transition = '';
+        });
+        return;
+      }
+
+      const viewportWidth = scrollContainer.clientWidth || window.innerWidth;
+      const uncroppedHeight = viewportWidth / PHONE_BACKDROP_CONFIG.TARGET_ASPECT_RATIO;
+
+      // When scrolling down, reduce height slower than scroll until uncropped
+      if (scrollTop > 0) {
+        const heightReduction = scrollTop * PHONE_BACKDROP_CONFIG.SCROLL_SHRINK_RATE;
+        const targetHeight = Math.max(
+          uncroppedHeight,
+          PHONE_BACKDROP_CONFIG.INITIAL_HEIGHT - heightReduction
+        );
+        backdropEl.style.height = `${targetHeight}px`;
+
+        getBackdropImages().forEach(img => {
+          img.style.transform = '';
+          img.style.transition = '';
+        });
+      } else {
+        // At the top (or overscrolling): keep initial height
+        backdropEl.style.height = `${PHONE_BACKDROP_CONFIG.INITIAL_HEIGHT}px`;
+
+        // Calculate zoom when trying to scroll past top
+        const effectivePull = pullDistance > 0 ? pullDistance : Math.max(0, -scrollTop);
+        if (effectivePull > 0) {
+          const zoom = 1 + Math.min(
+            PHONE_BACKDROP_CONFIG.MAX_PULL_ZOOM - 1,
+            effectivePull * PHONE_BACKDROP_CONFIG.PULL_ZOOM_SENSITIVITY
+          );
+          getBackdropImages().forEach(img => {
+            img.style.transition = 'none';
+            img.style.transform = `scale(${zoom})`;
+          });
+        }
+      }
+    };
+
+    const handleScroll = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        applyBackdropState(scrollContainer.scrollTop);
+      });
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (window.innerWidth >= PHONE_BACKDROP_CONFIG.PHONE_BREAKPOINT) return;
+      if (scrollContainer.scrollTop <= 1) {
+        touchStartY = e.touches[0].clientY;
+        isTouchingAtTop = true;
+      } else {
+        isTouchingAtTop = false;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isTouchingAtTop || window.innerWidth >= PHONE_BACKDROP_CONFIG.PHONE_BREAKPOINT) return;
+      if (scrollContainer.scrollTop <= 1) {
+        const currentY = e.touches[0].clientY;
+        const deltaY = currentY - touchStartY;
+        if (deltaY > 0) {
+          applyBackdropState(0, deltaY);
+        }
+      } else {
+        isTouchingAtTop = false;
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (!isTouchingAtTop) return;
+      isTouchingAtTop = false;
+      const images = getBackdropImages();
+      images.forEach(img => {
+        img.style.transition = `transform ${PHONE_BACKDROP_CONFIG.SPRING_BACK_DURATION_MS}ms cubic-bezier(0.2, 0.9, 0.3, 1)`;
+        img.style.transform = 'scale(1)';
+      });
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (window.innerWidth >= PHONE_BACKDROP_CONFIG.PHONE_BREAKPOINT) return;
+      if (scrollContainer.scrollTop <= 0 && e.deltaY < 0) {
+        wheelPullDistance = Math.min(250, wheelPullDistance + Math.abs(e.deltaY) * 0.4);
+        applyBackdropState(0, wheelPullDistance);
+
+        if (wheelSpringTimeout) clearTimeout(wheelSpringTimeout);
+        wheelSpringTimeout = setTimeout(() => {
+          wheelPullDistance = 0;
+          const images = getBackdropImages();
+          images.forEach(img => {
+            img.style.transition = `transform ${PHONE_BACKDROP_CONFIG.SPRING_BACK_DURATION_MS}ms cubic-bezier(0.2, 0.9, 0.3, 1)`;
+            img.style.transform = 'scale(1)';
+          });
+        }, 150);
+      }
+    };
+
+    const handleResize = () => {
+      applyBackdropState(scrollContainer.scrollTop);
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    scrollContainer.addEventListener('touchstart', handleTouchStart, { passive: true });
+    scrollContainer.addEventListener('touchmove', handleTouchMove, { passive: true });
+    scrollContainer.addEventListener('touchend', handleTouchEnd, { passive: true });
+    scrollContainer.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    scrollContainer.addEventListener('wheel', handleWheel, { passive: true });
+    window.addEventListener('resize', handleResize);
+
+    applyBackdropState(scrollContainer.scrollTop);
+
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (wheelSpringTimeout) clearTimeout(wheelSpringTimeout);
+      scrollContainer.removeEventListener('scroll', handleScroll);
+      scrollContainer.removeEventListener('touchstart', handleTouchStart);
+      scrollContainer.removeEventListener('touchmove', handleTouchMove);
+      scrollContainer.removeEventListener('touchend', handleTouchEnd);
+      scrollContainer.removeEventListener('touchcancel', handleTouchEnd);
+      scrollContainer.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isTransitioning, currentMedia.id, artworkSource]);
 
   const openHistoryModal = (history?: MediaHistory) => {
     setEditingHistory(history || null);
@@ -527,7 +857,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
       }}
     >
       {/* Pinned Backdrop */}
-      <div className="mdv-backdrop">
+      <div ref={backdropRef} className="mdv-backdrop">
         {artworkSource ? (
           <img
             src={artworkSource}
@@ -544,6 +874,17 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         ) : (
           <div className="mdv-backdrop-fallback" />
         )}
+        {/* Hover preview when in standard (fit) mode: behaves like backdrop image */}
+        {!fillVideoToScreen && previewFrameToShow && resumeTarget && resumeTarget.position > 0 && (
+          <img
+            ref={resumeBackdropImgRef}
+            src={previewFrameToShow}
+            alt="Resume frame preview"
+            className={`mdv-backdrop-img transition-opacity duration-300 ease-in-out ${
+              isShowingResumePreview ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+          />
+        )}
         {/* Hero Backlight Glow Effect */}
           {/* <div className="absolute -inset-10 opacity-40 transition-opacity duration-500 blur-3xl pointer-events-none z-0">
             <img 
@@ -552,7 +893,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
               className="w-full h-full object-cover saturate-200" 
             />
           </div> */}
-        {artworkSource && (
+        {!isTransitioning && artworkSource && (
           <DominantColorExtractor
             key={artworkSource}
             imageSrc={artworkSource}
@@ -563,87 +904,111 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         <div className="mdv-backdrop-overlay" />
       </div>
 
+      {/* Hover preview when in fill-screen mode: matches full screen video player for a seamless transition */}
+      {fillVideoToScreen && previewFrameToShow && resumeTarget && resumeTarget.position > 0 && (
+        <img
+          src={previewFrameToShow}
+          alt="Resume frame preview"
+          className={`fixed inset-0 w-full h-full object-cover object-center pointer-events-none transition-opacity duration-300 ease-in-out z-[1] ${
+            isShowingResumePreview ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+      )}
+
       {/* Pinned Header Bar Actions */}
-      <div className={`mdv-header ${isPlayButtonStuck ? 'mdv-header--stuck' : ''}`}>
-        <div className="mdv-header-actions mdv-sidebar-aware" data-sidebar-aware
-             style={{ left: sidebarPadding }}
-             >
-        <button
-          onClick={onBack}
-          className="mdv-btn mdv-btn-glass cursor-pointer group flex items-center gap-2 w-10 hover:w-36 transition-[width] duration-300 ease-in-out overflow-hidden whitespace-nowrap px-0 hover:px-2 hover:backdrop-blur-md"
-        >
-          <ArrowLeft className="mdv-icon-md shrink-0 transition-[margin] duration-300 ease-in-out" />
-          <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100">
-            Back to Library
-          </span>
-        </button>
-
-          <div className="relative">
+      {!activePlayerSession && (
+        <>
+          <TitleBarPortal target="left">
             <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="mdv-btn mdv-btn-glass cursor-pointer"
-              title="Media Options"
+              onClick={onBack}
+              onMouseDown={(e) => e.stopPropagation()}
+              data-tauri-drag-region="false"
+              className="mdv-btn mdv-btn-glass mdv-back-btn cursor-pointer group flex items-center h-8 w-8 hover:w-36 transition-[width,margin] duration-300 ease-in-out overflow-hidden whitespace-nowrap !p-0 !gap-0 hover:backdrop-blur-md justify-start"
+              title="Back to Library"
+              style={{
+                marginLeft: backButtonMarginLeft,
+                transition: 'margin-left 0.3s cubic-bezier(0.16, 1, 0.3, 1), width 0.3s ease-in-out'
+              }}
             >
-              <MoreVertical className="mdv-icon-md" />
-            </button>
-
-            {showMenu && (
-              <div 
-                onMouseLeave={() => setShowMenu(false)}
-                className="absolute right-0 mt-2 w-56 bg-[#1b1d2a]/65 backdrop-blur-md border border-white/15 rounded-xl shadow-2xl py-1 z-50 animate-fadeIn before:absolute before:-top-2 before:h-2 before:inset-x-0 after:absolute after:-bottom-4 after:h-4 after:inset-x-0"
-              >
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                    handleManualMetadataRefresh();
-                  }}
-                  disabled={isRefreshingMetadata}
-                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.06] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className="w-4 h-4 text-[#E27D12] shrink-0" />
-                  <span>{isRefreshingMetadata ? 'Re-syncing Provider...' : 'Refresh Metadata'}</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                    setShowFixMatchModal(true);
-                  }}
-                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.06] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2 transition-all cursor-pointer border-t border-white/10"
-                >
-                  <LinkIcon className="w-4 h-4 text-sky-400 shrink-0" />
-                  <span>Fix Match / Change Metadata</span>
-                </button>
-
-                
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                    setShowBackdropPicker(true);
-                  }}
-                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.06] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2 transition-all cursor-pointer border-t border-white/10"
-                >
-                  <Wallpaper className="w-4 h-4 text-sky-400 shrink-0" />
-                  <span>Change Background Image</span>
-                </button>
-                
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                    void handleDeleteMedia();
-                  }}
-                  disabled={isDeletingMedia}
-                  className="w-full text-left px-4 py-2.5 text-xs text-[#ff3D12] hover:bg-[#ff3D12]/50 flex items-center space-x-2 transition-colors cursor-pointer border-t border-[#232736] disabled:opacity-50"
-                >
-                  <Trash2 className="w-4 h-4 shrink-0" />
-                  <span>{isDeletingMedia ? 'Deleting...' : 'Delete from Library'}</span>
-                </button>
+              <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                <ArrowLeft className="w-4 h-4 text-white" />
               </div>
-            )}
+              <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 text-xs font-medium text-white pr-2.5">
+                Back to Library
+              </span>
+            </button>
+          </TitleBarPortal>
 
-          </div>
-        </div>
-      </div>
+          <TitleBarPortal target="right">
+            <div className="relative" data-tauri-drag-region="false">
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                onMouseDown={(e) => e.stopPropagation()}
+                data-tauri-drag-region="false"
+                className="mdv-btn mdv-btn-glass mdv-btn-icon-glass cursor-pointer h-8 w-8 flex items-center justify-center !p-0"
+                title="Media Options"
+              >
+                <MoreVertical className="w-4 h-4 text-white fill-current shrink-0" />
+              </button>
+
+              {showMenu && (
+                <div 
+                  onMouseDown={(e) => e.stopPropagation()}
+                  data-tauri-drag-region="false"
+                  onMouseLeave={() => setShowMenu(false)}
+                  className="absolute right-0 top-full mt-2 w-56 bg-[#1b1d2a]/70 backdrop-blur-xl border border-white/15 rounded-xl shadow-2xl py-1 z-50 animate-fadeIn before:absolute before:-top-2 before:h-2 before:inset-x-0 after:absolute after:-bottom-4 after:h-4 after:inset-x-0"
+                >
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      handleManualMetadataRefresh();
+                    }}
+                    disabled={isRefreshingMetadata}
+                    className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.08] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2.5 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-4 h-4 text-[#E27D12] shrink-0" />
+                    <span>{isRefreshingMetadata ? 'Re-syncing Provider...' : 'Refresh Metadata'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      setShowFixMatchModal(true);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.08] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2.5 transition-all cursor-pointer border-t border-white/10"
+                  >
+                    <LinkIcon className="w-4 h-4 text-sky-400 shrink-0" />
+                    <span>Fix Match / Change Metadata</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      setShowBackdropPicker(true);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.08] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2.5 transition-all cursor-pointer border-t border-white/10"
+                  >
+                    <Wallpaper className="w-4 h-4 text-sky-400 shrink-0" />
+                    <span>Change Background Image</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      void handleDeleteMedia();
+                    }}
+                    disabled={isDeletingMedia}
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#ff3D12] hover:bg-[#ff3D12]/20 hover:text-red-300 flex items-center space-x-2.5 transition-colors cursor-pointer border-t border-white/10 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <span>{isDeletingMedia ? 'Deleting...' : 'Delete from Library'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </TitleBarPortal>
+        </>
+      )}
 
       {/* Scrollable Hero Content */}
       <div className="mdv-hero">
@@ -656,46 +1021,109 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
         >
           <div className="mdv-title-block">
             <div className="mdv-badges">
-              <span className="mdv-type-badge">
+              <span
+                className="mdv-type-badge cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                title={`Filter by type: ${currentMedia.type}`}
+                onClick={e => {
+                  e.stopPropagation();
+                  handleTriggerSearch(getTypeFilter(currentMedia.type));
+                }}
+              >
                 {getTypeIcon()}
                 <span>{currentMedia.type}</span>
               </span>
 
               {isAvailableLocally ? (
-                <span className="mdv-status-badge mdv-status-badge--ok">
+                <span
+                  className="mdv-status-badge mdv-status-badge--ok cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                  title="Filter by local files: Available Locally"
+                  onClick={e => {
+                    e.stopPropagation();
+                    handleTriggerSearch('local:available');
+                  }}
+                >
                   <FolderCheck className="mdv-icon-md" />
                   <span>🖥 Available Locally</span>
                 </span>
               ) : isLocalMissing ? (
-                <span className="mdv-status-badge mdv-status-badge--warn">
+                <span
+                  className="mdv-status-badge mdv-status-badge--warn cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                  title="Filter by local files: Local file missing"
+                  onClick={e => {
+                    e.stopPropagation();
+                    handleTriggerSearch('local:missing');
+                  }}
+                >
                   <FolderX className="mdv-icon-md" />
                   <span>⚠ Local file missing</span>
                 </span>
               ) : null}
 
               {currentMedia.release_year && (
-                <span className="mdv-pill">
+                <span
+                  className="mdv-pill cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                  title={`Filter by year: ${currentMedia.release_year}`}
+                  onClick={e => {
+                    e.stopPropagation();
+                    handleTriggerSearch(`year:${currentMedia.release_year}`);
+                  }}
+                >
                   <Calendar className="mdv-icon-sm mdv-icon-accent-on-dark" />
                   <span>{currentMedia.release_year}</span>
                 </span>
               )}
 
               {currentMedia.runtime && (
-                <span className="mdv-pill">
+                <span
+                  className="mdv-pill cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                  title={`Filter by runtime: ${currentMedia.runtime} mins`}
+                  onClick={e => {
+                    e.stopPropagation();
+                    handleTriggerSearch(`runtime:${currentMedia.runtime}`);
+                  }}
+                >
                   <Clock className="mdv-icon-sm mdv-icon-accent-on-dark" />
                   <span>{currentMedia.runtime} mins</span>
                 </span>
               )}
 
+              {currentMedia.language && (
+                <span
+                  className="mdv-pill cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                  title={`Filter by language: ${currentMedia.language.toUpperCase()}`}
+                  onClick={e => {
+                    e.stopPropagation();
+                    handleTriggerSearch(`lang:${toLanguageCode(currentMedia.language)}`);
+                  }}
+                >
+                  <Globe className="mdv-icon-sm mdv-icon-accent-on-dark" />
+                  <span>{currentMedia.language.toUpperCase()}</span>
+                </span>
+              )}
+
               {currentMedia.publisher && (
-                <span className="mdv-pill">
+                <span
+                  className="mdv-pill cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                  title={`Filter by publisher: ${currentMedia.publisher}`}
+                  onClick={e => {
+                    e.stopPropagation();
+                    handleTriggerSearch(`publisher:${currentMedia.publisher!.trim().replace(/\s+/g, '-')}`);
+                  }}
+                >
                   <Building className="mdv-icon-sm mdv-icon-amber" />
                   <span>{currentMedia.publisher}</span>
                 </span>
               )}
 
               {currentMedia.developer && (
-                <span className="mdv-pill">
+                <span
+                  className="mdv-pill cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                  title={`Filter by developer: ${currentMedia.developer}`}
+                  onClick={e => {
+                    e.stopPropagation();
+                    handleTriggerSearch(`developer:${currentMedia.developer!.trim().replace(/\s+/g, '-')}`);
+                  }}
+                >
                   <Code className="mdv-icon-sm mdv-icon-purple" />
                   <span>{currentMedia.developer}</span>
                 </span>
@@ -703,11 +1131,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             </div>
 
             {logoUrl ? (
-              <div className="py-1">
+              <div className="mdv-title-lockup py-1" style={{ willChange: 'transform' }}>
                 <img
                   src={logoUrl}
                   alt={currentMedia.title}
-                  className="h-16 md:h-24 max-w-xs md:max-w-md object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
+                  className="h-24 sm:h-35 max-w-md object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                     const titleEl = document.getElementById(`media-title-text-${currentMedia.id}`);
@@ -719,7 +1147,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
 
             <h1
               id={`media-title-text-${currentMedia.id}`}
-              className={`text-4xl md:text-5xl font-black text-white tracking-tight drop-shadow-lg flex items-center space-x-3 ${logoUrl ? 'hidden' : ''}`}
+              className={`mdv-title-lockup text-4xl sm:text-6xl font-extrabold uppercase text-white tracking-tight drop-shadow-md leading-none flex items-center space-x-3 ${logoUrl ? 'hidden' : ''}`}
+              style={{ willChange: 'transform' }}
             >
               <span>{currentMedia.title}</span>
             </h1>
@@ -727,7 +1156,15 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
             {currentMedia.genres && currentMedia.genres.length > 0 && (
               <div className="mdv-genres">
                 {currentMedia.genres.map(g => (
-                  <span key={g} className="mdv-genre">
+                  <span
+                    key={g}
+                    className="mdv-genre cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                    title={`Filter by genre: ${g}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleTriggerSearch(`genre:${g.trim().replace(/\s+/g, '-')}`);
+                    }}
+                  >
                     {g}
                   </span>
                 ))}
@@ -763,6 +1200,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           }}
         >
           <button
+            onMouseEnter={() => setIsHoveringPlay(true)}
+            onMouseLeave={() => setIsHoveringPlay(false)}
             onClick={() => handleTriggerPlay(undefined, false)}
             className="mdv-btn mdv-btn-play flex items-center space-x-2"
           >
@@ -847,30 +1286,38 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                 <span>Top Cast Members</span>
               </h2>
 
-              <div className="mdv-cast-rail">
+              <HorizontalDragScroll className="mdv-cast-rail">
                 {currentMedia.cast.map(member => (
                   <div
                     key={member.id}
-                    className="mdv-cast-member"
-                    title="Double-click to find media with this actor"
-                    onDoubleClick={() => onSearchCast?.(member.name)}
+                    className="mdv-cast-member cursor-pointer select-none transition-transform hover:scale-105"
+                    title="Click to find media with this actor"
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleTriggerSearch(`cast:${member.name.trim().replace(/\s+/g, '-')}`);
+                    }}
                   >
-                    <div className="mdv-cast-avatar">
+                    <div className="mdv-cast-avatar select-none">
                       {member.profile_path ? (
-                        <img src={member.profile_path} alt={member.name} />
+                        <img
+                          src={member.profile_path}
+                          alt={member.name}
+                          draggable={false}
+                          className="select-none pointer-events-none"
+                        />
                       ) : (
-                        <div className="mdv-cast-avatar-empty">
+                        <div className="mdv-cast-avatar-empty select-none">
                           <User className="mdv-icon-xl" />
                         </div>
                       )}
                     </div>
-                    <p className="mdv-cast-name" title={member.name}>{member.name}</p>
+                    <p className="mdv-cast-name select-none" title={member.name}>{member.name}</p>
                     {member.character && (
-                      <p className="mdv-cast-role" title={member.character}>{member.character}</p>
+                      <p className="mdv-cast-role select-none" title={member.character}>{member.character}</p>
                     )}
                   </div>
                 ))}
-              </div>
+              </HorizontalDragScroll>
             </section>
           )}
 
@@ -989,12 +1436,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                                                     if (currentMedia.type === 'VideoGame' || playerModeSetting === 'os_default') {
                                                       handlePlayFile(activeEpFile);
                                                     } else {
+                                                      const epPos = epProg?.position_seconds || 0;
                                                       setActivePlayerSession({
                                                         file: activeEpFile,
                                                         season: season.season_number,
                                                         episode: ep.episode_number,
-                                                        position: epProg? epProg?.position_seconds: 0,
-                                                        title: ep.name || ""
+                                                        position: epPos,
+                                                        title: ep.name || "",
+                                                        previewFrame: epPos > 0 ? getCachedVideoFrame(activeEpFile.path, epPos) : null
                                                       });
                                                     }
                                                   }
@@ -1288,7 +1737,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
                                 season: Number(lf.season),
                                 episode: Number(lf.episode),
                                 position: position,
-                                title: episodeName || ""
+                                title: episodeName || "",
+                                previewFrame: position > 0 ? getCachedVideoFrame(lf.path, position) : null
                               });
                             }
                           }}
@@ -1570,7 +2020,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           media={currentMedia}
           isOpen={showBackdropPicker}
           onClose={() => setShowBackdropPicker(false)}
-          onBackgroundUpdated={(updated) => {
+          onBackgroundUpdated={(updated, isApplied) => {
+            if (isApplied) {
+              setCustomBackdrop(updated.backdrop || null);
+            }
             updateCurrentMedia(updated);
           }}
           isCollapsed={isCollapsed}
@@ -1806,22 +2259,30 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({ media: initial
           episodeNumber={activePlayerSession.episode}
           episodeTitle={activePlayerSession.title}
           initialPosition={activePlayerSession.position}
+          previewFrame={activePlayerSession.previewFrame}
+          previewSourceRect={activePlayerSession.previewSourceRect}
           allLocalFiles={localFiles}
-          sideBarIsCollapsed={isCollapsed}
-          sidebarHideEnabled={sidebarHideEnabled}
+          initialFillToScreen={fillVideoToScreen}
           onClose={() => {
             setActivePlayerSession(null);
+            loadSettings();
             void Promise.all([refreshLocalFiles(), refreshHistoryAndState()])
               .catch(error => console.error('Failed to refresh media details after playback:', error));
           }}
           onPlaybackCompleted={refreshHistoryAndState}
           onEpisodeChange={(nextFile, s, ep, title, position) => {
+            const seasonNum = s || nextFile.season || 1;
+            const epNum = ep || nextFile.episode || 1;
+            const matchedSeason = currentMedia.seasons?.find(sm => Number(sm.season_number) === Number(seasonNum));
+            const matchedEpisode = matchedSeason?.episodes?.find(em => Number(em.episode_number) === Number(epNum));
+            const resolvedEpTitle = title || matchedEpisode?.name || nextFile.parsed_title || nextFile.filename;
             setActivePlayerSession({
               file: nextFile,
-              season: s || nextFile.season || 1,
-              episode: ep || nextFile.episode || 1,
+              season: seasonNum,
+              episode: epNum,
               position: position || 0,
-              title: title || nextFile.parsed_title || nextFile.filename
+              title: resolvedEpTitle,
+              previewFrame: position && position > 0 ? getCachedVideoFrame(nextFile.path, position) : null
             });
             refreshLocalFiles();
           }}

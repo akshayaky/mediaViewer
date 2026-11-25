@@ -1,5 +1,6 @@
 import { LocalFile, MediaType, Media } from '../types/media';
 import { dbService } from './DatabaseService';
+import { skipSegmentCache } from './skip/SkipSegmentCache';
 import { invoke } from '@tauri-apps/api/core';
 
 export const isTauri = (): boolean => {
@@ -355,6 +356,7 @@ export class LocalScannerService {
         if (!localFileRecord.media_id && matchedMedia) {
           localFileRecord.media_id = matchedMedia.id;
           autoMatchedCount++;
+          skipSegmentCache.preloadSkipSegments(matchedMedia, parsed.season, parsed.episode);
         } else if (!localFileRecord.media_id) {
           unmatchedCount++;
         }
@@ -386,6 +388,7 @@ export class LocalScannerService {
 
         if (matchedMedia) {
           autoMatchedCount++;
+          skipSegmentCache.preloadSkipSegments(matchedMedia, parsed.season, parsed.episode);
         } else {
           unmatchedCount++;
         }

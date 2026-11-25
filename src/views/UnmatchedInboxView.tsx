@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { LocalFile, Media, MediaType } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { localScannerService } from '../services/LocalScannerService';
+import { skipSegmentCache } from '../services/skip/SkipSegmentCache';
 import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
 import { MetadataSearchOptions, MetadataSearchResult } from '../providers/interfaces';
 import { searchMediaMetadata, getMetadataSearchKey } from '../services/MediaSearchService';
 import { MetadataSearchFilters } from '../components/MetadataSearchFilters';
+import { HighlightedFilterInput } from '../components/HighlightedFilterInput';
 import {
   Inbox,
   CheckCircle2,
@@ -58,6 +60,11 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
 
   const handleLinkToMedia = async (fileId: string, mediaId: string) => {
     await dbService.linkLocalFileToMedia(fileId, mediaId);
+    const targetMedia = allMedia.find(m => m.id === mediaId);
+    const targetFile = unmatchedFiles.find(f => f.id === fileId);
+    if (targetMedia) {
+      skipSegmentCache.preloadSkipSegments(targetMedia, targetFile?.season, targetFile?.episode);
+    }
     setSavedMessage('Local file successfully linked to media entry.');
     setTimeout(() => setSavedMessage(''), 3000);
     await refreshFiles();
@@ -86,6 +93,13 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
 
     try {
       await Promise.all(matchesToConfirm.map(m => dbService.linkLocalFileToMedia(m.fileId, m.mediaId)));
+      matchesToConfirm.forEach(m => {
+        const targetMedia = allMedia.find(med => med.id === m.mediaId);
+        const targetFile = unmatchedFiles.find(f => f.id === m.fileId);
+        if (targetMedia) {
+          skipSegmentCache.preloadSkipSegments(targetMedia, targetFile?.season, targetFile?.episode);
+        }
+      });
       setSavedMessage(`Successfully matched ${matchesToConfirm.length} items!`);
       setTimeout(() => setSavedMessage(''), 3000);
       await refreshFiles();
@@ -203,6 +217,7 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
 
     await dbService.saveMedia(newMedia);
     await dbService.linkLocalFileToMedia(file.id, newMedia.id);
+    skipSegmentCache.preloadSkipSegments(newMedia, file.season, file.episode);
 
     setSavedMessage(`Matched "${newMedia.title}" with external metadata from ${candidate.provider}!`);
     setTimeout(() => setSavedMessage(''), 3000);
@@ -403,13 +418,11 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
 
                   <div className="flex items-center space-x-2">
                     <div className="relative flex-1">
-                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="text"
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-30" />
+                      <HighlightedFilterInput
                         placeholder="Search candidate title on TMDB / IGDB..."
                         value={searchQuery}
-                        onChange={e => {
-                          const newValue = e.target.value;
+                        onChange={newValue => {
                           setSearchQueryMap({ ...searchQueries, [file.id]: newValue });
                           
                           if (searchTimeouts[file.id]) {
@@ -428,7 +441,12 @@ export const UnmatchedInboxView: React.FC<UnmatchedInboxViewProps> = ({ onMediaM
                             handleSearchExternalProviders(file);
                           }
                         }}
-                        className="w-full bg-[#13151f] border border-[#2d3145] rounded-lg pl-9 pr-3 py-2 text-xs text-gray-100"
+                        wrapperClassName="w-full"
+                        inputClassName="w-full bg-[#13151f] border border-[#2d3145] rounded-lg pl-9 pr-3 py-2 text-xs text-gray-100"
+                        highlightClassName="pl-9 pr-3 py-2 text-xs"
+                        highlightStyle={{ fontSize: '0.75rem', lineHeight: '1rem' }}
+                        ariaLabel="Search candidate title on TMDB / IGDB"
+                        scope="external"
                       />
                     </div>
 

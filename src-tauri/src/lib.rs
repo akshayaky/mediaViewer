@@ -1,3 +1,4 @@
+mod native_player;
 mod stream_server;
 
 use std::path::Path;
@@ -167,7 +168,7 @@ fn grant_video_files_access(app: tauri::AppHandle, video_path: String) -> Result
     Ok(())
 }
 
-mod urlencoding {
+pub mod urlencoding {
     pub fn encode(s: &str) -> String {
         let mut result = String::new();
         for b in s.bytes() {
@@ -184,9 +185,46 @@ mod urlencoding {
     }
 }
 
+
+
+#[tauri::command]
+fn set_fullscreen(window: tauri::Window, fullscreen: bool) -> Result<(), String> {
+    window.set_fullscreen(fullscreen).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn is_fullscreen(window: tauri::Window) -> Result<bool, String> {
+    window.is_fullscreen().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn minimize_window(window: tauri::Window) -> Result<(), String> {
+    window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn toggle_maximize_window(window: tauri::Window) -> Result<(), String> {
+    if window.is_maximized().map_err(|e| e.to_string())? {
+        window.unmaximize().map_err(|e| e.to_string())
+    } else {
+        window.maximize().map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn close_window(window: tauri::Window) -> Result<(), String> {
+    window.close().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn is_window_maximized(window: tauri::Window) -> Result<bool, String> {
+    window.is_maximized().map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(native_player::PlayerManager::new())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
@@ -200,7 +238,30 @@ pub fn run() {
             get_video_stream_url,
             get_subtitle_url,
             list_subtitle_files,
-            grant_video_files_access
+            grant_video_files_access,
+            native_player::native_player_init,
+            native_player::native_player_load_file,
+            native_player::native_player_play,
+            native_player::native_player_pause,
+            native_player::native_player_toggle_pause,
+            native_player::native_player_seek,
+            native_player::native_player_set_volume,
+            native_player::native_player_set_mute,
+            native_player::native_player_set_speed,
+            native_player::native_player_set_audio_track,
+            native_player::native_player_set_subtitle_track,
+            native_player::native_player_add_subtitle_file,
+            native_player::native_player_set_property,
+            native_player::native_player_get_state,
+            native_player::native_player_stop,
+            native_player::native_player_destroy,
+            native_player::set_screen_orientation,
+            set_fullscreen,
+            is_fullscreen,
+            minimize_window,
+            toggle_maximize_window,
+            close_window,
+            is_window_maximized
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -12,7 +12,7 @@ interface BackdropPickerModalProps {
   media: Media;
   isOpen: boolean;
   onClose: () => void;
-  onBackgroundUpdated: (updatedMedia: Media) => void;
+  onBackgroundUpdated: (updatedMedia: Media, isApplied?: boolean) => void;
   isCollapsed: boolean;
 }
 
@@ -190,9 +190,10 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
         { backdrop: finalUrl }
       );
 
-      onBackgroundUpdated(updatedMedia);
+      onBackgroundUpdated(updatedMedia, shouldClose);
       if (shouldClose) {
-        dbService.updateMediaArtwork(media.id, {poster: media.poster, backdrop: finalUrl,logo: media.logo});
+        await dbService.updateMediaArtwork(media.id, {poster: media.poster, backdrop: finalUrl,logo: media.logo});
+        window.dispatchEvent(new CustomEvent('library-scanned'));
         onClose();
       }
     } catch (err) {
@@ -292,7 +293,7 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
               <div
                 key={idx}
                 onClick={() => {
-                  // 3. Pass the current quality state to your handler
+                  setSelectedBackdrop(backdrop.url);
                   handleApply(backdrop.url, false);
                 }}
                 className={`group relative aspect-video rounded-xl overflow-hidden cursor-pointer transition-all border-4 ${
@@ -319,7 +320,11 @@ export const BackdropPickerModal: React.FC<BackdropPickerModalProps> = ({
 
         <div className="p-4 border-t border-[#232736] flex items-center justify-end space-x-3 bg-[#11131c]">
           <button onClick={() => {
-              handleApply(initialBackdropRef.current!!, false);
+              if (initialBackdropRef.current) {
+                handleApply(initialBackdropRef.current, false);
+              } else {
+                onBackgroundUpdated({ ...media, backdrop: undefined }, false);
+              }
               onClose();
             }
           } className="px-4 py-2 rounded-xl border border-[#2d3145] text-gray-300 hover:bg-[#1a1c29] text-xs font-semibold transition-colors cursor-pointer">

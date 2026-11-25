@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getHighQualityBackdropUrl, getLastWatchedEpisodeArtwork, isEpisodeWatched } from '../helper/episodeProgress';
-import { Media, MediaHistory } from '../types/media';
+import {
+  calculateResumeTarget,
+  getHighQualityBackdropUrl,
+  getLastWatchedEpisodeArtwork,
+  isEpisodeWatched
+} from '../helper/episodeProgress';
+import { LocalFile, Media, MediaHistory, PlaybackProgress, MediaSkipSegments } from '../types/media';
 
 const media: Media = {
   id: 'show-1',
@@ -123,5 +128,264 @@ describe('getHighQualityBackdropUrl', () => {
     expect(getHighQualityBackdropUrl('https://image.tmdb.org/t/p/original/still.jpg'))
       .toBe('https://image.tmdb.org/t/p/original/still.jpg');
     expect(getHighQualityBackdropUrl(undefined)).toBeUndefined();
+  });
+});
+
+describe('calculateResumeTarget', () => {
+  const dummyFile: LocalFile = {
+    id: 'f-1',
+    media_id: 'film-1',
+    path: '/path/to/movie.mkv',
+    filename: 'movie.mkv',
+    extension: 'mkv',
+    size: 1000,
+    discovered_at: '',
+    last_seen_at: '',
+    exists: true,
+    file_type: 'movie'
+  };
+
+  it('returns null when no active local files exist', () => {
+    const movie: Media = { id: 'film-1', type: 'Film', title: 'Movie', genres: [], created_at: '', updated_at: '' };
+    expect(calculateResumeTarget(movie, [], [])).toBeNull();
+    expect(calculateResumeTarget(movie, [{ ...dummyFile, exists: false }], [])).toBeNull();
+  });
+
+  it('calculates correct label and target for Movie without progress', () => {
+    const movie: Media = { id: 'film-1', type: 'Film', title: 'Movie', genres: [], created_at: '', updated_at: '' };
+    const target = calculateResumeTarget(movie, [dummyFile], []);
+    expect(target).toEqual({
+      file: dummyFile,
+      season: 0,
+      episode: 0,
+      position: 0,
+      label: 'Play Movie',
+      hasSavedProgress: false
+    });
+  });
+
+  it('calculates Resume Movie when saved progress exists', () => {
+    const movie: Media = { id: 'film-1', type: 'Film', title: 'Movie', genres: [], created_at: '', updated_at: '' };
+    const progress: PlaybackProgress = {
+      id: 'p-1',
+      media_id: 'film-1',
+      season: 0,
+      episode: 0,
+      position_seconds: 360,
+      duration_seconds: 7200,
+      is_completed: false,
+      updated_at: ''
+    };
+    const target = calculateResumeTarget(movie, [dummyFile], [progress]);
+    expect(target?.label).toBe('Resume Movie (6m)');
+    expect(target?.position).toBe(360);
+    expect(target?.hasSavedProgress).toBe(true);
+  });
+
+  it('calculates correct label for TV Series when in-progress', () => {
+    const epFile: LocalFile = { ...dummyFile, season: 1, episode: 2, file_type: 'tv_episode' };
+    const progress: PlaybackProgress = {
+      id: 'p-2',
+      media_id: media.id,
+      season: 1,
+      episode: 2,
+      position_seconds: 120,
+      duration_seconds: 1800,
+      is_completed: false,
+      updated_at: ''
+    };
+    const target = calculateResumeTarget(media, [epFile], [progress]);
+    expect(target?.label).toBe('Resume S01E02');
+    expect(target?.position).toBe(120);
+    expect(target?.hasSavedProgress).toBe(true);
+  });
+
+  it('calculates Play Next when an episode was completed', () => {
+    const ep1File: LocalFile = { ...dummyFile, id: 'f-1', season: 1, episode: 1, file_type: 'tv_episode' };
+    const ep2File: LocalFile = { ...dummyFile, id: 'f-2', season: 1, episode: 2, file_type: 'tv_episode' };
+    const progress: PlaybackProgress = {
+      id: 'p-1',
+      media_id: media.id,
+      season: 1,
+      episode: 1,
+      position_seconds: 1800,
+      duration_seconds: 1800,
+      is_completed: true,
+      updated_at: ''
+    };
+    const target = calculateResumeTarget(media, [ep1File, ep2File], [progress]);
+    expect(target?.label).toBe('Play Next S01E02');
+    expect(target?.file.id).toBe('f-2');
+    expect(target?.hasSavedProgress).toBe(false);
+  });
+
+  describe('outro detection vs 90% threshold', () => {
+    const ep1File: LocalFile = { ...dummyFile, id: 'f-1', season: 1, episode: 1, file_type: 'tv_episode' };
+    const ep2File: LocalFile = { ...dummyFile, id: 'f-2', season: 1, episode: 2, file_type: 'tv_episode' };
+
+    it('treats episode at 92% duration as completed without outro, defaulting to Play Next S01E02', () => {
+      const progress: PlaybackProgress = {
+        id: 'p-1',
+        media_id: media.id,
+        season: 1,
+        episode: 1,
+        position_seconds: 920,
+        duration_seconds: 1000,
+        is_completed: false,
+        updated_at: '2026-11-20T10:00:00Z'
+      };
+      const target = calculateResumeTarget(media, [ep1File, ep2File], [progress], [], []);
+      expect(target?.label).toBe('Play Next S01E02');
+    });
+
+    it('treats episode at 92% duration as in-progress if outro begins at 95% (950s)', () => {
+      const progress: PlaybackProgress = {
+        id: 'p-1',
+        media_id: media.id,
+        season: 1,
+        episode: 1,
+        position_seconds: 920,
+        duration_seconds: 1000,
+        is_completed: false,
+        updated_at: '2026-11-20T10:00:00Z'
+      };
+      const skipSeg: MediaSkipSegments = {
+        id: 'seg-1',
+        external_id: 'ext-1',
+        provider: 'introdb',
+        media_type: 'tv',
+        season: 1,
+        episode: 1,
+        outro: { start: 950, end: 1000 },
+        status: 'found',
+        updated_at: ''
+      };
+      const target = calculateResumeTarget(media, [ep1File, ep2File], [progress], [], [skipSeg]);
+      expect(target?.label).toBe('Resume S01E01');
+      expect(target?.position).toBe(920);
+    });
+
+    it('treats episode at 85% duration as completed if outro begins earlier at 80% (800s)', () => {
+      const progress: PlaybackProgress = {
+        id: 'p-1',
+        media_id: media.id,
+        season: 1,
+        episode: 1,
+        position_seconds: 850,
+        duration_seconds: 1000,
+        is_completed: false,
+        updated_at: '2026-11-20T10:00:00Z'
+      };
+      const skipSeg: MediaSkipSegments = {
+        id: 'seg-1',
+        external_id: 'ext-1',
+        provider: 'introdb',
+        media_type: 'tv',
+        season: 1,
+        episode: 1,
+        outro: { start: 800, end: 1000 },
+        status: 'found',
+        updated_at: ''
+      };
+      const target = calculateResumeTarget(media, [ep1File, ep2File], [progress], [], [skipSeg]);
+      expect(target?.label).toBe('Play Next S01E02');
+    });
+  });
+
+  describe('recency resolution between Tier 1 (in-progress) and Tier 2 (completed next)', () => {
+    const ep1File: LocalFile = { ...dummyFile, id: 'f-1', season: 1, episode: 1, file_type: 'tv_episode' };
+    const ep2File: LocalFile = { ...dummyFile, id: 'f-2', season: 1, episode: 2, file_type: 'tv_episode' };
+    const ep3File: LocalFile = { ...dummyFile, id: 'f-3', season: 1, episode: 3, file_type: 'tv_episode' };
+    const ep4File: LocalFile = { ...dummyFile, id: 'f-4', season: 1, episode: 4, file_type: 'tv_episode' };
+    const ep5File: LocalFile = { ...dummyFile, id: 'f-5', season: 1, episode: 5, file_type: 'tv_episode' };
+    const allFiles = [ep1File, ep2File, ep3File, ep4File, ep5File];
+
+    it('chooses Tier 1 (Resume) when in-progress episode was watched more recently than last completed episode', () => {
+      // Completed E1 yesterday at 20:00
+      const progCompletedE1: PlaybackProgress = {
+        id: 'p-1',
+        media_id: media.id,
+        season: 1,
+        episode: 1,
+        position_seconds: 1800,
+        duration_seconds: 1800,
+        is_completed: true,
+        updated_at: '2026-11-20T20:00:00Z'
+      };
+      // Watching E2 today at 10:00
+      const progInProgressE2: PlaybackProgress = {
+        id: 'p-2',
+        media_id: media.id,
+        season: 1,
+        episode: 2,
+        position_seconds: 500,
+        duration_seconds: 1800,
+        is_completed: false,
+        updated_at: '2026-11-21T10:00:00Z'
+      };
+
+      const target = calculateResumeTarget(media, allFiles, [progCompletedE1, progInProgressE2]);
+      expect(target?.label).toBe('Resume S01E02');
+      expect(target?.position).toBe(500);
+      expect(target?.hasSavedProgress).toBe(true);
+    });
+
+    it('chooses Tier 2 (Play Next) when another episode was completed more recently than an old in-progress episode', () => {
+      // Started E1 3 weeks ago
+      const progOldInProgressE1: PlaybackProgress = {
+        id: 'p-1',
+        media_id: media.id,
+        season: 1,
+        episode: 1,
+        position_seconds: 400,
+        duration_seconds: 1800,
+        is_completed: false,
+        updated_at: '2026-11-01T12:00:00Z'
+      };
+      // Completed E4 today at 15:00
+      const progCompletedE4: PlaybackProgress = {
+        id: 'p-4',
+        media_id: media.id,
+        season: 1,
+        episode: 4,
+        position_seconds: 1800,
+        duration_seconds: 1800,
+        is_completed: true,
+        updated_at: '2026-11-21T15:00:00Z'
+      };
+
+      const target = calculateResumeTarget(media, allFiles, [progOldInProgressE1, progCompletedE4]);
+      expect(target?.label).toBe('Play Next S01E05');
+      expect(target?.file.id).toBe('f-5');
+      expect(target?.hasSavedProgress).toBe(false);
+    });
+
+    it('chooses Tier 2 when episode was marked watched in historyList with a newer timestamp than progress', () => {
+      // User paused E3 at 11:00
+      const progE3: PlaybackProgress = {
+        id: 'p-3',
+        media_id: media.id,
+        season: 1,
+        episode: 3,
+        position_seconds: 600,
+        duration_seconds: 1800,
+        is_completed: false,
+        updated_at: '2026-11-21T11:00:00Z'
+      };
+      // User marked E3 as watched in historyList at 11:05
+      const historyE3: MediaHistory = {
+        id: 'h-3',
+        media_id: media.id,
+        status: 'Watched Episode',
+        context: 'S01E03',
+        source: 'Manual',
+        created_at: '2026-11-21T11:05:00Z',
+        updated_at: '2026-11-21T11:05:00Z'
+      };
+
+      const target = calculateResumeTarget(media, allFiles, [progE3], [historyE3]);
+      expect(target?.label).toBe('Play Next S01E04');
+      expect(target?.file.id).toBe('f-4');
+    });
   });
 });

@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HeroShowcase } from '../components/HeroShowcase';
 import { MediaRail } from '../components/MediaRail';
-import { Media, MediaCardOrientation, MediaHistory, MediaState } from '../types/media';
+import { Media, MediaCardOrientation, MediaHistory, MediaState, SelectMediaOptions } from '../types/media';
 import { dbService } from '../services/DatabaseService';
-import { getAccentRgb, parseColor } from '../helper/mediaDetailTheme';
+import { animateAccentTransition, getAccentRgb, parseColor } from '../helper/mediaDetailTheme';
 import { useDominantColor } from '../helper/useDominantColour';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
 
@@ -102,17 +102,31 @@ function getHeroCandidates(
 }
 
 interface HomeViewProps {
-  onSelectMedia: (media: Media, clickedCardRect?: DOMRect) => void;
-  onPlayMedia: (media: Media) => void;
+  onSelectMedia: (
+    media: Media,
+    clickedCardRect?: DOMRect,
+    options?: SelectMediaOptions
+  ) => void;
+  onPlayMedia: (
+    media: Media,
+    clickedCardRect?: DOMRect,
+    options?: {
+      type?: 'container' | 'circle';
+      clickPoint?: { x: number; y: number };
+      titleRect?: DOMRect;
+    }
+  ) => void;
   onAccentColorChange: (color?: string) => void;
   isCollapsed?: boolean;
+  isDetailsOpen?: boolean;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
    onSelectMedia,
    onPlayMedia,
    onAccentColorChange,
-   isCollapsed
+   isCollapsed,
+   isDetailsOpen
   }) => {
   const { pagePadding } = useSidebarPadding(isCollapsed);
   const [heroData, setHeroData] = useState<{
@@ -246,38 +260,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       return;
     }
 
-    const currentAccent = getComputedStyle(root).getPropertyValue('--hero-accent').trim() || '#E27D12';
-    const from = parseColor(currentAccent);
-    const to = parseColor(heroAccentColor);
-    if (!from || !to) {
-      root.style.setProperty('--hero-accent', heroAccentColor);
-      root.style.setProperty('--hero-accent-rgb', getAccentRgb(heroAccentColor));
-      root.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${heroAccentColor}, white 20%)`);
-      onAccentColorChange(heroAccentColor);
-      return;
-    }
-
-    const startTime = performance.now();
-    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 850;
-    let frame = 0;
-    const animate = (now: number) => {
-      const progress = duration ? Math.min((now - startTime) / duration, 1) : 1;
-      const eased = 1 - (1 - progress) ** 3;
-      const color = `rgb(${from.map((channel, index) =>
-        Math.round(channel + (to[index] - channel) * eased)
-      ).join(', ')})`;
-      root.style.setProperty('--hero-accent', color);
-      root.style.setProperty('--hero-accent-rgb', getAccentRgb(color));
-      root.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${color}, white 20%)`);
-      onAccentColorChange(color);
-      if (progress < 1) {
-        frame = requestAnimationFrame(animate);
-      } else {
-        onAccentColorChange(heroAccentColor);
-      }
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
+    return animateAccentTransition(heroAccentColor, onAccentColorChange);
   }, [activeHero, dominantColor, heroAccentColor, onAccentColorChange]);
 
   if (heroData.loaded && !heroData.hasMedia && !heroData.loadError) {
@@ -308,7 +291,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
           onActiveMediaChange={handleActiveHeroChange}
           onSwipeAccentChange={handleHeroSwipeAccentChange}
           onSelectMedia={onSelectMedia}
+          onPlayMedia={onPlayMedia}
           contentPaddingLeft={pagePadding}
+          isDetailsOpen={isDetailsOpen}
         />
       )}
 
@@ -320,7 +305,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         }}
       >
         <MediaRail
-          key={`continue-${libraryRevision}`}
+          key="continue"
+          revision={libraryRevision}
           title="Continue Watching / Playing"
           subtitle="Pick up where you left off"
           loadPage={loadContinue}
@@ -330,7 +316,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         />
 
         <MediaRail
-          key={`recent-${libraryRevision}`}
+          key="recent"
+          revision={libraryRevision}
           title="Recently Completed"
           subtitle="Your latest logged watches and plays"
           loadPage={loadRecent}
@@ -341,7 +328,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         />
 
         <MediaRail
-          key={`rewatch-${libraryRevision}`}
+          key="rewatch"
+          revision={libraryRevision}
           title="Rewatch Candidates"
           subtitle="Personal favorites revisited multiple times"
           loadPage={loadRewatch}
@@ -352,7 +340,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         />
 
         <MediaRail
-          key={`local-${libraryRevision}`}
+          key="local"
+          revision={libraryRevision}
           title="Local Library Files"
           subtitle="Detected media files on local system"
           loadPage={loadLocal}
@@ -363,7 +352,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         />
 
         <MediaRail
-          key={`abandoned-${libraryRevision}`}
+          key="abandoned"
+          revision={libraryRevision}
           title="Paused & Abandoned"
           subtitle="Sessions currently on hold"
           loadPage={loadAbandoned}

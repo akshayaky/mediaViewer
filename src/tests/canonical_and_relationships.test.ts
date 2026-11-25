@@ -194,14 +194,6 @@ describe('Canonical Entities, Duplicates & Relationships', () => {
       availability_type: 'Stream',
       last_checked: now
     });
-    await dbService.saveWishlist({
-      id: `delete_wishlist_${Date.now()}`,
-      media_id: mediaId,
-      title: media.title,
-      type: media.type,
-      source: 'Manual',
-      added_at: now
-    });
     await dbService.saveNotionRawRecord({
       id: `delete_notion_${Date.now()}`,
       name_raw: media.title,
@@ -218,7 +210,6 @@ describe('Canonical Entities, Duplicates & Relationships', () => {
     expect(await dbService.getLocalFilesForMedia(mediaId)).toHaveLength(0);
     expect(await dbService.getAvailabilityForMedia(mediaId)).toHaveLength(0);
     expect(await dbService.getExternalIdsForMedia(mediaId)).toHaveLength(0);
-    expect((await dbService.getAllWishlist()).some(item => item.media_id === mediaId)).toBe(false);
     expect((await dbService.getAllNotionRawRecords()).some(record =>
       record.parsed_media_id === mediaId || record.parsed_history_id === historyId
     )).toBe(false);

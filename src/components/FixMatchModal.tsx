@@ -5,6 +5,7 @@ import { tmdbProvider } from '../providers/TMDBProvider';
 import { igdbProvider } from '../providers/IGDBProvider';
 import { searchMediaMetadata, getMetadataSearchKey, getMetadataSearchOptions } from '../services/MediaSearchService';
 import { dbService } from '../services/DatabaseService';
+import { skipSegmentCache } from '../services/skip/SkipSegmentCache';
 import { artworkCacheProvider } from '../providers/ArtworkCacheProvider';
 import { Search, Loader2, X, RefreshCw, CheckCircle2, Film, Tv, Gamepad2 } from 'lucide-react';
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
@@ -200,6 +201,8 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
       };
 
       await dbService.saveMedia(updatedMedia);
+      await dbService.deleteSkipSegmentsForMedia(media.id);
+      skipSegmentCache.preloadSkipSegments(updatedMedia);
 
       if (updatedMedia.poster || updatedMedia.backdrop || updatedMedia.logo) {
         artworkCacheProvider.setCachedArtwork(
@@ -276,6 +279,7 @@ export const FixMatchModal: React.FC<FixMatchModalProps> = ({
                 highlightStyle={{ fontFamily: 'inherit', fontSize: '0.875rem', lineHeight: '1.25rem', letterSpacing: 'normal' }}
                 ariaLabel={`Search ${media.type}`}
                 autoFocus
+                scope="external"
               />
             </div>
 

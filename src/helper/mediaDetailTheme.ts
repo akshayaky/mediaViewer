@@ -153,3 +153,60 @@ export function getMediaTheme(accentColor?: string): MediaTheme {
     } as CSSProperties
   };
 }
+
+/**
+ * Smoothly transitions the application's root accent color CSS variables
+ * (--hero-accent, --hero-accent-rgb, --hero-accent-light) and invokes an optional
+ * callback on each animation frame with cubic ease-out easing over 850ms.
+ */
+export function animateAccentTransition(
+  targetColor: string,
+  onColorChange?: (color: string) => void,
+  duration = 850
+): () => void {
+  if (typeof document === 'undefined') return () => {};
+
+  const root = document.documentElement;
+  const currentAccent = getComputedStyle(root).getPropertyValue('--hero-accent').trim() || '#E27D12';
+  const from = parseColor(currentAccent);
+  const to = parseColor(targetColor);
+
+  const applyColor = (c: string) => {
+    root.style.setProperty('--hero-accent', c);
+    root.style.setProperty('--hero-accent-rgb', getAccentRgb(c));
+    root.style.setProperty('--hero-accent-light', `color-mix(in srgb, ${c}, white 20%)`);
+    onColorChange?.(c);
+  };
+
+  if (!from || !to) {
+    applyColor(targetColor);
+    return () => {};
+  }
+
+  const isReducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  const animDuration = isReducedMotion ? 0 : duration;
+
+  if (animDuration === 0) {
+    applyColor(targetColor);
+    return () => {};
+  }
+
+  const startTime = performance.now();
+  let frame = 0;
+  const animate = (now: number) => {
+    const progress = Math.min((now - startTime) / animDuration, 1);
+    const eased = 1 - (1 - progress) ** 3;
+    const color = `rgb(${from.map((channel, index) =>
+      Math.round(channel + (to[index] - channel) * eased)
+    ).join(', ')})`;
+    applyColor(color);
+    if (progress < 1) {
+      frame = requestAnimationFrame(animate);
+    } else {
+      applyColor(targetColor);
+    }
+  };
+  frame = requestAnimationFrame(animate);
+  return () => cancelAnimationFrame(frame);
+}
+

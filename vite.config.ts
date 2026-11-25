@@ -52,6 +52,11 @@ export default defineConfig(() => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/steam-search/, ''),
       },
+      '/introdb-api': {
+        target: 'https://api.introdb.app',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/introdb-api/, ''),
+      },
     },
   },
 }));

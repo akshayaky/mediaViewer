@@ -1,4 +1,4 @@
-import { Media, LocalFile, Availability, Wishlist, MediaType, CastMember } from '../types/media';
+import { Media, LocalFile, Availability, MediaType, CastMember } from '../types/media';
 
 export interface MetadataSearchResult {
   title: string;
@@ -80,9 +80,4 @@ export interface NotionProvider {
 
 export interface LocalLibraryScanner {
   scanDirectory(path: string, mediaType: MediaType): Promise<LocalFile[]>;
-}
-
-export interface WishlistProvider {
-  name: string;
-  fetchWishlistItems(): Promise<Wishlist[]>;
 }

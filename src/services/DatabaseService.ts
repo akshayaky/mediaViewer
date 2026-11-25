@@ -5,11 +5,11 @@ import {
   MediaState,
   LocalFile,
   Availability,
-  Wishlist,
   NotionRawRecord,
   AppSettings,
   ExternalID,
-  PlaybackProgress
+  PlaybackProgress,
+  MediaSkipSegments
 } from '../types/media';
 import { isEpisodeCompletionStatus } from '../helper/episodeProgress';
 
@@ -150,19 +150,6 @@ export class DatabaseService {
         last_checked TEXT NOT NULL,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
       )`,
-      `CREATE TABLE IF NOT EXISTS wishlist (
-        id TEXT PRIMARY KEY,
-        media_id TEXT,
-        title TEXT NOT NULL,
-        type TEXT NOT NULL,
-        source TEXT NOT NULL,
-        external_url TEXT,
-        notes TEXT,
-        added_at TEXT NOT NULL,
-        target_release_date TEXT,
-        poster TEXT,
-        FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE SET NULL
-      )`,
       `CREATE TABLE IF NOT EXISTS notion_raw_records (
         id TEXT PRIMARY KEY,
         name_raw TEXT NOT NULL,
@@ -198,6 +185,25 @@ export class DatabaseService {
         updated_at TEXT NOT NULL,
         is_completed INTEGER DEFAULT 0,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
+      )`,
+      `CREATE TABLE IF NOT EXISTS media_skip_segments (
+        id TEXT PRIMARY KEY,
+        media_id TEXT,
+        external_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        season INTEGER DEFAULT 0,
+        episode INTEGER DEFAULT 0,
+        intro_start REAL,
+        intro_end REAL,
+        recap_start REAL,
+        recap_end REAL,
+        outro_start REAL,
+        outro_end REAL,
+        raw_data TEXT,
+        status TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
       )`
     ];
 
@@ -206,6 +212,7 @@ export class DatabaseService {
     }
 
     // A trigger keeps related cleanup in the same atomic statement as the media deletion.
+    await this.db.execute('DROP TRIGGER IF EXISTS delete_media_related_records');
     await this.db.execute(`
       CREATE TRIGGER IF NOT EXISTS delete_media_related_records
       BEFORE DELETE ON media
@@ -218,11 +225,12 @@ export class DatabaseService {
         DELETE FROM media_history WHERE media_id = OLD.id;
         DELETE FROM local_file WHERE media_id = OLD.id;
         DELETE FROM availability WHERE media_id = OLD.id;
-        DELETE FROM wishlist WHERE media_id = OLD.id;
         DELETE FROM external_ids WHERE media_id = OLD.id;
         DELETE FROM playback_progress WHERE media_id = OLD.id;
+        DELETE FROM media_skip_segments WHERE media_id = OLD.id;
       END;
     `);
+    await this.db.execute('DROP TABLE IF EXISTS wishlist');
 
     // Migrations for pre-existing SQLite databases
     await this.addColumnIfNotExists('media', 'metadata_refreshed_at', 'TEXT');
@@ -237,6 +245,8 @@ export class DatabaseService {
     await this.addColumnIfNotExists('local_file', 'end_episode', 'INTEGER');
     await this.addColumnIfNotExists('local_file', 'parsed_title', 'TEXT');
     await this.addColumnIfNotExists('local_file', 'parsed_year', 'INTEGER');
+    await this.addColumnIfNotExists('media_skip_segments', 'recap_start', 'REAL');
+    await this.addColumnIfNotExists('media_skip_segments', 'recap_end', 'REAL');
 
     try {
       await this.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_external_ids_provider_ext ON external_ids(provider, external_id);');
@@ -249,6 +259,12 @@ export class DatabaseService {
     } catch {
       // Index already exists
     }
+    try {
+      await this.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_skip_segments_lookup ON media_skip_segments(external_id, season, episode);');
+    } catch {
+      // Index already exists
+    }
+    await this.db.execute('CREATE INDEX IF NOT EXISTS idx_skip_segments_media ON media_skip_segments(media_id, season, episode);');
     await this.db.execute('CREATE INDEX IF NOT EXISTS idx_media_history_media_created ON media_history(media_id, created_at DESC);');
     await this.db.execute('CREATE INDEX IF NOT EXISTS idx_local_file_media ON local_file(media_id);');
 
@@ -589,10 +605,7 @@ export class DatabaseService {
       // 3. Relink availability
       await this.db.execute('UPDATE availability SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
 
-      // 4. Relink wishlist
-      await this.db.execute('UPDATE wishlist SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
-
-      // 5. Relink notion raw records
+      // 4. Relink notion raw records
       await this.db.execute('UPDATE notion_raw_records SET parsed_media_id = ? WHERE parsed_media_id = ?', [survivingId, duplicateId]);
 
       // 6. Handle external_ids reassignments without duplicate provider/external_id conflicts
@@ -605,6 +618,9 @@ export class DatabaseService {
         [duplicateId, survivingId]
       );
       await this.db.execute('UPDATE external_ids SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+
+      // Relink skip segments
+      await this.db.execute('UPDATE media_skip_segments SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
 
       // 7. Delete duplicate media row
       await this.db.execute('DELETE FROM media WHERE id = ?', [duplicateId]);
@@ -641,8 +657,6 @@ export class DatabaseService {
     for (const media of seededMedia) {
       await this.deleteMedia(media.id);
     }
-
-    await this.db.execute('DELETE FROM wishlist WHERE id IN (?, ?)', ['wish_1', 'wish_2']);
   }
 
   public async clearMediaByType(type: Media['type']): Promise<number> {
@@ -718,6 +732,20 @@ export class DatabaseService {
        ON CONFLICT(id) DO UPDATE SET provider=excluded.provider, external_id=excluded.external_id`,
       [ext.id, ext.media_id, ext.provider, ext.external_id]
     );
+  }
+
+  public async replaceExternalIdsForMedia(media_id: string, provider: string, external_id: string): Promise<void> {
+    if (!this.db) return;
+    await this.db.execute(
+      'DELETE FROM external_ids WHERE media_id = ? AND provider = ?',
+      [media_id, provider]
+    );
+    await this.saveExternalId({
+      id: `ext_${provider.toLowerCase()}_${media_id}`,
+      media_id,
+      provider,
+      external_id
+    });
   }
 
   // ==========================================
@@ -1035,57 +1063,7 @@ export class DatabaseService {
   }
 
   // ==========================================
-  // 6. WISHLIST REPOSITORY
-  // ==========================================
-
-  /** Retrieves all wishlist items sorted newest first. */
-  public async getAllWishlist(): Promise<Wishlist[]> {
-    if (!this.db) return [];
-    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM wishlist ORDER BY added_at DESC');
-    return rows.map(row => ({
-      id: row.id,
-      media_id: row.media_id || undefined,
-      title: row.title,
-      type: row.type,
-      source: row.source,
-      external_url: row.external_url || undefined,
-      notes: row.notes || undefined,
-      added_at: row.added_at,
-      target_release_date: row.target_release_date || undefined,
-      poster: row.poster || undefined
-    }));
-  }
-
-  public async saveWishlist(item: Wishlist): Promise<void> {
-    if (!this.db) return;
-    await this.db.execute(
-      `INSERT INTO wishlist (id, media_id, title, type, source, external_url, notes, added_at, target_release_date, poster)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         media_id=excluded.media_id,
-         title=excluded.title,
-         type=excluded.type,
-         source=excluded.source,
-         external_url=excluded.external_url,
-         notes=excluded.notes,
-         poster=excluded.poster`,
-      [
-        item.id,
-        item.media_id || null,
-        item.title,
-        item.type,
-        item.source,
-        item.external_url || null,
-        item.notes || null,
-        item.added_at,
-        item.target_release_date || null,
-        item.poster || null
-      ]
-    );
-  }
-
-  // ==========================================
-  // 7. NOTION RAW RECORDS REPOSITORY
+  // 6. NOTION RAW RECORDS REPOSITORY
   // ==========================================
 
   /** Persists original un-altered Notion CSV row records. */
@@ -1368,6 +1346,132 @@ export class DatabaseService {
         });
       }
     }
+  }
+  // ==========================================
+  // 12. SKIP SEGMENTS REPOSITORY
+  // ==========================================
+
+  public async getSkipSegments(media_id: string, season: number = 0, episode: number = 0): Promise<MediaSkipSegments | null> {
+    if (!this.db) return null;
+    const rows = await this.db.select<Record<string, unknown>[]>(
+      'SELECT * FROM media_skip_segments WHERE media_id = ? AND season = ? AND episode = ? LIMIT 1',
+      [media_id, season, episode]
+    );
+    if (rows.length > 0) {
+      return this.mapSkipSegments(rows[0]);
+    }
+    return null;
+  }
+
+  public async getAllSkipSegmentsForMedia(media_id: string): Promise<MediaSkipSegments[]> {
+    if (!this.db) return [];
+    const rows = await this.db.select<Record<string, unknown>[]>(
+      'SELECT * FROM media_skip_segments WHERE media_id = ?',
+      [media_id]
+    );
+    return rows.map(r => this.mapSkipSegments(r));
+  }
+
+  public async getSkipSegmentsByExternalId(external_id: string, season: number = 0, episode: number = 0): Promise<MediaSkipSegments | null> {
+    if (!this.db) return null;
+    const rows = await this.db.select<Record<string, unknown>[]>(
+      'SELECT * FROM media_skip_segments WHERE external_id = ? AND season = ? AND episode = ? LIMIT 1',
+      [external_id, season, episode]
+    );
+    if (rows.length > 0) {
+      return this.mapSkipSegments(rows[0]);
+    }
+    return null;
+  }
+
+  public async saveSkipSegments(segments: MediaSkipSegments): Promise<void> {
+    if (!this.db) return;
+    const introStart = segments.intro?.start ?? null;
+    const introEnd = segments.intro?.end ?? null;
+    const recapStart = segments.recap?.start ?? null;
+    const recapEnd = segments.recap?.end ?? null;
+    const outroStart = segments.outro?.start ?? null;
+    const outroEnd = segments.outro?.end ?? null;
+
+    await this.db.execute(
+      `INSERT INTO media_skip_segments (
+        id, media_id, external_id, provider, media_type, season, episode,
+        intro_start, intro_end, recap_start, recap_end, outro_start, outro_end, raw_data, status, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(external_id, season, episode) DO UPDATE SET
+        media_id = COALESCE(excluded.media_id, media_skip_segments.media_id),
+        provider = excluded.provider,
+        media_type = excluded.media_type,
+        intro_start = excluded.intro_start,
+        intro_end = excluded.intro_end,
+        recap_start = excluded.recap_start,
+        recap_end = excluded.recap_end,
+        outro_start = excluded.outro_start,
+        outro_end = excluded.outro_end,
+        raw_data = excluded.raw_data,
+        status = excluded.status,
+        updated_at = excluded.updated_at`,
+      [
+        segments.id,
+        segments.media_id || null,
+        segments.external_id,
+        segments.provider,
+        segments.media_type,
+        segments.season ?? 0,
+        segments.episode ?? 0,
+        introStart,
+        introEnd,
+        recapStart,
+        recapEnd,
+        outroStart,
+        outroEnd,
+        segments.raw_data || null,
+        segments.status,
+        segments.updated_at
+      ]
+    );
+  }
+
+  public async deleteSkipSegmentsForMedia(media_id: string): Promise<void> {
+    if (!this.db) return;
+    await this.db.execute('DELETE FROM media_skip_segments WHERE media_id = ?', [media_id]);
+  }
+
+  private mapSkipSegments(row: Record<string, unknown>): MediaSkipSegments {
+    const introStart = row.intro_start !== null && row.intro_start !== undefined ? Number(row.intro_start) : null;
+    const introEnd = row.intro_end !== null && row.intro_end !== undefined ? Number(row.intro_end) : null;
+    const recapStart = row.recap_start !== null && row.recap_start !== undefined ? Number(row.recap_start) : null;
+    const recapEnd = row.recap_end !== null && row.recap_end !== undefined ? Number(row.recap_end) : null;
+    const outroStart = row.outro_start !== null && row.outro_start !== undefined ? Number(row.outro_start) : null;
+    const outroEnd = row.outro_end !== null && row.outro_end !== undefined ? Number(row.outro_end) : null;
+
+    const intro = introStart !== null && introEnd !== null && introEnd > introStart
+      ? { start: introStart, end: introEnd }
+      : null;
+
+    const recap = recapStart !== null && recapEnd !== null && recapEnd > recapStart
+      ? { start: recapStart, end: recapEnd }
+      : null;
+
+    const outro = outroStart !== null && outroEnd !== null && outroEnd > outroStart
+      ? { start: outroStart, end: outroEnd }
+      : null;
+
+    return {
+      id: row.id as string,
+      media_id: (row.media_id as string) || undefined,
+      external_id: row.external_id as string,
+      provider: row.provider as string,
+      media_type: row.media_type as 'movie' | 'tv',
+      season: Number(row.season || 0),
+      episode: Number(row.episode || 0),
+      intro,
+      recap,
+      outro,
+      status: row.status as 'found' | 'not_found' | 'error',
+      updated_at: row.updated_at as string,
+      raw_data: (row.raw_data as string) || undefined
+    };
   }
 }
 
