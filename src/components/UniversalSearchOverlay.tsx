@@ -13,6 +13,41 @@ type SearchResult =
   | { kind: 'file'; file: LocalFile; media?: Media; score: number }
   | { kind: 'external'; candidate: MetadataSearchResult; score: number };
 
+interface FloatingFilterVisual {
+  key: string;
+  kind: 'cast' | 'publisher' | 'developer';
+  label: string;
+  imageUrl: string;
+  sourceTokenValue: string;
+  style: React.CSSProperties;
+}
+
+const PERIMETER_SLOTS: Array<{ top: number; left: number }> = [
+  { top: 14, left: 8 },
+  { top: 16, left: 84 },
+  { top: 42, left: 6 },
+  { top: 40, left: 86 },
+  { top: 68, left: 10 },
+  { top: 66, left: 82 },
+  { top: 82, left: 26 },
+  { top: 82, left: 66 },
+  { top: 6, left: 26 },
+  { top: 6, left: 68 }
+];
+
+function hashString(str: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function normalizeFilterToken(value: string): string {
+  return value.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+}
+
 interface UniversalSearchOverlayProps {
   isOpen: boolean;
   initialQuery?: string;
@@ -89,6 +124,7 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
   const [query, setQuery] = useState('');
   const [media, setMedia] = useState<Media[]>([]);
   const [files, setFiles] = useState<LocalFile[]>([]);
+  const [companyLogos, setCompanyLogos] = useState<Record<string, string>>({});
   const [historyByMediaId, setHistoryByMediaId] = useState<Map<string, MediaHistory>>(new Map());
   const [externalResults, setExternalResults] = useState<MetadataSearchResult[]>([]);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
@@ -112,11 +148,17 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
     inputRef.current?.focus();
     let isMounted = true;
     setIsLoadingLibrary(true);
-    Promise.all([dbService.getAllMedia(), dbService.getAllLocalFiles(), dbService.getAllHistory()])
-      .then(([loadedMedia, loadedFiles, loadedHistory]) => {
+    Promise.all([
+      dbService.getAllMedia(),
+      dbService.getAllLocalFiles(),
+      dbService.getAllHistory(),
+      dbService.getCompanyLogos()
+    ])
+      .then(([loadedMedia, loadedFiles, loadedHistory, loadedCompanyLogos]) => {
         if (!isMounted) return;
         setMedia(loadedMedia);
         setFiles(loadedFiles);
+        setCompanyLogos(loadedCompanyLogos);
         const histMap = new Map<string, MediaHistory>();
         for (const h of loadedHistory) {
           if (!histMap.has(h.media_id)) {
@@ -305,6 +347,109 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
       } as const));
   const results: SearchResult[] = [...localResults, ...externalEntries];
 
+  const floatingFilterVisuals = useMemo<FloatingFilterVisual[]>(() => {
+    if (!parsedQuery.filters.length) return [];
+
+    const collected: Array<{
+      key: string;
+      kind: 'cast' | 'publisher' | 'developer';
+      label: string;
+      imageUrl: string;
+      sourceTokenValue: string;
+    }> = [];
+    const seenKeys = new Set<string>();
+
+    const allCast = media.flatMap(item => item.cast || []);
+    const companyLogoEntries = new Map<string, { name: string; url: string }>();
+    for (const [name, url] of Object.entries(companyLogos)) {
+      if (url) companyLogoEntries.set(normalizeFilterToken(name), { name, url });
+    }
+    for (const item of media) {
+      if (item.publisher && item.publisher_logo) {
+        companyLogoEntries.set(normalizeFilterToken(item.publisher), { name: item.publisher, url: item.publisher_logo });
+      }
+      if (item.developer && item.developer_logo) {
+        companyLogoEntries.set(normalizeFilterToken(item.developer), { name: item.developer, url: item.developer_logo });
+      }
+    }
+
+    for (const filter of parsedQuery.filters) {
+      if (filter.kind === 'cast') {
+        const needle = normalizeFilterToken(filter.cast);
+        if (!needle) continue;
+        const exactMatches = allCast.filter(c => c.profile_path && normalizeFilterToken(c.name) === needle);
+        const partialMatches = allCast.filter(
+          c => c.profile_path && normalizeFilterToken(c.name) !== needle && normalizeFilterToken(c.name).includes(needle)
+        );
+        for (const matchedCast of [...exactMatches, ...partialMatches]) {
+          if (!matchedCast.profile_path) continue;
+          const key = `cast:${matchedCast.name.toLocaleLowerCase()}`;
+          if (!seenKeys.has(key)) {
+            seenKeys.add(key);
+            collected.push({
+              key,
+              kind: 'cast',
+              label: matchedCast.name,
+              imageUrl: matchedCast.profile_path,
+              sourceTokenValue: filter.cast
+            });
+          }
+          if (collected.length >= PERIMETER_SLOTS.length) break;
+        }
+      } else if (filter.kind === 'publisher' || filter.kind === 'developer') {
+        const rawValue = filter.kind === 'publisher' ? filter.publisher : filter.developer;
+        const needle = normalizeFilterToken(rawValue);
+        if (!needle) continue;
+        const exactMatch = companyLogoEntries.get(needle);
+        const matches: Array<{ name: string; url: string }> = exactMatch ? [exactMatch] : [];
+        for (const [normName, entry] of companyLogoEntries.entries()) {
+          if (normName !== needle && normName.includes(needle)) {
+            matches.push(entry);
+          }
+        }
+        for (const matched of matches) {
+          const key = `${filter.kind}:${matched.name.toLocaleLowerCase()}`;
+          if (!seenKeys.has(key)) {
+            seenKeys.add(key);
+            collected.push({
+              key,
+              kind: filter.kind,
+              label: matched.name,
+              imageUrl: matched.url,
+              sourceTokenValue: rawValue
+            });
+          }
+          if (collected.length >= PERIMETER_SLOTS.length) break;
+        }
+      }
+      if (collected.length >= PERIMETER_SLOTS.length) break;
+    }
+
+    const usedSlots = new Set<number>();
+    return collected.slice(0, PERIMETER_SLOTS.length).map(item => {
+      const h = hashString(item.key);
+      let slotIdx = h % PERIMETER_SLOTS.length;
+      while (usedSlots.has(slotIdx)) {
+        slotIdx = (slotIdx + 1) % PERIMETER_SLOTS.length;
+      }
+      usedSlots.add(slotIdx);
+
+      const base = PERIMETER_SLOTS[slotIdx];
+      const jitterX = ((h >>> 4) % 5) - 2; // -2% to +2%
+      const jitterY = ((h >>> 8) % 5) - 2; // -2% to +2%
+      const rotate = ((h >>> 12) % 13) - 6; // -6deg to +6deg
+
+      return {
+        ...item,
+        style: {
+          top: `${Math.min(86, Math.max(4, base.top + jitterY))}%`,
+          left: `${Math.min(88, Math.max(4, base.left + jitterX))}%`,
+          transform: `rotate(${rotate}deg)`
+        }
+      };
+    });
+  }, [parsedQuery.filters, media, companyLogos]);
+
   useEffect(() => {
     setActiveIndex(index => Math.min(index, Math.max(0, results.length - 1)));
   }, [results.length]);
@@ -361,6 +506,21 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
     }
   };
 
+  const handleSelectFloatingVisual = useCallback((item: FloatingFilterVisual) => {
+    const completedToken = `${item.kind}:${item.label.trim().replace(/\s+/g, '-')}`;
+    const escapedSource = item.sourceTokenValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const tokenRegex = new RegExp(`(^|\\s)${item.kind}:${escapedSource}(?=\\s|$)`, 'i');
+    setQuery(prev => {
+      if (tokenRegex.test(prev)) {
+        const replaced = prev.replace(tokenRegex, `$1${completedToken}`);
+        return replaced.endsWith(' ') ? replaced : `${replaced} `;
+      }
+      const trimmed = prev.trimEnd();
+      return trimmed ? `${trimmed} ${completedToken} ` : `${completedToken} `;
+    });
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
+
   if (!isOpen) return null;
 
   return (
@@ -370,6 +530,40 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
         if (event.target === event.currentTarget) onClose();
       }}
     >
+      {floatingFilterVisuals.map(item => (
+        <button
+          key={item.key}
+          type="button"
+          style={item.style}
+          title={`Select ${item.kind}: ${item.label}`}
+          onClick={event => {
+            event.stopPropagation();
+            handleSelectFloatingVisual(item);
+          }}
+          className="fixed z-0 hidden sm:flex flex-col items-center gap-1.5 select-none animate-fadeIn opacity-90 transition-all duration-200 cursor-pointer hover:scale-110 hover:opacity-100 focus:outline-none"
+        >
+          {item.kind === 'cast' ? (
+            <div className="h-16 w-16 md:h-20 md:w-20 overflow-hidden rounded-full border border-white/25 bg-white/10 p-0.5 shadow-2xl backdrop-blur-md">
+              <img
+                src={item.imageUrl}
+                alt={item.label}
+                className="h-full w-full rounded-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/25 bg-white/10 px-3.5 py-2 shadow-2xl backdrop-blur-md">
+              <img
+                src={item.imageUrl}
+                alt={item.label}
+                className="h-7 max-w-[110px] w-auto object-contain"
+              />
+            </div>
+          )}
+          <span className="max-w-[130px] truncate rounded-full border border-white/10 bg-black/55 px-2.5 py-0.5 text-[10px] font-medium text-white/80 backdrop-blur-sm">
+            {item.label}
+          </span>
+        </button>
+      ))}
       <section
         role="dialog"
         aria-modal="true"
