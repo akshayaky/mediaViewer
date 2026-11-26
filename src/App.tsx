@@ -9,6 +9,7 @@ import { UnmatchedInboxView } from './views/UnmatchedInboxView';
 import { UniversalSearchOverlay } from './components/UniversalSearchOverlay';
 import { TitleBarDragRegion } from './components/TitleBarDragRegion';
 import { dbService } from './services/DatabaseService';
+import { syncEngine } from './sync/syncEngine';
 import { Media, MediaHistory, SelectMediaOptions } from './types/media';
 import { animateAccentTransition, getAccentRgb } from './helper/mediaDetailTheme';
 
@@ -143,6 +144,7 @@ export function App() {
         await dbService.removeLegacySeedData();
         const settings = await dbService.getSettings();
         document.body.classList.toggle('sidebar-hide-enabled', settings.sidebar_hide_enabled !== false);
+        void syncEngine.startAutoSync();
       } catch (err) {
         console.error('Failed to initialize database:', err);
       } finally {
@@ -150,6 +152,9 @@ export function App() {
       }
     }
     initApp();
+    return () => {
+      syncEngine.stopAutoSync();
+    };
   }, []);
 
   useEffect(() => {
@@ -359,6 +364,8 @@ export function App() {
       }
 
       if (typeof container.animate === 'function') {
+        container.style.willChange = 'transform, clip-path';
+        container.style.contain = 'paint';
         const circleAnim = container.animate(
           [
             {
@@ -394,47 +401,60 @@ export function App() {
         }
 
         // Smoothly move the hero title/logo element to its detail view position
-        if (origin.heroTitleRect) {
-          const detailTitleEl = container.querySelector<HTMLElement>('.mdv-title-lockup:not(.hidden)');
-          if (detailTitleEl) {
-            const detailTitleRect = detailTitleEl.getBoundingClientRect();
-            const titleDx = origin.heroTitleRect.left - detailTitleRect.left;
-            const titleDy = origin.heroTitleRect.top - detailTitleRect.top;
-            origin.titleDx = titleDx;
-            origin.titleDy = titleDy;
+        const detailTitleEl = origin.heroTitleRect
+          ? container.querySelector<HTMLElement>('.mdv-title-lockup:not(.hidden)')
+          : null;
+        if (origin.heroTitleRect && detailTitleEl) {
+          const detailTitleRect = detailTitleEl.getBoundingClientRect();
+          const titleDx = origin.heroTitleRect.left - detailTitleRect.left;
+          const titleDy = origin.heroTitleRect.top - detailTitleRect.top;
+          origin.titleDx = titleDx;
+          origin.titleDy = titleDy;
 
-            if (typeof detailTitleEl.animate === 'function') {
-              const titleAnim = detailTitleEl.animate(
-                [
-                  { transform: `translate3d(${titleDx}px, ${titleDy}px, 0)` },
-                  { transform: 'translate3d(0px, 0px, 0)' }
-                ],
-                {
-                  duration: openDuration,
-                  easing: openEasing,
-                  fill: 'forwards'
-                }
-              );
-              activeAnimationsRef.current.push(titleAnim);
-            }
+          if (typeof detailTitleEl.animate === 'function') {
+            detailTitleEl.style.willChange = 'transform';
+            const titleAnim = detailTitleEl.animate(
+              [
+                { transform: `translate3d(${titleDx}px, ${titleDy}px, 0)` },
+                { transform: 'translate3d(0px, 0px, 0)' }
+              ],
+              {
+                duration: openDuration,
+                easing: openEasing,
+                fill: 'forwards'
+              }
+            );
+            activeAnimationsRef.current.push(titleAnim);
+          }
 
-            const heroTitleEl = homeScrollRef.current?.querySelector<HTMLElement>('.hero-title-lockup:not(.hidden)');
-            if (heroTitleEl && typeof heroTitleEl.animate === 'function') {
-              const heroTitleAnim = heroTitleEl.animate(
-                [
-                  { transform: 'translate3d(0px, 0px, 0)' },
-                  { transform: `translate3d(${-titleDx}px, ${-titleDy}px, 0)` }
-                ],
-                {
-                  duration: openDuration,
-                  easing: openEasing,
-                  fill: 'forwards'
-                }
-              );
-              activeAnimationsRef.current.push(heroTitleAnim);
-            }
+          const heroTitleEl = homeScrollRef.current?.querySelector<HTMLElement>('.hero-title-lockup:not(.hidden)');
+          if (heroTitleEl && typeof heroTitleEl.animate === 'function') {
+            const heroTitleAnim = heroTitleEl.animate(
+              [
+                { transform: 'translate3d(0px, 0px, 0)' },
+                { transform: `translate3d(${-titleDx}px, ${-titleDy}px, 0)` }
+              ],
+              {
+                duration: openDuration,
+                easing: openEasing,
+                fill: 'forwards'
+              }
+            );
+            activeAnimationsRef.current.push(heroTitleAnim);
           }
         }
+
+        const clearCircleAnimationStyles = () => {
+          if (container) {
+            container.style.pointerEvents = '';
+            container.style.clipPath = '';
+            container.style.willChange = '';
+            container.style.contain = '';
+          }
+          if (detailTitleEl) {
+            detailTitleEl.style.willChange = '';
+          }
+        };
 
         circleAnim.onfinish = () => {
           const anims = activeAnimationsRef.current;
@@ -442,17 +462,12 @@ export function App() {
           anims.forEach(a => {
             try { a.cancel(); } catch { /* ignore */ }
           });
-          if (container) {
-            container.style.pointerEvents = '';
-            container.style.clipPath = '';
-          }
+          clearCircleAnimationStyles();
         };
 
         circleAnim.oncancel = () => {
           activeAnimationsRef.current = [];
-          if (container) {
-            container.style.pointerEvents = '';
-          }
+          clearCircleAnimationStyles();
         };
       }
       return;
@@ -465,6 +480,11 @@ export function App() {
     }
 
     if (typeof container.animate === 'function') {
+      container.style.willChange = 'transform, clip-path';
+      container.style.contain = 'paint';
+      if (appScreenLayer) {
+        appScreenLayer.style.willChange = 'opacity';
+      }
       // 1. Container Transform (translate, uniform scale, clip-path: inset with corner radius)
       const containerAnim = container.animate(
         [
@@ -532,6 +552,8 @@ export function App() {
           container.style.transform = '';
           container.style.clipPath = '';
           container.style.borderRadius = '';
+          container.style.willChange = '';
+          container.style.contain = '';
         }
         if (itemLayer) {
           itemLayer.style.display = 'none';
@@ -539,6 +561,7 @@ export function App() {
         if (appScreenLayer) {
           appScreenLayer.style.pointerEvents = '';
           appScreenLayer.style.opacity = '1';
+          appScreenLayer.style.willChange = '';
         }
       };
 
@@ -547,9 +570,12 @@ export function App() {
         activeAnimationsRef.current = [];
         if (container) {
           container.style.pointerEvents = '';
+          container.style.willChange = '';
+          container.style.contain = '';
         }
         if (appScreenLayer) {
           appScreenLayer.style.pointerEvents = '';
+          appScreenLayer.style.willChange = '';
         }
       };
     }
@@ -629,9 +655,12 @@ export function App() {
         requestAnimationFrame(() => {
           if (container) {
             container.style.display = 'none';
+            container.style.willChange = '';
+            container.style.contain = '';
           }
           if (appScreenLayer) {
             appScreenLayer.style.pointerEvents = '';
+            appScreenLayer.style.willChange = '';
           }
           const heroTitleEl = homeScrollRef.current?.querySelector<HTMLElement>('.hero-title-lockup');
           if (heroTitleEl) {
@@ -662,6 +691,8 @@ export function App() {
         ));
 
         container.style.pointerEvents = 'none';
+        container.style.willChange = 'transform, clip-path';
+        container.style.contain = 'paint';
 
         const exitCircleAnim = container.animate(
           [
@@ -769,6 +800,11 @@ export function App() {
 
       container.style.transformOrigin = '0 0';
       container.style.pointerEvents = 'none';
+      container.style.willChange = 'transform, clip-path';
+      container.style.contain = 'paint';
+      if (appScreenLayer) {
+        appScreenLayer.style.willChange = 'opacity';
+      }
 
       // 1. Container Transform in Reverse (translate, uniform scale, clip-path: inset with corner radius)
       const exitAnim = container.animate(
@@ -1126,9 +1162,7 @@ export function App() {
             ref={detailContainerRef}
             className="absolute inset-0 z-10 overflow-hidden"
             style={{
-              backgroundColor: selectedAccentColor || selectedMedia?.accent_color || '#423e3f',
-              willChange: 'transform, clip-path',
-              contain: 'paint'
+              backgroundColor: selectedAccentColor || selectedMedia?.accent_color || '#423e3f'
             }}
           >
             {/* Item Layer: crossfades out over first 25% of open, fades back in over last 25% of close */}
@@ -1192,7 +1226,6 @@ export function App() {
             <div
               ref={appScreenLayerRef}
               className="mdv-detail-scroll-container w-full h-full"
-              style={{ willChange: 'opacity' }}
             >
               {renderDetailView()}
             </div>

@@ -1,5 +1,6 @@
 mod native_player;
 mod stream_server;
+mod sync_server;
 
 use std::path::Path;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -187,9 +188,16 @@ pub mod urlencoding {
 
 
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn set_fullscreen(window: tauri::Window, fullscreen: bool) -> Result<(), String> {
     window.set_fullscreen(fullscreen).map_err(|e| e.to_string())
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn set_fullscreen(_window: tauri::Window, _fullscreen: bool) -> Result<(), String> {
+    Ok(())
 }
 
 #[tauri::command]
@@ -197,11 +205,19 @@ fn is_fullscreen(window: tauri::Window) -> Result<bool, String> {
     window.is_fullscreen().map_err(|e| e.to_string())
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn minimize_window(window: tauri::Window) -> Result<(), String> {
     window.minimize().map_err(|e| e.to_string())
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn minimize_window(_window: tauri::Window) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn toggle_maximize_window(window: tauri::Window) -> Result<(), String> {
     if window.is_maximized().map_err(|e| e.to_string())? {
@@ -209,6 +225,12 @@ fn toggle_maximize_window(window: tauri::Window) -> Result<(), String> {
     } else {
         window.maximize().map_err(|e| e.to_string())
     }
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn toggle_maximize_window(_window: tauri::Window) -> Result<(), String> {
+    Ok(())
 }
 
 #[tauri::command]
@@ -225,6 +247,7 @@ fn is_window_maximized(window: tauri::Window) -> Result<bool, String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(native_player::PlayerManager::new())
+        .manage(sync_server::SyncServerState::new())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
@@ -261,7 +284,12 @@ pub fn run() {
             minimize_window,
             toggle_maximize_window,
             close_window,
-            is_window_maximized
+            is_window_maximized,
+            sync_server::sync_server_get_local_ips,
+            sync_server::sync_server_start,
+            sync_server::sync_server_stop,
+            sync_server::sync_server_respond,
+            sync_server::sync_http_request
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

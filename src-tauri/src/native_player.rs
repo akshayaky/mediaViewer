@@ -1081,6 +1081,8 @@ impl NativePlayer {
         s.is_ready = false;
         s.is_frame_ready = false;
         s.error = None;
+        drop(s);
+        Self::emit_state(&self.app_handle, &self.state);
         Ok(())
     }
 
@@ -1091,6 +1093,8 @@ impl NativePlayer {
         let mut s = self.state.lock().unwrap();
         s.is_paused = false;
         s.is_playing = true;
+        drop(s);
+        Self::emit_state(&self.app_handle, &self.state);
         Ok(())
     }
 
@@ -1101,6 +1105,8 @@ impl NativePlayer {
         let mut s = self.state.lock().unwrap();
         s.is_paused = true;
         s.is_playing = false;
+        drop(s);
+        Self::emit_state(&self.app_handle, &self.state);
         Ok(())
     }
 

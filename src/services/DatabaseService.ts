@@ -12,6 +12,7 @@ import {
   MediaSkipSegments
 } from '../types/media';
 import { isEpisodeCompletionStatus } from '../helper/episodeProgress';
+import type { SqliteExecutor } from '../sync/types';
 
 export type HomeRailSection = 'continue' | 'recent' | 'rewatch' | 'local' | 'abandoned';
 
@@ -34,6 +35,7 @@ export interface HomeHeroData {
 export class DatabaseService {
   private db: DatabaseTauri | null = null;
   private initialized = false;
+  private localDeviceId: string | null = null;
   private inMemoryStore = new Map<string, string>();
 
   private getItem(key: string): string | null {
@@ -68,6 +70,48 @@ export class DatabaseService {
     await this.runMigrations();
     this.initialized = true;
     return this.db;
+  }
+
+  /** Exposes the active SQLite executor for isolated sync modules. */
+  public async getSqliteExecutor(): Promise<SqliteExecutor> {
+    return this.init();
+  }
+
+  /** Returns the persistent local device identifier used for sync provenance. */
+  public async getLocalDeviceId(): Promise<string> {
+    if (!this.db) {
+      await this.init();
+    }
+    return this.resolveLocalDeviceId();
+  }
+
+  private async resolveLocalDeviceId(): Promise<string> {
+    if (this.localDeviceId) {
+      return this.localDeviceId;
+    }
+    if (!this.db) {
+      this.localDeviceId = `dev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      return this.localDeviceId;
+    }
+    const rows = await this.db.select<{ value: string }[]>(
+      'SELECT value FROM settings WHERE key = ? LIMIT 1',
+      ['sync_device_id']
+    );
+    if (rows[0]?.value) {
+      this.localDeviceId = rows[0].value;
+      return this.localDeviceId;
+    }
+    const generated =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? `dev_${crypto.randomUUID()}`
+        : `dev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    await this.db.execute(
+      `INSERT INTO settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      ['sync_device_id', generated]
+    );
+    this.localDeviceId = generated;
+    return generated;
   }
 
   private async addColumnIfNotExists(table: string, column: string, type: string): Promise<void> {
@@ -204,6 +248,17 @@ export class DatabaseService {
         status TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
+      )`,
+      `CREATE TABLE IF NOT EXISTS sync_devices (
+        device_id TEXT PRIMARY KEY,
+        device_name TEXT NOT NULL,
+        shared_secret TEXT,
+        last_ip TEXT,
+        last_port INTEGER,
+        last_synced_at TEXT,
+        peer_cursor TEXT,
+        paired_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       )`
     ];
 
@@ -248,25 +303,56 @@ export class DatabaseService {
     await this.addColumnIfNotExists('media_skip_segments', 'recap_start', 'REAL');
     await this.addColumnIfNotExists('media_skip_segments', 'recap_end', 'REAL');
 
-    try {
-      await this.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_external_ids_provider_ext ON external_ids(provider, external_id);');
-    } catch {
-      // Index already exists
-    }
+    // Sync metadata columns for incremental delta sync & soft-delete tombstones
+    await this.addColumnIfNotExists('media', 'deleted_at', 'TEXT');
+    await this.addColumnIfNotExists('media', 'device_id', 'TEXT');
+    await this.addColumnIfNotExists('media_history', 'deleted_at', 'TEXT');
+    await this.addColumnIfNotExists('media_history', 'device_id', 'TEXT');
+    await this.addColumnIfNotExists('external_ids', 'updated_at', 'TEXT');
+    await this.addColumnIfNotExists('external_ids', 'deleted_at', 'TEXT');
+    await this.addColumnIfNotExists('external_ids', 'device_id', 'TEXT');
+    await this.addColumnIfNotExists('playback_progress', 'deleted_at', 'TEXT');
+    await this.addColumnIfNotExists('playback_progress', 'device_id', 'TEXT');
+    await this.addColumnIfNotExists('media_skip_segments', 'deleted_at', 'TEXT');
+    await this.addColumnIfNotExists('media_skip_segments', 'device_id', 'TEXT');
+    await this.addColumnIfNotExists('availability', 'updated_at', 'TEXT');
+    await this.addColumnIfNotExists('availability', 'deleted_at', 'TEXT');
+    await this.addColumnIfNotExists('availability', 'device_id', 'TEXT');
+    await this.addColumnIfNotExists('sync_devices', 'peer_cursor', 'TEXT');
 
-    try {
-      await this.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_playback_progress_media_ep ON playback_progress(media_id, season, episode);');
-    } catch {
-      // Index already exists
-    }
-    try {
-      await this.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_skip_segments_lookup ON media_skip_segments(external_id, season, episode);');
-    } catch {
-      // Index already exists
-    }
+    const migrationNow = new Date().toISOString();
+    await this.db.execute('UPDATE media_history SET updated_at = created_at WHERE updated_at IS NULL');
+    await this.db.execute('UPDATE availability SET updated_at = last_checked WHERE updated_at IS NULL');
+    await this.db.execute('UPDATE external_ids SET updated_at = ? WHERE updated_at IS NULL', [migrationNow]);
+
+    // Recreate natural-key unique indexes as partial indexes (active rows only)
+    // so soft-deleted tombstones do not block re-creation or sync merges.
+    await this.db.execute('DROP INDEX IF EXISTS idx_external_ids_provider_ext');
+    await this.db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_external_ids_provider_ext ON external_ids(provider, external_id) WHERE deleted_at IS NULL;'
+    );
+
+    await this.db.execute('DROP INDEX IF EXISTS idx_playback_progress_media_ep');
+    await this.db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_playback_progress_media_ep ON playback_progress(media_id, season, episode) WHERE deleted_at IS NULL;'
+    );
+
+    await this.db.execute('DROP INDEX IF EXISTS idx_skip_segments_lookup');
+    await this.db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_skip_segments_lookup ON media_skip_segments(external_id, season, episode) WHERE deleted_at IS NULL;'
+    );
+
     await this.db.execute('CREATE INDEX IF NOT EXISTS idx_skip_segments_media ON media_skip_segments(media_id, season, episode);');
     await this.db.execute('CREATE INDEX IF NOT EXISTS idx_media_history_media_created ON media_history(media_id, created_at DESC);');
     await this.db.execute('CREATE INDEX IF NOT EXISTS idx_local_file_media ON local_file(media_id);');
+    await this.db.execute('CREATE INDEX IF NOT EXISTS idx_sync_media_updated ON media(updated_at, deleted_at);');
+    await this.db.execute('CREATE INDEX IF NOT EXISTS idx_sync_history_updated ON media_history(updated_at, deleted_at);');
+    await this.db.execute('CREATE INDEX IF NOT EXISTS idx_sync_ext_updated ON external_ids(updated_at, deleted_at);');
+    await this.db.execute('CREATE INDEX IF NOT EXISTS idx_sync_playback_updated ON playback_progress(updated_at, deleted_at);');
+    await this.db.execute('CREATE INDEX IF NOT EXISTS idx_sync_skip_updated ON media_skip_segments(updated_at, deleted_at);');
+    await this.db.execute('CREATE INDEX IF NOT EXISTS idx_sync_avail_updated ON availability(updated_at, deleted_at);');
+
+    await this.resolveLocalDeviceId();
 
   }
 
@@ -281,7 +367,7 @@ export class DatabaseService {
       const stored = localStorage.getItem('web_media_library');
       return stored ? JSON.parse(stored) : [];
     }
-    const res = await this.db.select<Media[]>('SELECT * FROM media ORDER BY title ASC');
+    const res = await this.db.select<Media[]>('SELECT * FROM media WHERE deleted_at IS NULL ORDER BY title ASC');
     return Promise.all(res.map(row => this.mapMediaObject(row)));
   }
 
@@ -292,7 +378,10 @@ export class DatabaseService {
       const mediaList: Media[] = stored ? JSON.parse(stored) : [];
       return mediaList.find(m => m.id === id) || null;
     }
-    const res = await this.db.select<Record<string, unknown>[]>('SELECT * FROM media WHERE id = ?', [id]);
+    const res = await this.db.select<Record<string, unknown>[]>(
+      'SELECT * FROM media WHERE id = ? AND deleted_at IS NULL',
+      [id]
+    );
     
     if (res.length > 0) {
       return this.mapMediaObject(res[0]);
@@ -363,30 +452,33 @@ export class DatabaseService {
     }
 
     const [{ count }, rows] = await Promise.all([
-      this.db.select<{ count: number }[]>('SELECT COUNT(*) AS count FROM media').then(result => result[0] || { count: 0 }),
+      this.db
+        .select<{ count: number }[]>('SELECT COUNT(*) AS count FROM media WHERE deleted_at IS NULL')
+        .then(result => result[0] || { count: 0 }),
       this.db.select<Record<string, any>[]>(`
         SELECT m.*
         FROM media m
-        WHERE m.backdrop IS NOT NULL
+        WHERE m.deleted_at IS NULL
+          AND m.backdrop IS NOT NULL
           AND LENGTH(TRIM(m.backdrop)) >= 8
           AND COALESCE(m.backdrop, '') <> COALESCE(m.poster, '')
         ORDER BY
           CASE
-            WHEN (SELECT h.status FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1) = 'Currently' THEN 0
-            WHEN (SELECT h.status FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1)
+            WHEN (SELECT h.status FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL ORDER BY h.created_at DESC LIMIT 1) = 'Currently' THEN 0
+            WHEN (SELECT h.status FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL ORDER BY h.created_at DESC LIMIT 1)
               IN ('Currently', 'Watched Episode', 'Finished')
               AND JULIANDAY('now') - JULIANDAY(COALESCE(
                 (SELECT COALESCE(h.completed_at, h.started_at, h.created_at)
-                 FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1),
+                 FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL ORDER BY h.created_at DESC LIMIT 1),
                 m.created_at
               )) <= 30 THEN 1
             WHEN JULIANDAY('now') - JULIANDAY(m.created_at) <= 90 THEN 2
-            WHEN (SELECT h.status FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1) = 'Finished' THEN 3
-            WHEN EXISTS (SELECT 1 FROM media_history h WHERE h.media_id = m.id AND h.score >= 4) THEN 4
+            WHEN (SELECT h.status FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL ORDER BY h.created_at DESC LIMIT 1) = 'Finished' THEN 3
+            WHEN EXISTS (SELECT 1 FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL AND h.score >= 4) THEN 4
             ELSE 5
           END,
           COALESCE(
-            (SELECT MAX(COALESCE(h.completed_at, h.started_at, h.created_at)) FROM media_history h WHERE h.media_id = m.id),
+            (SELECT MAX(COALESCE(h.completed_at, h.started_at, h.created_at)) FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL),
             m.created_at
           ) DESC,
           m.id
@@ -408,22 +500,23 @@ export class DatabaseService {
     if (!this.db) return { entries: [], hasMore: false };
 
     const filters: Record<HomeRailSection, string> = {
-      continue: `(SELECT h.status FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1) = 'Currently'`,
-      recent: `EXISTS (SELECT 1 FROM media_history h WHERE h.media_id = m.id AND h.status IN ('Finished', 'Watched Episode'))`,
+      continue: `(SELECT h.status FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL ORDER BY h.created_at DESC LIMIT 1) = 'Currently'`,
+      recent: `EXISTS (SELECT 1 FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL AND h.status IN ('Finished', 'Watched Episode'))`,
       rewatch: `(
-        (SELECT COUNT(*) FROM media_history h WHERE h.media_id = m.id AND h.status = 'Finished') > 1
-        OR EXISTS (SELECT 1 FROM media_history h WHERE h.media_id = m.id AND LOWER(COALESCE(h.context, '')) LIKE '%rewatch%')
+        (SELECT COUNT(*) FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL AND h.status = 'Finished') > 1
+        OR EXISTS (SELECT 1 FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL AND LOWER(COALESCE(h.context, '')) LIKE '%rewatch%')
       )`,
       local: `EXISTS (SELECT 1 FROM local_file f WHERE f.media_id = m.id)`,
-      abandoned: `(SELECT h.status FROM media_history h WHERE h.media_id = m.id ORDER BY h.created_at DESC LIMIT 1) = 'Abandoned'`
+      abandoned: `(SELECT h.status FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL ORDER BY h.created_at DESC LIMIT 1) = 'Abandoned'`
     };
     const rows = await this.db.select<Record<string, any>[]>(`
       SELECT m.*
       FROM media m
-      WHERE ${filters[section]}
+      WHERE m.deleted_at IS NULL
+        AND ${filters[section]}
       ORDER BY
         COALESCE(
-          (SELECT MAX(COALESCE(h.completed_at, h.started_at, h.created_at)) FROM media_history h WHERE h.media_id = m.id),
+          (SELECT MAX(COALESCE(h.completed_at, h.started_at, h.created_at)) FROM media_history h WHERE h.media_id = m.id AND h.deleted_at IS NULL),
           m.created_at
         ) DESC,
         m.title COLLATE NOCASE ASC,
@@ -449,7 +542,7 @@ export class DatabaseService {
     const historyRows = await this.db.select<Record<string, any>[]>(
       `SELECT id, media_id, started_at, completed_at, status, score, context, source, created_at
        FROM media_history
-       WHERE media_id IN (${ids.map(() => '?').join(', ')})
+       WHERE deleted_at IS NULL AND media_id IN (${ids.map(() => '?').join(', ')})
        ORDER BY created_at DESC`,
       ids
     );
@@ -502,9 +595,10 @@ export class DatabaseService {
       localStorage.setItem('web_media_library', JSON.stringify(mediaList));
       return;
     }
+    const deviceId = await this.resolveLocalDeviceId();
     await this.db.execute(
-      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at, accent_color, manually_matched)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at, accent_color, manually_matched, deleted_at, device_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
        ON CONFLICT(id) DO UPDATE SET
          type=excluded.type,
          title=excluded.title,
@@ -525,7 +619,9 @@ export class DatabaseService {
          seasons=excluded.seasons,
          updated_at=excluded.updated_at,
          accent_color=excluded.accent_color,
-         manually_matched=excluded.manually_matched`,
+         manually_matched=excluded.manually_matched,
+         deleted_at=NULL,
+         device_id=excluded.device_id`,
       [
         media.id,
         media.type,
@@ -548,12 +644,17 @@ export class DatabaseService {
         media.created_at,
         media.updated_at,
         media.accent_color || null,
-        media.manually_matched ? 1 : 0
+        media.manually_matched ? 1 : 0,
+        deviceId
       ]
     );
 
     if (media.external_ids) {
-      await this.db.execute('DELETE FROM external_ids WHERE media_id = ?', [media.id]);
+      const now = new Date().toISOString();
+      await this.db.execute(
+        'UPDATE external_ids SET deleted_at = ?, updated_at = ?, device_id = ? WHERE media_id = ? AND deleted_at IS NULL',
+        [now, now, deviceId, media.id]
+      );
       for (const ext of media.external_ids) {
         await this.saveExternalId(ext);
       }
@@ -562,7 +663,10 @@ export class DatabaseService {
 
   public async getMediaByExternalId(provider: string, external_id: string): Promise<Media | null> {
     if (!this.db) return null;
-    const res = await this.db.select<Pick<ExternalID, 'media_id'>[]>('SELECT media_id FROM external_ids WHERE provider = ? AND external_id = ?', [provider, external_id]);
+    const res = await this.db.select<Pick<ExternalID, 'media_id'>[]>(
+      'SELECT media_id FROM external_ids WHERE provider = ? AND external_id = ? AND deleted_at IS NULL',
+      [provider, external_id]
+    );
     
     if (res.length > 0) {
       const row = res[0];
@@ -595,35 +699,58 @@ export class DatabaseService {
   public async mergeMediaEntities(survivingId: string, duplicateId: string, overrides?: Partial<Media>): Promise<void> {
     if (!this.db || survivingId === duplicateId) return;
 
+    const now = new Date().toISOString();
+    const deviceId = await this.resolveLocalDeviceId();
+
     try {
       // 1. Relink local files
       await this.db.execute('UPDATE local_file SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
 
       // 2. Relink history
-      await this.db.execute('UPDATE media_history SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+      await this.db.execute(
+        'UPDATE media_history SET media_id = ?, updated_at = ?, device_id = ? WHERE media_id = ? AND deleted_at IS NULL',
+        [survivingId, now, deviceId, duplicateId]
+      );
 
       // 3. Relink availability
-      await this.db.execute('UPDATE availability SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+      await this.db.execute(
+        'UPDATE availability SET media_id = ?, updated_at = ?, device_id = ? WHERE media_id = ? AND deleted_at IS NULL',
+        [survivingId, now, deviceId, duplicateId]
+      );
 
       // 4. Relink notion raw records
       await this.db.execute('UPDATE notion_raw_records SET parsed_media_id = ? WHERE parsed_media_id = ?', [survivingId, duplicateId]);
 
       // 6. Handle external_ids reassignments without duplicate provider/external_id conflicts
       await this.db.execute(
-        `DELETE FROM external_ids
-         WHERE media_id = ?
+        `UPDATE external_ids
+         SET deleted_at = ?, updated_at = ?, device_id = ?
+         WHERE media_id = ? AND deleted_at IS NULL
          AND provider || ':' || external_id IN (
-           SELECT provider || ':' || external_id FROM external_ids WHERE media_id = ?
+           SELECT provider || ':' || external_id FROM external_ids WHERE media_id = ? AND deleted_at IS NULL
          )`,
-        [duplicateId, survivingId]
+        [now, now, deviceId, duplicateId, survivingId]
       );
-      await this.db.execute('UPDATE external_ids SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+      await this.db.execute(
+        'UPDATE external_ids SET media_id = ?, updated_at = ?, device_id = ? WHERE media_id = ? AND deleted_at IS NULL',
+        [survivingId, now, deviceId, duplicateId]
+      );
 
-      // Relink skip segments
-      await this.db.execute('UPDATE media_skip_segments SET media_id = ? WHERE media_id = ?', [survivingId, duplicateId]);
+      // Relink skip segments & soft-delete duplicate playback progress
+      await this.db.execute(
+        'UPDATE media_skip_segments SET media_id = ?, updated_at = ?, device_id = ? WHERE media_id = ? AND deleted_at IS NULL',
+        [survivingId, now, deviceId, duplicateId]
+      );
+      await this.db.execute(
+        'UPDATE playback_progress SET deleted_at = ?, updated_at = ?, device_id = ? WHERE media_id = ? AND deleted_at IS NULL',
+        [now, now, deviceId, duplicateId]
+      );
 
-      // 7. Delete duplicate media row
-      await this.db.execute('DELETE FROM media WHERE id = ?', [duplicateId]);
+      // 7. Soft-delete duplicate media row
+      await this.db.execute(
+        'UPDATE media SET deleted_at = ?, updated_at = ?, device_id = ? WHERE id = ? AND deleted_at IS NULL',
+        [now, now, deviceId, duplicateId]
+      );
     } catch (err) {
       console.error('Failed to merge media entities:', err);
       throw err;
@@ -652,7 +779,7 @@ export class DatabaseService {
     }
 
     const seededMedia = await this.db.select<{ id: string }[]>(
-      "SELECT id FROM media WHERE metadata_source = 'Initial Seed'"
+      "SELECT id FROM media WHERE metadata_source = 'Initial Seed' AND deleted_at IS NULL"
     );
     for (const media of seededMedia) {
       await this.deleteMedia(media.id);
@@ -669,7 +796,50 @@ export class DatabaseService {
     }
 
     try {
-      const result = await this.db.execute(`DELETE FROM media WHERE ${mediaFilter}`, params);
+      const matching = await this.db.select<{ id: string }[]>(
+        `SELECT id FROM media WHERE (${mediaFilter}) AND deleted_at IS NULL`,
+        params
+      );
+      if (matching.length === 0) {
+        return 0;
+      }
+
+      const now = new Date().toISOString();
+      const deviceId = await this.resolveLocalDeviceId();
+      const ids = matching.map(row => row.id);
+      const placeholders = ids.map(() => '?').join(', ');
+
+      await this.db.execute(
+        `DELETE FROM notion_raw_records
+         WHERE parsed_media_id IN (${placeholders})
+            OR parsed_history_id IN (
+              SELECT id FROM media_history WHERE media_id IN (${placeholders})
+            )`,
+        [...ids, ...ids]
+      );
+      await this.db.execute(`DELETE FROM local_file WHERE media_id IN (${placeholders})`, ids);
+
+      for (const childTable of [
+        'media_history',
+        'availability',
+        'external_ids',
+        'playback_progress',
+        'media_skip_segments'
+      ]) {
+        await this.db.execute(
+          `UPDATE ${childTable}
+           SET deleted_at = ?, updated_at = ?, device_id = ?
+           WHERE media_id IN (${placeholders}) AND deleted_at IS NULL`,
+          [now, now, deviceId, ...ids]
+        );
+      }
+
+      const result = await this.db.execute(
+        `UPDATE media
+         SET deleted_at = ?, updated_at = ?, device_id = ?
+         WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
+        [now, now, deviceId, ...ids]
+      );
       return result.rowsAffected;
     } catch (err) {
       console.error('Failed to delete media and related records:', err);
@@ -691,15 +861,17 @@ export class DatabaseService {
     string; logo?: string}): Promise<void>{
       if(!this.db) return;
       const now = new Date().toISOString();
+      const deviceId = await this.resolveLocalDeviceId();
       await this.db.execute(
         `UPDATE media SET
           poster = COALESCE(?, poster),
           backdrop = COALESCE(?, backdrop),
           logo = COALESCE(?, logo),
-          updated_at = ?
-        WHERE id = ?`,
+          updated_at = ?,
+          device_id = ?
+        WHERE id = ? AND deleted_at IS NULL`,
          [artwork.poster || null, artwork.backdrop ||
-           null, artwork.logo || null, now, media_id]
+           null, artwork.logo || null, now, deviceId, media_id]
       )
       
   }
@@ -711,7 +883,10 @@ export class DatabaseService {
   /** Retrieves linked provider external IDs for a media item. */
   public async getExternalIdsForMedia(media_id: string): Promise<ExternalID[]> {
     if (!this.db) return [];
-    const res = await this.db.select<ExternalID[]>('SELECT * FROM external_ids WHERE media_id = ?', [media_id]);
+    const res = await this.db.select<ExternalID[]>(
+      'SELECT * FROM external_ids WHERE media_id = ? AND deleted_at IS NULL',
+      [media_id]
+    );
     const results: ExternalID[] = [];
     for (const row of res) {
       results.push({
@@ -726,19 +901,36 @@ export class DatabaseService {
 
   public async saveExternalId(ext: ExternalID): Promise<void> {
     if (!this.db) return;
+    const now = new Date().toISOString();
+    const deviceId = await this.resolveLocalDeviceId();
+    // Ensure any active row sharing the same (provider, external_id) with a different id is tombstoned first.
     await this.db.execute(
-      `INSERT INTO external_ids (id, media_id, provider, external_id)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET provider=excluded.provider, external_id=excluded.external_id`,
-      [ext.id, ext.media_id, ext.provider, ext.external_id]
+      `UPDATE external_ids
+       SET deleted_at = ?, updated_at = ?, device_id = ?
+       WHERE provider = ? AND external_id = ? AND id != ? AND deleted_at IS NULL`,
+      [now, now, deviceId, ext.provider, ext.external_id, ext.id]
+    );
+    await this.db.execute(
+      `INSERT INTO external_ids (id, media_id, provider, external_id, updated_at, deleted_at, device_id)
+       VALUES (?, ?, ?, ?, ?, NULL, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         media_id=excluded.media_id,
+         provider=excluded.provider,
+         external_id=excluded.external_id,
+         updated_at=excluded.updated_at,
+         deleted_at=NULL,
+         device_id=excluded.device_id`,
+      [ext.id, ext.media_id, ext.provider, ext.external_id, now, deviceId]
     );
   }
 
   public async replaceExternalIdsForMedia(media_id: string, provider: string, external_id: string): Promise<void> {
     if (!this.db) return;
+    const now = new Date().toISOString();
+    const deviceId = await this.resolveLocalDeviceId();
     await this.db.execute(
-      'DELETE FROM external_ids WHERE media_id = ? AND provider = ?',
-      [media_id, provider]
+      'UPDATE external_ids SET deleted_at = ?, updated_at = ?, device_id = ? WHERE media_id = ? AND provider = ? AND deleted_at IS NULL',
+      [now, now, deviceId, media_id, provider]
     );
     await this.saveExternalId({
       id: `ext_${provider.toLowerCase()}_${media_id}`,
@@ -755,7 +947,10 @@ export class DatabaseService {
   /** Retrieves interaction logs for a specific media item sorted newest first. */
   public async getHistoryForMedia(media_id: string): Promise<MediaHistory[]> {
     if (!this.db) return [];
-    const res = await this.db.select<MediaHistory[]>('SELECT * FROM media_history WHERE media_id = ? ORDER BY created_at DESC', [media_id]);
+    const res = await this.db.select<MediaHistory[]>(
+      'SELECT * FROM media_history WHERE media_id = ? AND deleted_at IS NULL ORDER BY created_at DESC',
+      [media_id]
+    );
     const results: MediaHistory[] = [];
     for (const row of res) {
       results.push({
@@ -779,7 +974,9 @@ export class DatabaseService {
 
   public async getAllHistory(): Promise<MediaHistory[]> {
     if (!this.db) return [];
-    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM media_history ORDER BY created_at DESC');
+    const rows = await this.db.select<Record<string, any>[]>(
+      'SELECT * FROM media_history WHERE deleted_at IS NULL ORDER BY created_at DESC'
+    );
     return rows.map(row => ({
       id: row.id,
       media_id: row.media_id,
@@ -799,9 +996,10 @@ export class DatabaseService {
   public async saveHistory(history: MediaHistory): Promise<void> {
     if (!this.db) return;
     const updatedAt = history.updated_at || new Date().toISOString();
+    const deviceId = await this.resolveLocalDeviceId();
     await this.db.execute(
-      `INSERT INTO media_history (id, media_id, started_at, completed_at, status, score, thoughts, context, source, original_source_record_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO media_history (id, media_id, started_at, completed_at, status, score, thoughts, context, source, original_source_record_id, created_at, updated_at, deleted_at, device_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
        ON CONFLICT(id) DO UPDATE SET
          started_at=excluded.started_at,
          completed_at=excluded.completed_at,
@@ -811,7 +1009,9 @@ export class DatabaseService {
          context=excluded.context,
          source=excluded.source,
          original_source_record_id=excluded.original_source_record_id,
-         updated_at=excluded.updated_at`,
+         updated_at=excluded.updated_at,
+         deleted_at=NULL,
+         device_id=excluded.device_id`,
       [
         history.id,
         history.media_id,
@@ -824,14 +1024,20 @@ export class DatabaseService {
         history.source,
         history.original_source_record_id || null,
         history.created_at,
-        updatedAt
+        updatedAt,
+        deviceId
       ]
     );
   }
 
   public async deleteHistory(history_id: string): Promise<void> {
     if (!this.db) return;
-    await this.db.execute('DELETE FROM media_history WHERE id = ?', [history_id]);
+    const now = new Date().toISOString();
+    const deviceId = await this.resolveLocalDeviceId();
+    await this.db.execute(
+      'UPDATE media_history SET deleted_at = ?, updated_at = ?, device_id = ? WHERE id = ? AND deleted_at IS NULL',
+      [now, now, deviceId, history_id]
+    );
   }
 
   public async getMediaState(media_id: string): Promise<MediaState> {
@@ -977,9 +1183,12 @@ export class DatabaseService {
     const padE = String(episode).padStart(2, '0');
     const tag1 = `S${padS}E${padE}`;
     const tag2 = `S${season}E${episode}`;
+    const now = new Date().toISOString();
+    const deviceId = await this.resolveLocalDeviceId();
     await this.db.execute(
-      `DELETE FROM media_history WHERE media_id = ? AND (context LIKE ? OR context LIKE ?)`,
-      [media_id, `%${tag1}%`, `%${tag2}%`]
+      `UPDATE media_history SET deleted_at = ?, updated_at = ?, device_id = ?
+       WHERE media_id = ? AND deleted_at IS NULL AND (context LIKE ? OR context LIKE ?)`,
+      [now, now, deviceId, media_id, `%${tag1}%`, `%${tag2}%`]
     );
   }
 
@@ -1027,7 +1236,10 @@ export class DatabaseService {
   /** Retrieves streaming availability entries for a specific media item. */
   public async getAvailabilityForMedia(media_id: string): Promise<Availability[]> {
     if (!this.db) return [];
-    const rows = await this.db.select<Record<string, any>[]>('SELECT * FROM availability WHERE media_id = ?', [media_id]);
+    const rows = await this.db.select<Record<string, any>[]>(
+      'SELECT * FROM availability WHERE media_id = ? AND deleted_at IS NULL',
+      [media_id]
+    );
     return rows.map(row => ({
         id: row.id as string,
         media_id: row.media_id as string,
@@ -1041,15 +1253,20 @@ export class DatabaseService {
 
   public async saveAvailability(avail: Availability): Promise<void> {
     if (!this.db) return;
+    const now = new Date().toISOString();
+    const deviceId = await this.resolveLocalDeviceId();
     await this.db.execute(
-      `INSERT INTO availability (id, media_id, provider, country, availability_type, url, last_checked)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO availability (id, media_id, provider, country, availability_type, url, last_checked, updated_at, deleted_at, device_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
        ON CONFLICT(id) DO UPDATE SET
          provider=excluded.provider,
          country=excluded.country,
          availability_type=excluded.availability_type,
          url=excluded.url,
-         last_checked=excluded.last_checked`,
+         last_checked=excluded.last_checked,
+         updated_at=excluded.updated_at,
+         deleted_at=NULL,
+         device_id=excluded.device_id`,
       [
         avail.id,
         avail.media_id,
@@ -1057,7 +1274,9 @@ export class DatabaseService {
         avail.country || null,
         avail.availability_type,
         avail.url || null,
-        avail.last_checked
+        avail.last_checked,
+        now,
+        deviceId
       ]
     );
   }
@@ -1166,7 +1385,7 @@ export class DatabaseService {
       return stored ? JSON.parse(stored) : null;
     }
     const res = await this.db.select<Record<string, any>[]>(
-      'SELECT * FROM playback_progress WHERE media_id = ? AND season = ? AND episode = ?',
+      'SELECT * FROM playback_progress WHERE media_id = ? AND season = ? AND episode = ? AND deleted_at IS NULL',
       [media_id, season, episode]
     );
     if (res.length > 0) {
@@ -1207,7 +1426,7 @@ export class DatabaseService {
       return results;
     }
     const res = await this.db.select<Record<string, any>[]>(
-      'SELECT * FROM playback_progress WHERE media_id = ? ORDER BY updated_at DESC',
+      'SELECT * FROM playback_progress WHERE media_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC',
       [media_id]
     );
     return res.map(row => ({
@@ -1236,7 +1455,7 @@ export class DatabaseService {
       return results;
     }
     const res = await this.db.select<Record<string, any>[]>(
-      'SELECT * FROM playback_progress ORDER BY updated_at DESC'
+      'SELECT * FROM playback_progress WHERE deleted_at IS NULL ORDER BY updated_at DESC'
     );
     return res.map(row => ({
       id: row.id as string,
@@ -1267,14 +1486,17 @@ export class DatabaseService {
     if (!this.db) {
       this.setItem(`playback_progress_${progress.media_id}_${s}_${e}`, JSON.stringify(payload));
     } else {
+      const deviceId = await this.resolveLocalDeviceId();
       await this.db.execute(
-        `INSERT INTO playback_progress (id, media_id, season, episode, position_seconds, duration_seconds, updated_at, is_completed)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(media_id, season, episode) DO UPDATE SET
+        `INSERT INTO playback_progress (id, media_id, season, episode, position_seconds, duration_seconds, updated_at, is_completed, deleted_at, device_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+         ON CONFLICT(media_id, season, episode) WHERE deleted_at IS NULL DO UPDATE SET
            position_seconds=excluded.position_seconds,
            duration_seconds=excluded.duration_seconds,
            updated_at=excluded.updated_at,
-           is_completed=excluded.is_completed`,
+           is_completed=excluded.is_completed,
+           deleted_at=NULL,
+           device_id=excluded.device_id`,
         [
           progress.id,
           progress.media_id,
@@ -1283,7 +1505,8 @@ export class DatabaseService {
           progress.position_seconds,
           progress.duration_seconds,
           progress.updated_at,
-          isCompleted ? 1 : 0
+          isCompleted ? 1 : 0,
+          deviceId
         ]
       );
     }
@@ -1299,9 +1522,11 @@ export class DatabaseService {
       this.removeItem(`playback_progress_${media_id}_${season}_${episode}`);
       return;
     }
+    const now = new Date().toISOString();
+    const deviceId = await this.resolveLocalDeviceId();
     await this.db.execute(
-      'DELETE FROM playback_progress WHERE media_id = ? AND season = ? AND episode = ?',
-      [media_id, season, episode]
+      'UPDATE playback_progress SET deleted_at = ?, updated_at = ?, device_id = ? WHERE media_id = ? AND season = ? AND episode = ? AND deleted_at IS NULL',
+      [now, now, deviceId, media_id, season, episode]
     );
   }
 
@@ -1354,7 +1579,7 @@ export class DatabaseService {
   public async getSkipSegments(media_id: string, season: number = 0, episode: number = 0): Promise<MediaSkipSegments | null> {
     if (!this.db) return null;
     const rows = await this.db.select<Record<string, unknown>[]>(
-      'SELECT * FROM media_skip_segments WHERE media_id = ? AND season = ? AND episode = ? LIMIT 1',
+      'SELECT * FROM media_skip_segments WHERE media_id = ? AND season = ? AND episode = ? AND deleted_at IS NULL LIMIT 1',
       [media_id, season, episode]
     );
     if (rows.length > 0) {
@@ -1366,7 +1591,7 @@ export class DatabaseService {
   public async getAllSkipSegmentsForMedia(media_id: string): Promise<MediaSkipSegments[]> {
     if (!this.db) return [];
     const rows = await this.db.select<Record<string, unknown>[]>(
-      'SELECT * FROM media_skip_segments WHERE media_id = ?',
+      'SELECT * FROM media_skip_segments WHERE media_id = ? AND deleted_at IS NULL',
       [media_id]
     );
     return rows.map(r => this.mapSkipSegments(r));
@@ -1375,7 +1600,7 @@ export class DatabaseService {
   public async getSkipSegmentsByExternalId(external_id: string, season: number = 0, episode: number = 0): Promise<MediaSkipSegments | null> {
     if (!this.db) return null;
     const rows = await this.db.select<Record<string, unknown>[]>(
-      'SELECT * FROM media_skip_segments WHERE external_id = ? AND season = ? AND episode = ? LIMIT 1',
+      'SELECT * FROM media_skip_segments WHERE external_id = ? AND season = ? AND episode = ? AND deleted_at IS NULL LIMIT 1',
       [external_id, season, episode]
     );
     if (rows.length > 0) {
@@ -1392,13 +1617,14 @@ export class DatabaseService {
     const recapEnd = segments.recap?.end ?? null;
     const outroStart = segments.outro?.start ?? null;
     const outroEnd = segments.outro?.end ?? null;
+    const deviceId = await this.resolveLocalDeviceId();
 
     await this.db.execute(
       `INSERT INTO media_skip_segments (
         id, media_id, external_id, provider, media_type, season, episode,
-        intro_start, intro_end, recap_start, recap_end, outro_start, outro_end, raw_data, status, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(external_id, season, episode) DO UPDATE SET
+        intro_start, intro_end, recap_start, recap_end, outro_start, outro_end, raw_data, status, updated_at, deleted_at, device_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+      ON CONFLICT(external_id, season, episode) WHERE deleted_at IS NULL DO UPDATE SET
         media_id = COALESCE(excluded.media_id, media_skip_segments.media_id),
         provider = excluded.provider,
         media_type = excluded.media_type,
@@ -1410,7 +1636,9 @@ export class DatabaseService {
         outro_end = excluded.outro_end,
         raw_data = excluded.raw_data,
         status = excluded.status,
-        updated_at = excluded.updated_at`,
+        updated_at = excluded.updated_at,
+        deleted_at = NULL,
+        device_id = excluded.device_id`,
       [
         segments.id,
         segments.media_id || null,
@@ -1427,14 +1655,20 @@ export class DatabaseService {
         outroEnd,
         segments.raw_data || null,
         segments.status,
-        segments.updated_at
+        segments.updated_at,
+        deviceId
       ]
     );
   }
 
   public async deleteSkipSegmentsForMedia(media_id: string): Promise<void> {
     if (!this.db) return;
-    await this.db.execute('DELETE FROM media_skip_segments WHERE media_id = ?', [media_id]);
+    const now = new Date().toISOString();
+    const deviceId = await this.resolveLocalDeviceId();
+    await this.db.execute(
+      'UPDATE media_skip_segments SET deleted_at = ?, updated_at = ?, device_id = ? WHERE media_id = ? AND deleted_at IS NULL',
+      [now, now, deviceId, media_id]
+    );
   }
 
   private mapSkipSegments(row: Record<string, unknown>): MediaSkipSegments {

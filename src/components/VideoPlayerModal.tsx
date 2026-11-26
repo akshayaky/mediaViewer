@@ -99,7 +99,7 @@ const normalizeSubtitleStyle = (value: unknown): SubtitleStyleSettings => {
   return {
     preset: style.preset && presets.includes(style.preset) ? style.preset : DEFAULT_SUBTITLE_STYLE.preset,
     fontSize: typeof style.fontSize === 'number' && Number.isFinite(style.fontSize)
-      ? Math.min(48, Math.max(12, style.fontSize))
+      ? Math.min(48, Math.max(8, style.fontSize))
       : DEFAULT_SUBTITLE_STYLE.fontSize,
     fontFamily: style.fontFamily && fontFamilies.includes(style.fontFamily)
       ? style.fontFamily
@@ -994,8 +994,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     });
     if (useNativePlayer) {
       void nativePlayerService.setProperty('sub-use-margins', 'no');
+      void nativePlayerService.setProperty('sub-scale-by-window', showPortraitLayout ? 'no' : 'yes');
+      void nativePlayerService.setProperty('sub-ass-scale-with-window', showPortraitLayout ? 'no' : 'yes');
+      const baseFontSize = isAndroid ? 26 : DEFAULT_SUBTITLE_STYLE.fontSize * 2;
+      void nativePlayerService.setProperty('sub-font-size', String(baseFontSize));
       if (subtitleStyle.fontSize) {
-        void nativePlayerService.setProperty('sub-font-size', String(subtitleStyle.fontSize * 2));
+        const subScale = subtitleStyle.fontSize / DEFAULT_SUBTITLE_STYLE.fontSize;
+        void nativePlayerService.setProperty('sub-scale', subScale.toFixed(3));
       }
       if (subtitleStyle.textColor) {
         void nativePlayerService.setProperty('sub-color', subtitleStyle.textColor);
@@ -1023,7 +1028,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       // 'scale' respects author-styled subtitles (ASS/SSA), while applying appearance settings to plain text (SRT/VTT)
       void nativePlayerService.setProperty('sub-ass-override', 'scale');
     }
-  }, [subtitleStyleLoaded, subtitleStyle, useNativePlayer]);
+  }, [subtitleStyleLoaded, subtitleStyle, useNativePlayer, showPortraitLayout]);
 
   // Shift subtitles up when on-screen controls are active so controls don't occlude them;
   // Shift subtitles back down when on-screen controls hide
@@ -1235,6 +1240,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   void nativePlayerService.setProperty('video-align-y', showPortraitLayoutRef.current ? '-1.0' : '0.0');
                   void nativePlayerService.setProperty('panscan', (!showPortraitLayoutRef.current && fillVideoToScreenRef.current) ? '1.0' : '0.0');
                   void nativePlayerService.setProperty('sub-use-margins', 'no');
+                  void nativePlayerService.setProperty('sub-scale-by-window', showPortraitLayoutRef.current ? 'no' : 'yes');
+                  void nativePlayerService.setProperty('sub-ass-scale-with-window', showPortraitLayoutRef.current ? 'no' : 'yes');
                   void nativePlayerService.setProperty('sub-pos', showControlsRef.current ? '84' : '100');
                 }
                 if (state.audioTracks.length > 0) {
@@ -1703,12 +1710,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     if (cursorOverrideTimerRef.current) clearTimeout(cursorOverrideTimerRef.current);
   }, []);
 
-  // Keep controls active when paused or when episode picker is open; hide after three idle seconds during playback.
+  // Keep controls active when paused or when any picker/editor panel is open; hide after three idle seconds during playback.
   useEffect(() => {
     if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
     hideControlsTimerRef.current = null;
 
-    if (isEpisodePickerOpen || !isPlaying) {
+    if (isAnyPanelOpen || !isPlaying) {
       setShowControls(true);
       return;
     }
@@ -1718,7 +1725,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
       hideControlsTimerRef.current = null;
     };
-  }, [isEpisodePickerOpen, showControls, isPlaying, scheduleControlsHide]);
+  }, [isAnyPanelOpen, showControls, isPlaying, scheduleControlsHide]);
 
   const handleMouseMove = () => revealControls();
 
@@ -2085,6 +2092,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     isVolumeGesture: boolean;
     hasMoved: boolean;
   } | null>(null);
+  const suppressNextVideoClickRef = useRef(false);
 
   const handleVideoTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length !== 1) return;
@@ -2113,6 +2121,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
     if (Math.abs(deltaY) > 8 && Math.abs(deltaY) > deltaX) {
       gesture.hasMoved = true;
+      suppressNextVideoClickRef.current = true;
       if (gesture.isVolumeGesture) {
         e.preventDefault();
         const deltaPercent = deltaY / 220;
@@ -2148,7 +2157,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     const delay = now - lastTap;
 
     if (delay > 0 && delay < 300) {
-      e.preventDefault(); 
+      e.preventDefault();
+      suppressNextVideoClickRef.current = true;
       
       const rect = currentTarget.getBoundingClientRect();
       const touchX = touch.clientX - rect.left;
@@ -2315,6 +2325,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           ref={viewportRef}
           className={`h-full w-full ${!showPortraitLayout && fillVideoToScreen ? 'object-cover' : 'object-contain'} bg-transparent select-none flex items-center justify-center`}
           onClick={(e) => {
+            if (suppressNextVideoClickRef.current) {
+              suppressNextVideoClickRef.current = false;
+              return;
+            }
             if (isAnyPanelOpen) {
               e.stopPropagation();
               closeAllPanels();
@@ -2330,6 +2344,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           src={streamUrl}
           className={`h-full w-full ${!showPortraitLayout && fillVideoToScreen ? 'object-cover' : 'object-contain'}`}
           onClick={(e) => {
+            if (suppressNextVideoClickRef.current) {
+              suppressNextVideoClickRef.current = false;
+              return;
+            }
             if (isAnyPanelOpen) {
               e.stopPropagation();
               closeAllPanels();
@@ -2435,7 +2453,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             color: subtitleStyle.textColor,
             fontFamily: subtitleStyle.fontFamily,
             fontSize: isNarrowScreen
-              ? `${Math.min(subtitleStyle.fontSize, 15)}px`
+              ? `${Math.max(8, Math.round(subtitleStyle.fontSize * 0.65))}px`
               : `${subtitleStyle.fontSize}px`,
             textShadow: subtitleStyle.outline
               ? '0 1px 2px #000, 1px 0 2px #000, -1px 0 2px #000, 0 -1px 2px #000'
@@ -2743,7 +2761,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
       {/* Bottom Control Bar Overlay */}
       <div
-        onClick={e => e.stopPropagation()}
+        onClick={e => {
+          e.stopPropagation();
+          if (isPlaying && !isAnyPanelOpenRef.current) scheduleControlsHide();
+        }}
+        onTouchStart={() => {
+          if (isPlaying && !isAnyPanelOpenRef.current) scheduleControlsHide();
+        }}
         className={`absolute left-0 right-0 bottom-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent transition-opacity duration-300 z-10 ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         } ${
@@ -3177,7 +3201,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     </span>
                     <input
                       type="range"
-                      min={12}
+                      min={8}
                       max={48}
                       step={1}
                       value={subtitleStyle.fontSize}
@@ -3520,7 +3544,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     </span>
                     <input
                       type="range"
-                      min={12}
+                      min={8}
                       max={48}
                       step={1}
                       value={subtitleStyle.fontSize}

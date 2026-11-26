@@ -28,10 +28,13 @@ import {
   Sliders,
   PlayCircle,
   HardDrive,
-  Info
+  Info,
+  Wifi
 } from 'lucide-react';
 
 import { useSidebarPadding } from '../hooks/useSidebarPadding';
+import { SyncModal } from '../ui/sync/SyncModal';
+import { SyncStatusBadge } from '../ui/sync/SyncStatusBadge';
 
 type SettingsTab = 'general' | 'integrations' | 'advanced';
 
@@ -198,6 +201,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
 
   const [savedMessage, setSavedMessage] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
   // Folder Directory Input Refs
   const moviesFolderInputRef = useRef<HTMLInputElement>(null);
@@ -587,6 +591,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
             </span>
           )}
 
+          <button
+            type="button"
+            onClick={() => setIsSyncModalOpen(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#181c28] hover:bg-[#212636] border border-[#2a2f42] text-xs font-semibold text-gray-100 transition-colors cursor-pointer"
+          >
+            <Wifi className="w-3.5 h-3.5 text-[#E27D12]" />
+            <span>Sync / Pair Device</span>
+          </button>
+          <SyncStatusBadge compact onClick={() => setIsSyncModalOpen(true)} />
+
           {/* Settings Tabs */}
           <div className="inline-flex rounded-xl bg-[#12141d] p-1 border border-[#232736] shadow-inner">
             {(['general', 'integrations', 'advanced'] as const).map(tabKey => {
@@ -836,7 +850,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
                   </div>
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-white flex items-center space-x-1.5">
-                      <span>Built-in HTML5 Video Player</span>
+                      <span>Built-in Video Player</span>
                     </div>
                     <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
                       Resume points, progress sync & styled subtitle engine
@@ -1330,6 +1344,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isCollapsed }) => {
           Schema v4.12 <span className="text-gray-600 mx-1">/</span> v1.0.0
         </div>
       </footer>
+
+      <SyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+      />
     </div>
   );
 };

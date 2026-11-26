@@ -54,6 +54,8 @@ import {
   Wallpaper
 } from 'lucide-react';
 
+const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+
 // ============================================================================
 // PHONE BACKDROP SCROLL & ZOOM CONFIGURATION (Easily editable)
 // ============================================================================
@@ -222,8 +224,20 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
 
   // Three dot menu state
   const [showMenu, setShowMenu] = useState(false);
+  const menuContainerRef = useRef<HTMLDivElement>(null);
   const [showFixMatchModal, setShowFixMatchModal] = useState(false);
   const [isDeletingMedia, setIsDeletingMedia] = useState(false);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    const handleOutsideClick = (event: PointerEvent) => {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsideClick);
+    return () => document.removeEventListener('pointerdown', handleOutsideClick);
+  }, [showMenu]);
 
   // Duplicates & Merge modal state
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -679,6 +693,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
             img.style.transition = 'none';
             img.style.transform = `scale(${zoom})`;
           });
+        } else {
+          getBackdropImages().forEach(img => {
+            img.style.transform = '';
+            img.style.transition = '';
+          });
         }
       }
     };
@@ -916,99 +935,119 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
       )}
 
       {/* Pinned Header Bar Actions */}
-      {!activePlayerSession && (
-        <>
-          <TitleBarPortal target="left">
-            <button
-              onClick={onBack}
-              onMouseDown={(e) => e.stopPropagation()}
-              data-tauri-drag-region="false"
-              className="mdv-btn mdv-btn-glass mdv-back-btn cursor-pointer group flex items-center h-8 w-8 hover:w-36 transition-[width,margin] duration-300 ease-in-out overflow-hidden whitespace-nowrap !p-0 !gap-0 hover:backdrop-blur-md justify-start"
-              title="Back to Library"
-              style={{
-                marginLeft: backButtonMarginLeft,
-                transition: 'margin-left 0.3s cubic-bezier(0.16, 1, 0.3, 1), width 0.3s ease-in-out'
-              }}
-            >
-              <div className="w-8 h-8 flex items-center justify-center shrink-0">
-                <ArrowLeft className="w-4 h-4 text-white" />
-              </div>
+      {!activePlayerSession && (() => {
+        const backButton = (
+          <button
+            onClick={onBack}
+            onMouseDown={(e) => e.stopPropagation()}
+            data-tauri-drag-region="false"
+            className={`mdv-btn mdv-btn-glass mdv-back-btn cursor-pointer group flex items-center h-8 w-8 ${
+              isAndroid ? 'justify-center' : 'hover:w-36 transition-[width,margin] duration-300 ease-in-out overflow-hidden whitespace-nowrap justify-start'
+            } !p-0 !gap-0 hover:backdrop-blur-md`}
+            title="Back to Library"
+            style={!isAndroid ? {
+              marginLeft: backButtonMarginLeft,
+              transition: 'margin-left 0.3s cubic-bezier(0.16, 1, 0.3, 1), width 0.3s ease-in-out'
+            } : undefined}
+          >
+            <div className="w-8 h-8 flex items-center justify-center shrink-0">
+              <ArrowLeft className="w-4 h-4 text-white" />
+            </div>
+            {!isAndroid && (
               <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 text-xs font-medium text-white pr-2.5">
                 Back to Library
               </span>
-            </button>
-          </TitleBarPortal>
+            )}
+          </button>
+        );
 
-          <TitleBarPortal target="right">
-            <div className="relative" data-tauri-drag-region="false">
-              <button
-                onClick={() => setShowMenu(!showMenu)}
+        const optionsMenu = (
+          <div ref={menuContainerRef} className="relative" data-tauri-drag-region="false">
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              onMouseDown={(e) => e.stopPropagation()}
+              data-tauri-drag-region="false"
+              className="mdv-btn mdv-btn-glass mdv-btn-icon-glass cursor-pointer h-8 w-8 flex items-center justify-center !p-0"
+              title="Media Options"
+            >
+              <MoreVertical className="w-4 h-4 text-white fill-current shrink-0" />
+            </button>
+
+            {showMenu && (
+              <div 
                 onMouseDown={(e) => e.stopPropagation()}
                 data-tauri-drag-region="false"
-                className="mdv-btn mdv-btn-glass mdv-btn-icon-glass cursor-pointer h-8 w-8 flex items-center justify-center !p-0"
-                title="Media Options"
+                onMouseLeave={!isAndroid ? () => setShowMenu(false) : undefined}
+                className="absolute right-0 top-full mt-2 w-56 bg-[#1b1d2a]/70 backdrop-blur-xl border border-white/15 rounded-xl shadow-2xl py-1 z-50 animate-fadeIn before:absolute before:-top-2 before:h-2 before:inset-x-0 after:absolute after:-bottom-4 after:h-4 after:inset-x-0"
               >
-                <MoreVertical className="w-4 h-4 text-white fill-current shrink-0" />
-              </button>
-
-              {showMenu && (
-                <div 
-                  onMouseDown={(e) => e.stopPropagation()}
-                  data-tauri-drag-region="false"
-                  onMouseLeave={() => setShowMenu(false)}
-                  className="absolute right-0 top-full mt-2 w-56 bg-[#1b1d2a]/70 backdrop-blur-xl border border-white/15 rounded-xl shadow-2xl py-1 z-50 animate-fadeIn before:absolute before:-top-2 before:h-2 before:inset-x-0 after:absolute after:-bottom-4 after:h-4 after:inset-x-0"
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    handleManualMetadataRefresh();
+                  }}
+                  disabled={isRefreshingMetadata}
+                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.08] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2.5 transition-all cursor-pointer disabled:opacity-50"
                 >
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      handleManualMetadataRefresh();
-                    }}
-                    disabled={isRefreshingMetadata}
-                    className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.08] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2.5 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className="w-4 h-4 text-[#E27D12] shrink-0" />
-                    <span>{isRefreshingMetadata ? 'Re-syncing Provider...' : 'Refresh Metadata'}</span>
-                  </button>
+                  <RefreshCw className="w-4 h-4 text-[#E27D12] shrink-0" />
+                  <span>{isRefreshingMetadata ? 'Re-syncing Provider...' : 'Refresh Metadata'}</span>
+                </button>
 
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      setShowFixMatchModal(true);
-                    }}
-                    className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.08] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2.5 transition-all cursor-pointer border-t border-white/10"
-                  >
-                    <LinkIcon className="w-4 h-4 text-sky-400 shrink-0" />
-                    <span>Fix Match / Change Metadata</span>
-                  </button>
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    setShowFixMatchModal(true);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.08] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2.5 transition-all cursor-pointer border-t border-white/10"
+                >
+                  <LinkIcon className="w-4 h-4 text-sky-400 shrink-0" />
+                  <span>Fix Match / Change Metadata</span>
+                </button>
 
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      setShowBackdropPicker(true);
-                    }}
-                    className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.08] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2.5 transition-all cursor-pointer border-t border-white/10"
-                  >
-                    <Wallpaper className="w-4 h-4 text-sky-400 shrink-0" />
-                    <span>Change Background Image</span>
-                  </button>
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    setShowBackdropPicker(true);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-gray-200 hover:bg-white/[0.08] hover:text-white hover:shadow-[inset_0_0_12px_rgba(255,255,255,0.05)] flex items-center space-x-2.5 transition-all cursor-pointer border-t border-white/10"
+                >
+                  <Wallpaper className="w-4 h-4 text-sky-400 shrink-0" />
+                  <span>Change Background Image</span>
+                </button>
 
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      void handleDeleteMedia();
-                    }}
-                    disabled={isDeletingMedia}
-                    className="w-full text-left px-4 py-2.5 text-xs text-[#ff3D12] hover:bg-[#ff3D12]/20 hover:text-red-300 flex items-center space-x-2.5 transition-colors cursor-pointer border-t border-white/10 disabled:opacity-50"
-                  >
-                    <Trash2 className="w-4 h-4 shrink-0" />
-                    <span>{isDeletingMedia ? 'Deleting...' : 'Delete from Library'}</span>
-                  </button>
-                </div>
-              )}
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    void handleDeleteMedia();
+                  }}
+                  disabled={isDeletingMedia}
+                  className="w-full text-left px-4 py-2.5 text-xs text-[#ff3D12] hover:bg-[#ff3D12]/20 hover:text-red-300 flex items-center space-x-2.5 transition-colors cursor-pointer border-t border-white/10 disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4 shrink-0" />
+                  <span>{isDeletingMedia ? 'Deleting...' : 'Delete from Library'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        );
+
+        if (isAndroid || (typeof document !== 'undefined' && !document.getElementById('titlebar-left'))) {
+          return (
+            <div className="mdv-header">
+              <div className="mdv-header-actions">
+                {backButton}
+                {optionsMenu}
+              </div>
             </div>
-          </TitleBarPortal>
-        </>
-      )}
+          );
+        }
+
+        return (
+          <>
+            <TitleBarPortal target="left">{backButton}</TitleBarPortal>
+            <TitleBarPortal target="right">{optionsMenu}</TitleBarPortal>
+          </>
+        );
+      })()}
 
       {/* Scrollable Hero Content */}
       <div className="mdv-hero">
@@ -1131,11 +1170,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
             </div>
 
             {logoUrl ? (
-              <div className="mdv-title-lockup py-1" style={{ willChange: 'transform' }}>
+              <div className="mdv-title-lockup py-1">
                 <img
                   src={logoUrl}
                   alt={currentMedia.title}
-                  className="h-24 sm:h-35 max-w-md object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
+                  className="max-h-24 sm:max-h-35 w-auto h-auto max-w-full sm:max-w-md object-contain object-left drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                     const titleEl = document.getElementById(`media-title-text-${currentMedia.id}`);
@@ -1148,7 +1187,6 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
             <h1
               id={`media-title-text-${currentMedia.id}`}
               className={`mdv-title-lockup text-4xl sm:text-6xl font-extrabold uppercase text-white tracking-tight drop-shadow-md leading-none flex items-center space-x-3 ${logoUrl ? 'hidden' : ''}`}
-              style={{ willChange: 'transform' }}
             >
               <span>{currentMedia.title}</span>
             </h1>

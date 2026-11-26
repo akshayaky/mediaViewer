@@ -395,11 +395,11 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({
         </div> */}
 
         {displayedMedia.logo ? (
-          <div className="hero-title-lockup py-1" style={{ willChange: 'transform' }}>
+          <div className="hero-title-lockup max-w-full py-1">
             <img
               src={displayedMedia.logo}
               alt={displayedMedia.title}
-              className="h-24 sm:h-35 max-w-md object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
+              className="max-h-24 sm:max-h-35 w-auto h-auto max-w-full sm:max-w-md object-contain object-left drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
               onError={event => {
                 event.currentTarget.style.display = 'none';
                 const titleElement = document.getElementById(`hero-title-text-${displayedMedia.id}`);

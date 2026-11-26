@@ -44,7 +44,8 @@ export function resetMockTauriDatabase(): void {
     'external_ids',
     'settings',
     'playback_progress',
-    'media_skip_segments'
+    'media_skip_segments',
+    'sync_devices'
   ]) {
     database.run(`DELETE FROM ${table}`);
   }
