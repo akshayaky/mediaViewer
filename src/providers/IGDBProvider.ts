@@ -289,7 +289,7 @@ export class IGDBProvider implements MetadataProvider {
       const token = await this.getTwitchAccessToken(clientId, clientSecret);
       if (token) {
         try {
-          const body = `where id = ${igdbId}; fields name, summary, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher;`;
+          const body = `where id = ${igdbId}; fields name, summary, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id, genres.name, keywords.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher;`;
           const res = await smartFetch(`${this.igdbBaseUrl}/games`, {
             method: 'POST',
             headers: {
@@ -317,6 +317,11 @@ export class IGDBProvider implements MetadataProvider {
                 : undefined;
 
               const genres = (game.genres || []).map((g: any) => g.name);
+              const keywords: string[] = Array.isArray(game.keywords)
+                ? game.keywords
+                    .map((k: any) => k?.name)
+                    .filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0)
+                : [];
 
               const developers: string[] = [];
               const publishers: string[] = [];
@@ -364,6 +369,7 @@ export class IGDBProvider implements MetadataProvider {
                 release_year: year,
                 description: game.summary,
                 genres,
+                keywords,
                 poster: coverUrl,
                 backdrop: backdropUrl,
                 logo,

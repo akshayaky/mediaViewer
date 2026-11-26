@@ -62,6 +62,7 @@ export async function addMetadataResultToLibrary(candidate: MetadataSearchResult
     release_year: details.release_year || candidate.release_year,
     description: details.description || candidate.description,
     genres: details.genres || [],
+    keywords: details.keywords,
     runtime: details.runtime,
     poster: details.poster || candidate.poster,
     backdrop: details.backdrop || candidate.backdrop,

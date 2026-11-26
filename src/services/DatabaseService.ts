@@ -136,6 +136,7 @@ export class DatabaseService {
         language TEXT,
         description TEXT,
         genres TEXT NOT NULL,
+        keywords TEXT,
         runtime INTEGER,
         poster TEXT,
         backdrop TEXT,
@@ -301,6 +302,7 @@ export class DatabaseService {
     await this.addColumnIfNotExists('media', 'seasons', 'TEXT');
     await this.addColumnIfNotExists('media', 'accent_color', 'TEXT');
     await this.addColumnIfNotExists('media', 'manually_matched', 'INTEGER DEFAULT 0');
+    await this.addColumnIfNotExists('media', 'keywords', 'TEXT');
     await this.addColumnIfNotExists('media_history', 'updated_at', 'TEXT');
     await this.addColumnIfNotExists('local_file', 'season', 'INTEGER');
     await this.addColumnIfNotExists('local_file', 'episode', 'INTEGER');
@@ -404,6 +406,16 @@ export class DatabaseService {
       genres = [];
     }
 
+    let keywords: string[] | undefined = undefined;
+    if (row.keywords) {
+      try {
+        const parsed = typeof row.keywords === 'string' ? JSON.parse(row.keywords) : row.keywords;
+        if (Array.isArray(parsed)) keywords = parsed;
+      } catch {
+        keywords = undefined;
+      }
+    }
+
     let cast: any[] | undefined = undefined;
     if (row.cast) {
       try {
@@ -431,6 +443,7 @@ export class DatabaseService {
       language: (row.language as string) || undefined,
       description: (row.description as string) || undefined,
       genres,
+      keywords,
       runtime: row.runtime ? Number(row.runtime) : undefined,
       poster: (row.poster as string) || undefined,
       backdrop: (row.backdrop as string) || undefined,
@@ -604,8 +617,8 @@ export class DatabaseService {
     }
     const deviceId = await this.resolveLocalDeviceId();
     await this.db.execute(
-      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at, accent_color, manually_matched, deleted_at, device_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, keywords, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at, accent_color, manually_matched, deleted_at, device_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
        ON CONFLICT(id) DO UPDATE SET
          type=excluded.type,
          title=excluded.title,
@@ -614,6 +627,7 @@ export class DatabaseService {
          language=excluded.language,
          description=excluded.description,
          genres=excluded.genres,
+         keywords=excluded.keywords,
          runtime=excluded.runtime,
          poster=excluded.poster,
          backdrop=excluded.backdrop,
@@ -638,6 +652,7 @@ export class DatabaseService {
         media.language || null,
         media.description || null,
         JSON.stringify(media.genres || []),
+        media.keywords ? JSON.stringify(media.keywords) : null,
         media.runtime || null,
         media.poster || null,
         media.backdrop || null,

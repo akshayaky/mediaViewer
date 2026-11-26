@@ -428,7 +428,7 @@ export class TMDBProvider implements MetadataProvider {
 
     try {
       const { url, headers } = await this.getFetchConfig(`/${mediaType}/${tmdbId}`, {
-        append_to_response: 'credits,images',
+        append_to_response: 'credits,images,keywords',
         include_image_language: 'en,null'
       });
 
@@ -441,6 +441,12 @@ export class TMDBProvider implements MetadataProvider {
       const data = await res.json();
 
       const genres = (data.genres || []).map((g: any) => g.name);
+      const rawKeywords = mediaType === 'movie' ? data.keywords?.keywords : data.keywords?.results;
+      const keywords: string[] = Array.isArray(rawKeywords)
+        ? rawKeywords
+            .map((k: any) => k?.name)
+            .filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0)
+        : [];
       const poster = data.poster_path ? `${this.imageBaseUrl}/w500${data.poster_path}` : undefined;
       const backdrop = data.backdrop_path ? `${this.imageBaseUrl}/w1280${data.backdrop_path}` : undefined;
       const language = this.getLanguageName(data.original_language || '');
@@ -521,6 +527,7 @@ export class TMDBProvider implements MetadataProvider {
         release_year: releaseYear,
         description: data.overview,
         genres,
+        keywords,
         runtime,
         poster,
         backdrop,

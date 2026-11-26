@@ -495,9 +495,16 @@ useEffect(() => {
 
   if (parsedTextFilter.query) {
     const q = parsedTextFilter.query.toLocaleLowerCase();
-    items = items.filter(
-      m => m.title.toLowerCase().includes(q) || m.publisher?.toLowerCase().includes(q)
-    );
+    const directMatches: Media[] = [];
+    const keywordMatches: Media[] = [];
+    for (const m of items) {
+      if (m.title.toLowerCase().includes(q) || m.publisher?.toLowerCase().includes(q)) {
+        directMatches.push(m);
+      } else if (m.keywords?.some(k => k.toLowerCase().includes(q))) {
+        keywordMatches.push(m);
+      }
+    }
+    items = [...directMatches, ...keywordMatches];
   }
 
   // Apply genre filter

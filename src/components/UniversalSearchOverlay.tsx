@@ -9,7 +9,7 @@ import { parseMediaTextFilter, matchesMediaTextFilter } from '../services/MediaT
 import { HighlightedFilterInput } from './HighlightedFilterInput';
 
 type SearchResult =
-  | { kind: 'media'; media: Media; score: number; file?: LocalFile }
+  | { kind: 'media'; media: Media; score: number; file?: LocalFile; matchedKeyword?: string }
   | { kind: 'file'; file: LocalFile; media?: Media; score: number }
   | { kind: 'external'; candidate: MetadataSearchResult; score: number };
 
@@ -32,6 +32,23 @@ function getTypeIcon(type: MediaType) {
   if (type === 'Film') return <Film className="h-4 w-4" />;
   if (type === 'TV Series') return <Tv className="h-4 w-4" />;
   return <Gamepad2 className="h-4 w-4" />;
+}
+
+function renderHighlightedTitle(title: string, rawQuery: string): React.ReactNode {
+  const query = rawQuery.trim();
+  if (!query) return title;
+  const matchIndex = title.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());
+  if (matchIndex === -1) return title;
+  const before = title.slice(0, matchIndex);
+  const match = title.slice(matchIndex, matchIndex + query.length);
+  const after = title.slice(matchIndex + query.length);
+  return (
+    <>
+      {before}
+      <mark className="rounded bg-[#E27D12]/25 px-0.5 text-white">{match}</mark>
+      {after}
+    </>
+  );
 }
 
 export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
@@ -129,11 +146,29 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
       const originalTitleScore = item.original_title
         ? getMatchScore(item.original_title, normalizedQuery)
         : -1;
-      const score = normalizedQuery
-        ? Math.min(...[titleScore, originalTitleScore].filter(value => value >= 0))
-        : 0;
-      if (Number.isFinite(score)) {
+      const directScores = [titleScore, originalTitleScore].filter(value => value >= 0);
+      if (!normalizedQuery || directScores.length > 0) {
+        const score = normalizedQuery ? Math.min(...directScores) : 0;
         matchingMedia.push({ kind: 'media', media: item, score, file: availableFile });
+      } else if (item.keywords && item.keywords.length > 0) {
+        let bestKeyword: string | undefined;
+        let bestKeywordScore = Infinity;
+        for (const keyword of item.keywords) {
+          const kwScore = getMatchScore(keyword, normalizedQuery);
+          if (kwScore >= 0 && kwScore < bestKeywordScore) {
+            bestKeywordScore = kwScore;
+            bestKeyword = keyword;
+          }
+        }
+        if (bestKeyword !== undefined) {
+          matchingMedia.push({
+            kind: 'media',
+            media: item,
+            score: 100 + bestKeywordScore,
+            file: availableFile,
+            matchedKeyword: bestKeyword
+          });
+        }
       }
     }
 
@@ -175,9 +210,9 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
       });
     }
 
-    return [...matchingMedia, ...matchingFiles]
-      .sort((a, b) => a.score - b.score)
-      .slice(0, 30);
+    matchingMedia.sort((a, b) => a.score - b.score);
+    matchingFiles.sort((a, b) => a.score - b.score);
+    return [...matchingMedia, ...matchingFiles].slice(0, 30);
   }, [files, media, historyByMediaId, parsedQuery]);
 
   const runExternalSearch = useCallback(async (searchQuery: string) => {
@@ -397,8 +432,17 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
                     />
                   : <span className="flex h-12 w-9 items-center justify-center rounded-md bg-white/5 text-white/55">{getTypeIcon(type)}</span>}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">{title}</span>
-                  <span className="block truncate text-xs text-white/45">{subtitle}</span>
+                  <span className="block truncate text-sm font-semibold">
+                    {renderHighlightedTitle(title, parsedQuery.query)}
+                  </span>
+                  <span className="block truncate text-xs text-white/45">
+                    {subtitle}
+                    {result.kind === 'media' && result.matchedKeyword && (
+                      <span className="ml-1.5 text-[11px] text-[#E27D12]/80">
+                        · Keyword: {result.matchedKeyword}
+                      </span>
+                    )}
+                  </span>
                 </span>
                 {unavailable && <span className="rounded-full bg-rose-400/10 px-2 py-1 text-[10px] font-semibold text-rose-300">Unavailable</span>}
                 {result.kind === 'external' && <span className="text-xs text-sky-300">Add</span>}

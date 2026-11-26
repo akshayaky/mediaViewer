@@ -43,6 +43,7 @@ export interface Media {
   language?: string;
   description?: string;
   genres: string[];
+  keywords?: string[];
   runtime?: number;
   poster?: string;
   backdrop?: string;
