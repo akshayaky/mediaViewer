@@ -245,6 +245,7 @@ export interface SubtitleStyleSettings {
   textColor: string;
   background: 'none' | 'semi-transparent' | 'solid';
   outline: boolean;
+  verticalPosition: number;
 }
 
 export interface SelectMediaOptions {

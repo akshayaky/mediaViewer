@@ -34,7 +34,8 @@ import {
   AudioLines,
   Settings2,
   Crop,
-  Film
+  Film,
+  FolderOpen
 } from 'lucide-react';
 
 const DEFAULT_SUBTITLE_STYLE: SubtitleStyleSettings = {
@@ -43,7 +44,8 @@ const DEFAULT_SUBTITLE_STYLE: SubtitleStyleSettings = {
   fontFamily: 'system-ui, sans-serif',
   textColor: '#ffffff',
   background: 'semi-transparent',
-  outline: true
+  outline: true,
+  verticalPosition: 0
 };
 
 const SUBTITLE_STYLE_PRESETS: Record<SubtitleStyleSettings['preset'], SubtitleStyleSettings> = {
@@ -54,7 +56,8 @@ const SUBTITLE_STYLE_PRESETS: Record<SubtitleStyleSettings['preset'], SubtitleSt
     fontFamily: 'system-ui, sans-serif',
     textColor: '#ffff00',
     background: 'solid',
-    outline: true
+    outline: true,
+    verticalPosition: 0
   },
   'large-text': {
     preset: 'large-text',
@@ -62,7 +65,8 @@ const SUBTITLE_STYLE_PRESETS: Record<SubtitleStyleSettings['preset'], SubtitleSt
     fontFamily: 'system-ui, sans-serif',
     textColor: '#ffffff',
     background: 'semi-transparent',
-    outline: true
+    outline: true,
+    verticalPosition: 0
   },
   minimal: {
     preset: 'minimal',
@@ -70,7 +74,8 @@ const SUBTITLE_STYLE_PRESETS: Record<SubtitleStyleSettings['preset'], SubtitleSt
     fontFamily: 'system-ui, sans-serif',
     textColor: '#ffffff',
     background: 'none',
-    outline: false
+    outline: false,
+    verticalPosition: 0
   },
   custom: {
     ...DEFAULT_SUBTITLE_STYLE,
@@ -110,9 +115,15 @@ const normalizeSubtitleStyle = (value: unknown): SubtitleStyleSettings => {
     background: style.background && backgrounds.includes(style.background)
       ? style.background
       : DEFAULT_SUBTITLE_STYLE.background,
-    outline: typeof style.outline === 'boolean' ? style.outline : DEFAULT_SUBTITLE_STYLE.outline
+    outline: typeof style.outline === 'boolean' ? style.outline : DEFAULT_SUBTITLE_STYLE.outline,
+    verticalPosition: typeof style.verticalPosition === 'number' && Number.isFinite(style.verticalPosition)
+      ? Math.min(50, Math.max(0, Math.round(style.verticalPosition)))
+      : DEFAULT_SUBTITLE_STYLE.verticalPosition
   };
 };
+
+const getNativeSubPos = (verticalPosition: number, controlsVisible: boolean): string =>
+  String(100 - Math.max(verticalPosition, controlsVisible ? 16 : 0));
 
 interface NativeAudioTrack {
   label?: string;
@@ -486,6 +497,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [subtitleError, setSubtitleError] = useState<string | null>(null);
   const [activeSubtitleText, setActiveSubtitleText] = useState('');
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyleSettings>(DEFAULT_SUBTITLE_STYLE);
+  const subtitleVerticalPosRef = useRef<number>(subtitleStyle.verticalPosition);
+  subtitleVerticalPosRef.current = subtitleStyle.verticalPosition;
   const [subtitleStyleLoaded, setSubtitleStyleLoaded] = useState(false);
   const [showSubtitleStyleEditor, setShowSubtitleStyleEditor] = useState(false);
   const [showSpeedPicker, setShowSpeedPicker] = useState(false);
@@ -865,6 +878,56 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     }
   }, [subtitleTracks, embeddedSubtitleTracks, showPlaybackNotice, useNativePlayer]);
 
+  const handleLoadCustomSubtitle = useCallback(async () => {
+    if (!isTauri) {
+      showPlaybackNotice('Custom subtitle loading requires desktop or Android app');
+      return;
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      let pickedPath: string | null = null;
+
+      if (isAndroid) {
+        type AndroidFsUri = { uri: string; documentTopTreeUri: string | null };
+        const selected = await invoke<AndroidFsUri[]>('plugin:android-fs|show_open_file_picker', {
+          mimeTypes: ['*/*'],
+          multiple: false,
+          pickerType: 'FilePicker',
+          needWritePermission: false,
+          localOnly: true,
+          initialLocation: null
+        });
+        if (selected.length > 0) {
+          await invoke<void>('plugin:android-fs|persist_picker_uri_permission', {
+            uri: selected[0]
+          });
+          pickedPath = selected[0].uri;
+        }
+      } else {
+        pickedPath = await invoke<string | null>('select_subtitle_file');
+      }
+
+      if (!pickedPath) return;
+
+      await dbService.saveCustomSubtitleForFile(activeFile.id, pickedPath);
+
+      if (useNativePlayer) {
+        await nativePlayerService.addSubtitleFile(pickedPath);
+        showPlaybackNotice('Loaded custom subtitle');
+      } else {
+        const track = await subtitleService.loadCustomSubtitleTrack(pickedPath);
+        setSubtitleTracks(prev => [...prev.filter(t => t.id !== track.id), track]);
+        setSubtitleTracksLoaded(true);
+        selectSubtitle(`sidecar:${track.id}`);
+      }
+      setShowSubtitlePicker(false);
+    } catch (err) {
+      console.error('Failed to load custom subtitle:', err);
+      showPlaybackNotice('Could not load custom subtitle');
+    }
+  }, [activeFile.id, selectSubtitle, showPlaybackNotice, useNativePlayer]);
+
   const selectAudioTrack = useCallback((trackId: string) => {
     setSelectedAudioTrackId(trackId);
     const track = audioTracks.find(item => item.id === trackId);
@@ -1035,9 +1098,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   useEffect(() => {
     if (useNativePlayer) {
       void nativePlayerService.setProperty('sub-use-margins', 'no');
-      void nativePlayerService.setProperty('sub-pos', showControls ? '84' : '100');
+      void nativePlayerService.setProperty('sub-pos', getNativeSubPos(subtitleStyle.verticalPosition, showControls));
     }
-  }, [showControls, useNativePlayer]);
+  }, [showControls, subtitleStyle.verticalPosition, useNativePlayer]);
 
   // Adjust video pan & scan (fill vs fit screen)
   const prevFillRef = useRef(fillVideoToScreen);
@@ -1187,6 +1250,23 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         }
       }
 
+      if (isTauri) {
+        try {
+          const customSubtitlePaths = await dbService.getCustomSubtitlesForFile(activeFile.id);
+          for (const customPath of customSubtitlePaths) {
+            if (discoveredTracks.some(track => track.id === customPath)) continue;
+            try {
+              const customTrack = await subtitleService.loadCustomSubtitleTrack(customPath);
+              discoveredTracks.push(customTrack);
+            } catch (customErr) {
+              console.warn('Failed to load saved custom subtitle:', customPath, customErr);
+            }
+          }
+        } catch (customDbErr) {
+          console.warn('Failed to query saved custom subtitles:', customDbErr);
+        }
+      }
+
       if (isMounted) {
         setSubtitleTracks(discoveredTracks);
         setSubtitleTracksLoaded(true);
@@ -1242,7 +1322,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   void nativePlayerService.setProperty('sub-use-margins', 'no');
                   void nativePlayerService.setProperty('sub-scale-by-window', showPortraitLayoutRef.current ? 'no' : 'yes');
                   void nativePlayerService.setProperty('sub-ass-scale-with-window', showPortraitLayoutRef.current ? 'no' : 'yes');
-                  void nativePlayerService.setProperty('sub-pos', showControlsRef.current ? '84' : '100');
+                  void nativePlayerService.setProperty('sub-pos', getNativeSubPos(subtitleVerticalPosRef.current, showControlsRef.current));
                 }
                 if (state.audioTracks.length > 0) {
                   setAudioTracks(prev => {
@@ -1300,10 +1380,22 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               try {
                 await nativePlayerService.loadFile(activeFile.path, initialPosition);
                 console.info('[VideoPlayerModal] File loaded into native player at position:', initialPosition);
+                try {
+                  const customSubtitlePaths = await dbService.getCustomSubtitlesForFile(activeFile.id);
+                  for (const customPath of customSubtitlePaths) {
+                    try {
+                      await nativePlayerService.addSubtitleFile(customPath);
+                    } catch (customSubErr) {
+                      console.warn('Failed to load saved custom subtitle into native player:', customPath, customSubErr);
+                    }
+                  }
+                } catch (customDbErr) {
+                  console.warn('Failed to query saved custom subtitles:', customDbErr);
+                }
                 void nativePlayerService.setProperty('video-align-y', showPortraitLayoutRef.current ? '-1.0' : '0.0');
                 void nativePlayerService.setProperty('panscan', (!showPortraitLayoutRef.current && fillVideoToScreenRef.current) ? '1.0' : '0.0');
                 void nativePlayerService.setProperty('sub-use-margins', 'no');
-                void nativePlayerService.setProperty('sub-pos', showControlsRef.current ? '84' : '100');
+                void nativePlayerService.setProperty('sub-pos', getNativeSubPos(subtitleVerticalPosRef.current, showControlsRef.current));
                 void nativePlayerService.setVolume(volumeRef.current * 100);
                 void nativePlayerService.setMute(isMutedRef.current || volumeRef.current === 0);
               } catch (loadErr) {
@@ -1430,7 +1522,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   useEffect(() => {
     if (!subtitleTracksLoaded || !videoMetadataLoaded || subtitleAutoSelectionDone) return;
 
-    const preferredTrack = subtitleTracks.find(track => track.embedded)
+    const preferredTrack = subtitleTracks.find(track => track.custom)
+      || subtitleTracks.find(track => track.embedded)
       || embeddedSubtitleTracks[0]
       || subtitleTracks[0];
     if (!preferredTrack) return;
@@ -2443,12 +2536,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       {activeSubtitleText && (
         <div
           aria-live="off"
-          className={`pointer-events-none absolute ${
-            showPortraitLayout
-              ? (showControls ? 'bottom-[22%]' : 'bottom-3')
-              : (showControls ? 'bottom-[18%]' : 'bottom-[5%]')
-          } left-1/2 z-20 max-w-[85vw] -translate-x-1/2 whitespace-pre-line rounded px-3 py-1.5 text-center font-semibold leading-relaxed`}
+          className="pointer-events-none absolute left-1/2 z-20 max-w-[85vw] -translate-x-1/2 whitespace-pre-line rounded px-3 py-1.5 text-center font-semibold leading-relaxed"
           style={{
+            bottom: `${Math.max(subtitleStyle.verticalPosition, showControls ? (showPortraitLayout ? 22 : 18) : 2)}%`,
             backgroundColor: subtitleBackground,
             color: subtitleStyle.textColor,
             fontFamily: subtitleStyle.fontFamily,
@@ -2502,7 +2592,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       )}
 
 
-      {media.type === 'TV Series' && allLocalFiles.length > 1 && !showPortraitLayout && (
+      {media.type === 'TV Series' && pickerSeasons.length > 0 && !showPortraitLayout && (
         <div
           onClick={event => event.stopPropagation()}
           onMouseDown={event => event.stopPropagation()}
@@ -2561,57 +2651,147 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               <div 
                 ref={episodeListRef}
                 className="min-h-0 min-w-0 flex flex-1 flex-row items-stretch gap-1 overflow-x-auto overflow-y-hidden overscroll-contain p-1.5 touch-pan-x min-[380px]:p-2 sidebar:flex-col sidebar:space-y-1 sidebar:overflow-x-hidden sidebar:overflow-y-auto sidebar:touch-pan-y sm:p-3">
-                {allLocalFiles
-                  .filter(file => file.exists && file.season === selectedPickerSeason && file.episode !== undefined)
-                  .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0))
-                  .map(file => {
-                  const season = file.season ?? 0;
-                  const episode = file.episode ?? 0;
-                  const details = getEpisodeDetails(season, episode);
-                  const isCurrentEpisode = season === seasonNumber && episode === episodeNumber;
+                {(() => {
+                  const seasonMeta = media.seasons?.find(s => Number(s.season_number) === Number(selectedPickerSeason));
+                  const seasonEpisodes = seasonMeta?.episodes;
 
-                  return (
-                    <button
-                      key={file.id}
-                      type="button"
-                      data-current-episode={isCurrentEpisode}
-                      onClick={() => {
-                        void switchEpisode(file, season, episode, getEpisodeTitle(file, season, episode));
-                        setIsEpisodePickerOpen(false);
-                      }}
-                      className={`flex min-w-0 flex-[0_0_calc(33.333%_-_0.167rem)] flex-col gap-1 rounded-lg p-1 text-left transition-colors sidebar:w-full sidebar:flex-none sidebar:flex-row sidebar:gap-3 sidebar:rounded-xl sidebar:p-2 ${
-                        isCurrentEpisode ? 'bg-white/15' : 'hover:bg-white/10'
-                      }`}
-                    >
-                      <span className="group/image relative h-20 w-full shrink-0 overflow-hidden rounded-md bg-black/40 sidebar:h-20 sidebar:w-32 sidebar:rounded-lg">
-                        {(details?.still_path || media.backdrop || media.poster) && (
-                          <img
-                            src={details?.still_path || media.backdrop || media.poster}
-                            alt=""
-                            className="h-full w-full object-cover transition-transform duration-200 group-hover/image:scale-105"
-                          />
-                        )}
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover/image:bg-black/45 group-focus-visible/image:bg-black/45">
-                          <Play className="h-5 w-5 scale-75 fill-current text-white opacity-0 drop-shadow transition-all group-hover/image:scale-100 group-hover/image:opacity-100 group-focus-visible/image:scale-100 group-focus-visible/image:opacity-100" />
+                  if (seasonEpisodes && seasonEpisodes.length > 0) {
+                    return seasonEpisodes.map(ep => {
+                      const season = selectedPickerSeason;
+                      const episode = ep.episode_number;
+                      const matchingFile = allLocalFiles.find(lf =>
+                        lf.exists &&
+                        lf.media_id === media.id &&
+                        Number(lf.season) === Number(season) &&
+                        (Number(lf.episode) === Number(episode) ||
+                          (lf.episode !== undefined && lf.end_episode !== undefined && Number(lf.episode) <= Number(episode) && Number(lf.end_episode) >= Number(episode)))
+                      );
+                      const isCurrentEpisode = Number(season) === Number(seasonNumber) && Number(episode) === Number(episodeNumber);
+                      const epProg = allProgress.find(p => Number(p.season) === Number(season) && Number(p.episode) === Number(episode));
+                      const epPct = epProg && epProg.duration_seconds > 0
+                        ? Math.min(100, Math.round((epProg.position_seconds / epProg.duration_seconds) * 100))
+                        : 0;
+
+                      return (
+                        <button
+                          key={ep.episode_number}
+                          type="button"
+                          disabled={!matchingFile}
+                          data-current-episode={isCurrentEpisode}
+                          onClick={() => {
+                            if (matchingFile) {
+                              void switchEpisode(matchingFile, season, episode, ep.name || getEpisodeTitle(matchingFile, season, episode));
+                              setIsEpisodePickerOpen(false);
+                            }
+                          }}
+                          className={`flex min-w-0 flex-[0_0_calc(33.333%_-_0.167rem)] flex-col gap-1 rounded-lg p-1 text-left transition-colors sidebar:w-full sidebar:flex-none sidebar:flex-row sidebar:gap-3 sidebar:rounded-xl sidebar:p-2 ${
+                            matchingFile
+                              ? isCurrentEpisode
+                                ? 'bg-white/15'
+                                : 'hover:bg-white/10'
+                              : 'opacity-50 cursor-not-allowed'
+                          }`}
+                        >
+                          <span className="group/image relative h-20 w-full shrink-0 overflow-hidden rounded-md bg-black/40 sidebar:h-20 sidebar:w-32 sidebar:rounded-lg">
+                            {(ep.still_path || media.backdrop || media.poster) && (
+                              <img
+                                src={ep.still_path || media.backdrop || media.poster}
+                                alt=""
+                                className={`h-full w-full object-cover transition-transform duration-200 ${matchingFile ? 'group-hover/image:scale-105' : ''}`}
+                              />
+                            )}
+                            {matchingFile && (
+                              <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover/image:bg-black/45 group-focus-visible/image:bg-black/45">
+                                <Play className="h-5 w-5 scale-75 fill-current text-white opacity-0 drop-shadow transition-all group-hover/image:scale-100 group-hover/image:opacity-100 group-focus-visible/image:scale-100 group-focus-visible/image:opacity-100" />
+                              </span>
+                            )}
+                            {epProg && !epProg.is_completed && epPct > 0 && (
+                              <span className="absolute bottom-0 inset-x-0 h-1 bg-black/60 z-10">
+                                <span className="block bg-[#E27D12] h-full" style={{ width: `${epPct}%` }} />
+                              </span>
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[10px] font-semibold text-[#E27D12] sidebar:text-xs">
+                              S{String(season).padStart(2, '0')}E{String(episode).padStart(2, '0')}
+                            </span>
+                            <span className="block truncate text-[10px] font-bold text-white sidebar:mt-1 sidebar:text-sm">
+                              {ep.name || (matchingFile ? getEpisodeTitle(matchingFile, season, episode) : `Episode ${episode}`)}
+                            </span>
+                            <span className="mt-0.5 line-clamp-3 text-[9px] leading-tight text-gray-200 sidebar:mt-1 sidebar:line-clamp-2 sidebar:text-xs sidebar:leading-relaxed">
+                              {ep.overview || 'Episode description unavailable.'}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    });
+                  }
+
+                  const filesForSeason = allLocalFiles
+                    .filter(file => file.exists && Number(file.season) === Number(selectedPickerSeason) && file.episode !== undefined)
+                    .sort((a, b) => (Number(a.episode) ?? 0) - (Number(b.episode) ?? 0));
+
+                  if (filesForSeason.length === 0) {
+                    return (
+                      <p className="p-4 text-center text-xs text-gray-300">No available episodes in this season.</p>
+                    );
+                  }
+
+                  return filesForSeason.map(file => {
+                    const season = file.season ?? 0;
+                    const episode = file.episode ?? 0;
+                    const details = getEpisodeDetails(season, episode);
+                    const isCurrentEpisode = Number(season) === Number(seasonNumber) && Number(episode) === Number(episodeNumber);
+                    const epProg = allProgress.find(p => Number(p.season) === Number(season) && Number(p.episode) === Number(episode));
+                    const epPct = epProg && epProg.duration_seconds > 0
+                      ? Math.min(100, Math.round((epProg.position_seconds / epProg.duration_seconds) * 100))
+                      : 0;
+
+                    return (
+                      <button
+                        key={file.id}
+                        type="button"
+                        data-current-episode={isCurrentEpisode}
+                        onClick={() => {
+                          void switchEpisode(file, season, episode, getEpisodeTitle(file, season, episode));
+                          setIsEpisodePickerOpen(false);
+                        }}
+                        className={`flex min-w-0 flex-[0_0_calc(33.333%_-_0.167rem)] flex-col gap-1 rounded-lg p-1 text-left transition-colors sidebar:w-full sidebar:flex-none sidebar:flex-row sidebar:gap-3 sidebar:rounded-xl sidebar:p-2 ${
+                          isCurrentEpisode ? 'bg-white/15' : 'hover:bg-white/10'
+                        }`}
+                      >
+                        <span className="group/image relative h-20 w-full shrink-0 overflow-hidden rounded-md bg-black/40 sidebar:h-20 sidebar:w-32 sidebar:rounded-lg">
+                          {(details?.still_path || media.backdrop || media.poster) && (
+                            <img
+                              src={details?.still_path || media.backdrop || media.poster}
+                              alt=""
+                              className="h-full w-full object-cover transition-transform duration-200 group-hover/image:scale-105"
+                            />
+                          )}
+                          <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover/image:bg-black/45 group-focus-visible/image:bg-black/45">
+                            <Play className="h-5 w-5 scale-75 fill-current text-white opacity-0 drop-shadow transition-all group-hover/image:scale-100 group-hover/image:opacity-100 group-focus-visible/image:scale-100 group-focus-visible/image:opacity-100" />
+                          </span>
+                          {epProg && !epProg.is_completed && epPct > 0 && (
+                            <span className="absolute bottom-0 inset-x-0 h-1 bg-black/60 z-10">
+                              <span className="block bg-[#E27D12] h-full" style={{ width: `${epPct}%` }} />
+                            </span>
+                          )}
                         </span>
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[10px] font-semibold text-[#E27D12] sidebar:text-xs">
-                          S{String(season).padStart(2, '0')}E{String(episode).padStart(2, '0')}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[10px] font-semibold text-[#E27D12] sidebar:text-xs">
+                            S{String(season).padStart(2, '0')}E{String(episode).padStart(2, '0')}
+                          </span>
+                          <span className="block truncate text-[10px] font-bold text-white sidebar:mt-1 sidebar:text-sm">
+                            {getEpisodeTitle(file, season, episode)}
+                          </span>
+                          <span className="mt-0.5 line-clamp-3 text-[9px] leading-tight text-gray-200 sidebar:mt-1 sidebar:line-clamp-2 sidebar:text-xs sidebar:leading-relaxed">
+                            {details?.overview || 'Episode description unavailable.'}
+                          </span>
                         </span>
-                        <span className="block truncate text-[10px] font-bold text-white sidebar:mt-1 sidebar:text-sm">
-                          {getEpisodeTitle(file, season, episode)}
-                        </span>
-                        <span className="mt-0.5 line-clamp-3 text-[9px] leading-tight text-gray-200 sidebar:mt-1 sidebar:line-clamp-2 sidebar:text-xs sidebar:leading-relaxed">
-                          {details?.overview || 'Episode description unavailable.'}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-                {allLocalFiles.filter(file => file.exists && file.season === selectedPickerSeason && file.episode !== undefined).length === 0 && (
-                  <p className="p-4 text-center text-xs text-gray-300">No available episodes in this season.</p>
-                )}
+                      </button>
+                    );
+                  });
+                })()}
               </div>
             </div>
           )}
@@ -2894,11 +3074,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               onClick={(e) => {
                 e.stopPropagation();
                 closeAllPanels();
-                if (videoRef.current) {
-                  videoRef.current.currentTime = 0;
-                  setCurrentTime(0);
-                  notifySkipSeek(0);
-                }
+                handleSkipSeek(0);
+                notifySkipSeek(0);
               }}
               className={`group text-gray-300 hover:text-white cursor-pointer ${showPortraitLayout ? 'p-1' : 'p-2'}`}
               title="Restart from Beginning"
@@ -3138,6 +3315,16 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                       </>
                     )}
                   </div>
+                  <div className="border-t border-white/10 p-1">
+                    <button
+                      type="button"
+                      onClick={() => void handleLoadCustomSubtitle()}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                    >
+                      <FolderOpen className="h-3.5 w-3.5 text-[#E27D12]" />
+                      <span>Load Custom Subtitle...</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -3286,6 +3473,27 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                       <option value="semi-transparent" className="bg-[#161923] text-white">Semi-transparent</option>
                       <option value="solid" className="bg-[#161923] text-white">Solid</option>
                     </select>
+                  </label>
+
+                  <label className="block space-y-0.5 text-[11px] text-gray-200">
+                    <span className="flex justify-between font-medium">
+                      <span>Height</span>
+                      <span className="text-[#E27D12]">{subtitleStyle.verticalPosition}%</span>
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={50}
+                      step={1}
+                      value={subtitleStyle.verticalPosition}
+                      onChange={event => setSubtitleStyle(style => ({
+                        ...style,
+                        preset: 'custom',
+                        verticalPosition: Number(event.target.value)
+                      }))}
+                      aria-label="Subtitle height"
+                      className="w-full accent-[#E27D12] h-1 bg-white/20 rounded cursor-pointer"
+                    />
                   </label>
                 </div>
               )}
@@ -3499,6 +3707,16 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                       ))}
                     </>
                   )}
+                  <div className="border-t border-white/10 pt-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleLoadCustomSubtitle()}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                    >
+                      <FolderOpen className="h-4 w-4 text-[#E27D12]" />
+                      <span>Load Custom Subtitle...</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -3629,6 +3847,27 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                       <option value="semi-transparent">Semi-transparent</option>
                       <option value="solid">Solid</option>
                     </select>
+                  </label>
+
+                  <label className="block space-y-1 text-xs text-gray-300">
+                    <span className="flex justify-between font-semibold text-white">
+                      <span>Height</span>
+                      <span className="text-[#E27D12]">{subtitleStyle.verticalPosition}%</span>
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={50}
+                      step={1}
+                      value={subtitleStyle.verticalPosition}
+                      onChange={event => setSubtitleStyle(style => ({
+                        ...style,
+                        preset: 'custom',
+                        verticalPosition: Number(event.target.value)
+                      }))}
+                      aria-label="Subtitle height"
+                      className="w-full accent-[#E27D12] h-2 bg-white/20 rounded cursor-pointer"
+                    />
                   </label>
                 </div>
               </div>
@@ -3766,7 +4005,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                               }
                             }}
                             className={`flex items-center gap-3 py-3 transition-colors rounded-xl px-2 -mx-2 ${
-                              matchingFile ? 'cursor-pointer hover:bg-white/[0.04]' : 'opacity-50 cursor-not-allowed'
+                              matchingFile ? 'cursor-pointer group hover:bg-white/[0.04]' : 'opacity-50 cursor-not-allowed'
                             } ${isCurrentEpisode ? 'bg-white/[0.08]' : ''}`}
                           >
                             {/* Thumbnail with Play Icon & Progress */}
@@ -3775,12 +4014,14 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                                 <img
                                   src={ep.still_path || media.backdrop || media.poster}
                                   alt=""
-                                  className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                                  className={`h-full w-full object-cover transition-transform duration-200 ${matchingFile ? 'group-hover:scale-105' : ''}`}
                                 />
                               )}
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors">
-                                <Play className="h-4 w-4 fill-current text-white opacity-90 drop-shadow" />
-                              </div>
+                              {matchingFile && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-active:bg-black/40 group-hover:bg-black/40 transition-colors">
+                                  <Play className="h-4 w-4 fill-current text-white opacity-0 group-active:opacity-100 group-hover:opacity-100 transition-opacity drop-shadow" />
+                                </div>
+                              )}
                               {epProg && !epProg.is_completed && epPct > 0 && (
                                 <div className="absolute bottom-0 inset-x-0 h-1 bg-black/60 z-10">
                                   <div className="bg-[#E27D12] h-full" style={{ width: `${epPct}%` }} />
@@ -3859,8 +4100,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                                 className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
                               />
                             )}
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors">
-                              <Play className="h-4 w-4 fill-current text-white opacity-90 drop-shadow" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-active:bg-black/40 group-hover:bg-black/40 transition-colors">
+                              <Play className="h-4 w-4 fill-current text-white opacity-0 group-active:opacity-100 group-hover:opacity-100 transition-opacity drop-shadow" />
                             </div>
                             {epProg && !epProg.is_completed && epPct > 0 && (
                               <div className="absolute bottom-0 inset-x-0 h-1 bg-black/60 z-10">

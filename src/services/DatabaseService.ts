@@ -184,6 +184,13 @@ export class DatabaseService {
         parsed_year INTEGER,
         FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
       )`,
+      `CREATE TABLE IF NOT EXISTS local_file_subtitles (
+        id TEXT PRIMARY KEY,
+        local_file_id TEXT NOT NULL,
+        path TEXT NOT NULL,
+        added_at TEXT NOT NULL,
+        FOREIGN KEY(local_file_id) REFERENCES local_file(id) ON DELETE CASCADE
+      )`,
       `CREATE TABLE IF NOT EXISTS availability (
         id TEXT PRIMARY KEY,
         media_id TEXT NOT NULL,
@@ -1150,6 +1157,36 @@ export class DatabaseService {
       parsed_title: (row.parsed_title as string) || undefined,
       parsed_year: row.parsed_year !== null && row.parsed_year !== undefined ? Number(row.parsed_year) : undefined
     };
+  }
+
+  public async getCustomSubtitlesForFile(localFileId: string): Promise<string[]> {
+    if (!this.db || !localFileId) return [];
+    const rows = await this.db.select<{ path: string }[]>(
+      'SELECT path FROM local_file_subtitles WHERE local_file_id = ? ORDER BY added_at ASC',
+      [localFileId]
+    );
+    return rows.map(row => row.path);
+  }
+
+  public async saveCustomSubtitleForFile(localFileId: string, subtitlePath: string): Promise<void> {
+    if (!this.db || !localFileId || !subtitlePath) return;
+    const now = new Date().toISOString();
+    const existing = await this.db.select<{ id: string }[]>(
+      'SELECT id FROM local_file_subtitles WHERE local_file_id = ? AND path = ?',
+      [localFileId, subtitlePath]
+    );
+    if (existing.length > 0) {
+      await this.db.execute(
+        'UPDATE local_file_subtitles SET added_at = ? WHERE id = ?',
+        [now, existing[0].id]
+      );
+      return;
+    }
+    const id = `${localFileId}::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`;
+    await this.db.execute(
+      'INSERT INTO local_file_subtitles (id, local_file_id, path, added_at) VALUES (?, ?, ?, ?)',
+      [id, localFileId, subtitlePath, now]
+    );
   }
 
   public async linkLocalFileToMedia(file_id: string, media_id: string): Promise<void> {

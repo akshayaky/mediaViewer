@@ -4,6 +4,7 @@ export interface SubtitleTrack {
   language: string;
   url: string;
   embedded?: boolean;
+  custom?: boolean;
 }
 
 export class SubtitleService {
@@ -88,6 +89,45 @@ export class SubtitleService {
     }
 
     return tracks;
+  }
+
+  /**
+   * Loads a user-selected custom subtitle file (local path or Android content:// URI)
+   * into a SubtitleTrack usable by the HTML5 player.
+   */
+  public async loadCustomSubtitleTrack(filePath: string): Promise<SubtitleTrack> {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const subtitleUrl = await invoke<string>('get_subtitle_url', { filePath });
+
+    let subtitleName = filePath.split(/[\\/]/).pop() || filePath;
+    if (filePath.startsWith('content://')) {
+      try {
+        subtitleName = await invoke<string>('plugin:android-fs|get_name', {
+          uri: { uri: filePath, documentTopTreeUri: null }
+        });
+      } catch {
+        subtitleName = 'Custom Subtitle';
+      }
+    }
+
+    const extension = subtitleName.split('.').pop()?.toLowerCase();
+    let url = subtitleUrl;
+    if (extension === 'srt') {
+      const response = await fetch(subtitleUrl);
+      if (!response.ok) {
+        throw new Error(`Could not load subtitle file "${subtitleName}" (${response.status}).`);
+      }
+      const vtt = this.convertSrtToVtt(await response.text());
+      url = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
+    }
+
+    return {
+      id: filePath,
+      label: `${subtitleName} (Custom)`,
+      language: 'und',
+      url,
+      custom: true
+    };
   }
 }
 

@@ -31,6 +31,23 @@ fn select_folder() -> Result<Option<String>, String> {
     Err("Folder selection is unavailable on mobile. Select media files instead.".to_string())
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command]
+fn select_subtitle_file(app: AppHandle) -> Option<String> {
+    app.dialog()
+        .file()
+        .add_filter("Subtitles", &["srt", "vtt", "ass", "ssa", "sub", "txt"])
+        .blocking_pick_file()
+        .and_then(|file_path| file_path.into_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn select_subtitle_file() -> Result<Option<String>, String> {
+    Err("Desktop file picker is unavailable on mobile.".to_string())
+}
+
 #[tauri::command]
 async fn scan_directory(
     folder_path: String,
@@ -257,6 +274,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             select_folder,
+            select_subtitle_file,
             scan_directory,
             get_video_stream_url,
             get_subtitle_url,
