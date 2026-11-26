@@ -516,9 +516,13 @@ export class TMDBProvider implements MetadataProvider {
 
       const runtime = rawRuntime && !isNaN(rawRuntime) ? rawRuntime : undefined;
 
-      const publisher = mediaType === 'tv' && data.networks && data.networks.length > 0
-        ? data.networks[0].name
-        : (data.production_companies && data.production_companies.length > 0 ? data.production_companies[0].name : undefined);
+      const primaryCompany = mediaType === 'tv' && data.networks && data.networks.length > 0
+        ? data.networks[0]
+        : (data.production_companies && data.production_companies.length > 0 ? data.production_companies[0] : undefined);
+      const publisher = primaryCompany?.name;
+      const publisher_logo = primaryCompany?.logo_path
+        ? `${this.imageBaseUrl}/w185${primaryCompany.logo_path}`
+        : undefined;
 
       return {
         title: mediaType === 'movie' ? data.title : data.name,
@@ -533,6 +537,7 @@ export class TMDBProvider implements MetadataProvider {
         backdrop,
         logo,
         publisher,
+        publisher_logo,
         cast,
         seasons,
         metadata_source: 'TMDB',

@@ -144,7 +144,9 @@ export class DatabaseService {
         metadata_source TEXT,
         metadata_refreshed_at TEXT,
         publisher TEXT,
+        publisher_logo TEXT,
         developer TEXT,
+        developer_logo TEXT,
         cast TEXT,
         seasons TEXT,
         created_at TEXT NOT NULL,
@@ -191,6 +193,11 @@ export class DatabaseService {
         path TEXT NOT NULL,
         added_at TEXT NOT NULL,
         FOREIGN KEY(local_file_id) REFERENCES local_file(id) ON DELETE CASCADE
+      )`,
+      `CREATE TABLE IF NOT EXISTS company_logos (
+        name TEXT PRIMARY KEY,
+        logo_url TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       )`,
       `CREATE TABLE IF NOT EXISTS availability (
         id TEXT PRIMARY KEY,
@@ -303,6 +310,8 @@ export class DatabaseService {
     await this.addColumnIfNotExists('media', 'accent_color', 'TEXT');
     await this.addColumnIfNotExists('media', 'manually_matched', 'INTEGER DEFAULT 0');
     await this.addColumnIfNotExists('media', 'keywords', 'TEXT');
+    await this.addColumnIfNotExists('media', 'publisher_logo', 'TEXT');
+    await this.addColumnIfNotExists('media', 'developer_logo', 'TEXT');
     await this.addColumnIfNotExists('media_history', 'updated_at', 'TEXT');
     await this.addColumnIfNotExists('local_file', 'season', 'INTEGER');
     await this.addColumnIfNotExists('local_file', 'episode', 'INTEGER');
@@ -451,7 +460,9 @@ export class DatabaseService {
       metadata_source: (row.metadata_source as string) || undefined,
       metadata_refreshed_at: (row.metadata_refreshed_at as string) || undefined,
       publisher: (row.publisher as string) || undefined,
+      publisher_logo: (row.publisher_logo as string) || undefined,
       developer: (row.developer as string) || undefined,
+      developer_logo: (row.developer_logo as string) || undefined,
       cast,
       seasons,
       created_at: row.created_at as string,
@@ -617,8 +628,8 @@ export class DatabaseService {
     }
     const deviceId = await this.resolveLocalDeviceId();
     await this.db.execute(
-      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, keywords, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, developer, cast, seasons, created_at, updated_at, accent_color, manually_matched, deleted_at, device_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+      `INSERT INTO media (id, type, title, original_title, release_year, language, description, genres, keywords, runtime, poster, backdrop, logo, metadata_source, metadata_refreshed_at, publisher, publisher_logo, developer, developer_logo, cast, seasons, created_at, updated_at, accent_color, manually_matched, deleted_at, device_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
        ON CONFLICT(id) DO UPDATE SET
          type=excluded.type,
          title=excluded.title,
@@ -635,7 +646,9 @@ export class DatabaseService {
          metadata_source=excluded.metadata_source,
          metadata_refreshed_at=excluded.metadata_refreshed_at,
          publisher=excluded.publisher,
+         publisher_logo=excluded.publisher_logo,
          developer=excluded.developer,
+         developer_logo=excluded.developer_logo,
          cast=excluded.cast,
          seasons=excluded.seasons,
          updated_at=excluded.updated_at,
@@ -660,7 +673,9 @@ export class DatabaseService {
         media.metadata_source || null,
         media.metadata_refreshed_at || null,
         media.publisher || null,
+        media.publisher_logo || null,
         media.developer || null,
+        media.developer_logo || null,
         media.cast ? JSON.stringify(media.cast) : null,
         media.seasons ? JSON.stringify(media.seasons) : null,
         media.created_at,
@@ -670,6 +685,25 @@ export class DatabaseService {
         deviceId
       ]
     );
+
+    const companyUpdates: Array<[string, string]> = [];
+    if (media.publisher && media.publisher_logo) {
+      companyUpdates.push([media.publisher, media.publisher_logo]);
+    }
+    if (media.developer && media.developer_logo) {
+      companyUpdates.push([media.developer, media.developer_logo]);
+    }
+    if (companyUpdates.length > 0) {
+      const logoNow = new Date().toISOString();
+      for (const [companyName, logoUrl] of companyUpdates) {
+        await this.db.execute(
+          `INSERT INTO company_logos (name, logo_url, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(name) DO UPDATE SET logo_url=excluded.logo_url, updated_at=excluded.updated_at`,
+          [companyName, logoUrl, logoNow]
+        );
+      }
+    }
 
     if (media.external_ids) {
       const now = new Date().toISOString();
@@ -1202,6 +1236,18 @@ export class DatabaseService {
       'INSERT INTO local_file_subtitles (id, local_file_id, path, added_at) VALUES (?, ?, ?, ?)',
       [id, localFileId, subtitlePath, now]
     );
+  }
+
+  public async getCompanyLogos(): Promise<Record<string, string>> {
+    if (!this.db) return {};
+    const rows = await this.db.select<{ name: string; logo_url: string }[]>(
+      'SELECT name, logo_url FROM company_logos'
+    );
+    const map: Record<string, string> = {};
+    for (const row of rows) {
+      map[row.name] = row.logo_url;
+    }
+    return map;
   }
 
   public async linkLocalFileToMedia(file_id: string, media_id: string): Promise<void> {

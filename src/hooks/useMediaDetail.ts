@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Media, LocalFile, MediaHistory, MediaState, Availability, PlaybackProgress, MediaSkipSegments } from '../types/media';
 import { dbService } from '../services/DatabaseService';
 import { localLauncherService } from '../services/LocalLauncherService';
@@ -41,6 +41,59 @@ export function useMediaDetail(initialMedia: Media, isTransitioning = false, ini
   const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState('');
   const [launchMessage, setLaunchMessage] = useState('');
+  const backfilledLogosRef = useRef<Set<string>>(new Set());
+
+  // Lazily backfill missing publisher/developer logos for existing library items
+  useEffect(() => {
+    if (isTransitioning) return;
+    const needsPublisherLogo = Boolean(currentMedia.publisher && !currentMedia.publisher_logo);
+    const needsDeveloperLogo = Boolean(currentMedia.developer && !currentMedia.developer_logo);
+    if (!needsPublisherLogo && !needsDeveloperLogo) return;
+    if (backfilledLogosRef.current.has(currentMedia.id)) return;
+
+    const targetExt = currentMedia.type === 'VideoGame'
+      ? currentMedia.external_ids?.find(e => e.provider === 'IGDB')
+      : currentMedia.external_ids?.find(e => e.provider === 'TMDB');
+    if (!targetExt) return;
+
+    backfilledLogosRef.current.add(currentMedia.id);
+    let isMounted = true;
+
+    const provider = currentMedia.type === 'VideoGame' ? igdbProvider : tmdbProvider;
+    provider.getMediaDetails(targetExt.external_id)
+      .then(async (details) => {
+        if (!isMounted) return;
+        const nextPublisherLogo = currentMedia.publisher_logo || details.publisher_logo;
+        const nextDeveloperLogo = currentMedia.developer_logo || details.developer_logo;
+        if (!nextPublisherLogo && !nextDeveloperLogo) return;
+
+        const updated: Media = {
+          ...currentMedia,
+          publisher_logo: nextPublisherLogo,
+          developer_logo: nextDeveloperLogo,
+          keywords: currentMedia.keywords?.length ? currentMedia.keywords : details.keywords,
+          updated_at: new Date().toISOString()
+        };
+        setCurrentMedia(updated);
+        await dbService.saveMedia(updated);
+      })
+      .catch(err => {
+        console.warn('Lazy company logo backfill failed:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    isTransitioning,
+    currentMedia.id,
+    currentMedia.type,
+    currentMedia.publisher,
+    currentMedia.publisher_logo,
+    currentMedia.developer,
+    currentMedia.developer_logo,
+    currentMedia.external_ids
+  ]);
 
   // Synchronize added external IDs from database
   const refreshAddedExternalIds = useCallback(async () => {

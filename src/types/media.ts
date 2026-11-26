@@ -51,7 +51,9 @@ export interface Media {
   metadata_source?: string;
   metadata_refreshed_at?: string;
   publisher?: string;
+  publisher_logo?: string;
   developer?: string;
+  developer_logo?: string;
   cast?: CastMember[];
   seasons?: Season[];
   created_at: string;

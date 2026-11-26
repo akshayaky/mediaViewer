@@ -1141,31 +1141,69 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
               )}
 
               {currentMedia.publisher && (
-                <span
-                  className="mdv-pill cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
-                  title={`Filter by publisher: ${currentMedia.publisher}`}
-                  onClick={e => {
-                    e.stopPropagation();
-                    handleTriggerSearch(`publisher:${currentMedia.publisher!.trim().replace(/\s+/g, '-')}`);
-                  }}
-                >
-                  <Building className="mdv-icon-sm mdv-icon-amber" />
-                  <span>{currentMedia.publisher}</span>
-                </span>
+                currentMedia.publisher_logo ? (
+                  <span
+                    className="inline-flex h-8 items-center justify-center rounded-full border border-white/25 bg-white/[0.08] p-0.5 backdrop-blur-md cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                    title={`Filter by publisher: ${currentMedia.publisher}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleTriggerSearch(`publisher:${currentMedia.publisher!.trim().replace(/\s+/g, '-')}`);
+                    }}
+                  >
+                    <span className="inline-flex h-full items-center justify-center rounded-full border border-white/20 bg-black/25 px-3 py-1">
+                      <img
+                        src={currentMedia.publisher_logo}
+                        alt={currentMedia.publisher}
+                        className="h-4 max-w-[76px] w-auto object-contain"
+                      />
+                    </span>
+                  </span>
+                ) : (
+                  <span
+                    className="mdv-pill cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                    title={`Filter by publisher: ${currentMedia.publisher}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleTriggerSearch(`publisher:${currentMedia.publisher!.trim().replace(/\s+/g, '-')}`);
+                    }}
+                  >
+                    <Building className="mdv-icon-sm mdv-icon-amber" />
+                    <span>{currentMedia.publisher}</span>
+                  </span>
+                )
               )}
 
               {currentMedia.developer && (
-                <span
-                  className="mdv-pill cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
-                  title={`Filter by developer: ${currentMedia.developer}`}
-                  onClick={e => {
-                    e.stopPropagation();
-                    handleTriggerSearch(`developer:${currentMedia.developer!.trim().replace(/\s+/g, '-')}`);
-                  }}
-                >
-                  <Code className="mdv-icon-sm mdv-icon-purple" />
-                  <span>{currentMedia.developer}</span>
-                </span>
+                currentMedia.developer_logo ? (
+                  <span
+                    className="inline-flex h-8 items-center justify-center rounded-full border border-white/25 bg-white/[0.08] p-0.5 backdrop-blur-md cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                    title={`Filter by developer: ${currentMedia.developer}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleTriggerSearch(`developer:${currentMedia.developer!.trim().replace(/\s+/g, '-')}`);
+                    }}
+                  >
+                    <span className="inline-flex h-full items-center justify-center rounded-full border border-white/20 bg-black/25 px-3 py-1">
+                      <img
+                        src={currentMedia.developer_logo}
+                        alt={currentMedia.developer}
+                        className="h-4 max-w-[76px] w-auto object-contain"
+                      />
+                    </span>
+                  </span>
+                ) : (
+                  <span
+                    className="mdv-pill cursor-pointer transition-transform hover:scale-105 hover:brightness-125"
+                    title={`Filter by developer: ${currentMedia.developer}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleTriggerSearch(`developer:${currentMedia.developer!.trim().replace(/\s+/g, '-')}`);
+                    }}
+                  >
+                    <Code className="mdv-icon-sm mdv-icon-purple" />
+                    <span>{currentMedia.developer}</span>
+                  </span>
+                )
               )}
             </div>
 
@@ -1251,7 +1289,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
           {resumeTarget?.hasSavedProgress && currentMedia.type !== 'VideoGame' && (
             <button
               onClick={() => handleTriggerPlay(undefined, true)}
-              className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 backdrop-blur-md transition-all cursor-pointer shadow-md"
+              className="px-4 py-3 rounded-2xl bg-[var(--mdv-card-bg)] hover:brightness-110 text-[var(--mdv-heading)] font-bold text-xs border border-[var(--mdv-divider)] backdrop-blur-md transition-all cursor-pointer shadow-md"
               title="Restart playback from 00:00"
             >
               Start from Beginning

@@ -289,7 +289,7 @@ export class IGDBProvider implements MetadataProvider {
       const token = await this.getTwitchAccessToken(clientId, clientSecret);
       if (token) {
         try {
-          const body = `where id = ${igdbId}; fields name, summary, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id, genres.name, keywords.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher;`;
+          const body = `where id = ${igdbId}; fields name, summary, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id, genres.name, keywords.name, involved_companies.company.name, involved_companies.company.logo.image_id, involved_companies.developer, involved_companies.publisher;`;
           const res = await smartFetch(`${this.igdbBaseUrl}/games`, {
             method: 'POST',
             headers: {
@@ -325,14 +325,25 @@ export class IGDBProvider implements MetadataProvider {
 
               const developers: string[] = [];
               const publishers: string[] = [];
+              let developer_logo: string | undefined;
+              let publisher_logo: string | undefined;
 
               if (game.involved_companies) {
                 for (const ic of game.involved_companies) {
+                  const companyLogoUrl = ic.company?.logo?.image_id
+                    ? `https://images.igdb.com/igdb/image/upload/t_logo_med/${ic.company.logo.image_id}.png`
+                    : undefined;
                   if (ic.developer && ic.company?.name && !developers.includes(ic.company.name)) {
                     developers.push(ic.company.name);
+                    if (!developer_logo && companyLogoUrl) {
+                      developer_logo = companyLogoUrl;
+                    }
                   }
                   if (ic.publisher && ic.company?.name && !publishers.includes(ic.company.name)) {
                     publishers.push(ic.company.name);
+                    if (!publisher_logo && companyLogoUrl) {
+                      publisher_logo = companyLogoUrl;
+                    }
                   }
                 }
               }
@@ -374,7 +385,9 @@ export class IGDBProvider implements MetadataProvider {
                 backdrop: backdropUrl,
                 logo,
                 developer,
+                developer_logo,
                 publisher,
+                publisher_logo,
                 metadata_source: 'IGDB',
                 metadata_refreshed_at: new Date().toISOString()
               };

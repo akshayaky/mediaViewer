@@ -65,12 +65,12 @@
 
   --mdv-title-shadow: 0 10px 15px rgba(0, 0, 0, 0.4);
 
-  --mdv-success-text: #34d399;
-  --mdv-success-bg: rgba(2, 44, 34, 0.85);
-  --mdv-success-border: rgba(16, 185, 129, 0.4);
-  --mdv-warn-text: #fbbf24;
-  --mdv-warn-bg: rgba(69, 26, 3, 0.85);
-  --mdv-warn-border: rgba(245, 158, 11, 0.4);
+  --mdv-success-text: #86efac;
+  --mdv-success-bg: rgba(16, 185, 129, 0.16);
+  --mdv-success-border: rgba(110, 231, 183, 0.35);
+  --mdv-warn-text: #fcd34d;
+  --mdv-warn-bg: rgba(245, 158, 11, 0.16);
+  --mdv-warn-border: rgba(252, 211, 77, 0.35);
   --mdv-purple-text: #d8b4fe;
   --mdv-purple-bg: rgba(59, 7, 100, 0.8);
   --mdv-purple-border: rgba(168, 85, 247, 0.3);
@@ -580,25 +580,32 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--mdv-on-accent);
-  background: var(--accent-color);
+  color: var(--mdv-heading);
+  background: var(--mdv-card-bg);
+  border: 1px solid var(--mdv-divider);
   border-radius: 9999px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 /* Icon inside the filled badge follows the badge text colour */
-.mdv-type-badge svg { color: inherit; }
+.mdv-type-badge svg,
+.mdv-pill svg { color: inherit; }
 
 .mdv-pill {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.625rem;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--mdv-pill-text);
-  background: var(--mdv-pill-bg);
-  border: 1px solid var(--mdv-pill-border);
+  color: var(--mdv-heading);
+  background: var(--mdv-card-bg);
+  border: 1px solid var(--mdv-divider);
   border-radius: 9999px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 .mdv-status-badge {
@@ -609,7 +616,9 @@
   font-size: 0.75rem;
   font-weight: 700;
   border-radius: 9999px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 .mdv-status-badge--ok {
@@ -649,13 +658,15 @@
 }
 
 .mdv-genre {
-  padding: 0.125rem 0.625rem;
+  padding: 0.2rem 0.65rem;
   font-size: 11px;
   font-weight: 600;
-  color: var(--mdv-pill-text);
-  background: #1c1f2e;
-  border: 1px solid #2e334a;
-  border-radius: 0.375rem;
+  color: var(--mdv-heading);
+  background: var(--mdv-card-bg);
+  border: 1px solid var(--mdv-divider);
+  border-radius: 0.5rem;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 /* ---- Feedback messages ---- */
