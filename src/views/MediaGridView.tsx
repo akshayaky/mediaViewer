@@ -495,12 +495,18 @@ useEffect(() => {
 
   if (parsedTextFilter.query) {
     const q = parsedTextFilter.query.toLocaleLowerCase();
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const matchesText = (text?: string) => {
+      if (!text) return false;
+      const lower = text.toLowerCase();
+      return lower.includes(q) || (tokens.length > 1 && tokens.every(t => lower.includes(t)));
+    };
     const directMatches: Media[] = [];
     const keywordMatches: Media[] = [];
     for (const m of items) {
-      if (m.title.toLowerCase().includes(q) || m.publisher?.toLowerCase().includes(q)) {
+      if (matchesText(m.title) || matchesText(m.original_title) || matchesText(m.publisher)) {
         directMatches.push(m);
-      } else if (m.keywords?.some(k => k.toLowerCase().includes(q))) {
+      } else if (m.keywords?.some(k => matchesText(k))) {
         keywordMatches.push(m);
       }
     }

@@ -22,9 +22,12 @@ interface UniversalSearchOverlayProps {
 
 function getMatchScore(text: string, query: string): number {
   const normalized = text.trim().toLocaleLowerCase();
+  if (!query) return 0;
   if (normalized === query) return 0;
   if (normalized.startsWith(query)) return 1;
   if (normalized.includes(query)) return 2;
+  const tokens = query.split(/\s+/).filter(Boolean);
+  if (tokens.length > 1 && tokens.every(token => normalized.includes(token))) return 3;
   return -1;
 }
 
@@ -37,16 +40,41 @@ function getTypeIcon(type: MediaType) {
 function renderHighlightedTitle(title: string, rawQuery: string): React.ReactNode {
   const query = rawQuery.trim();
   if (!query) return title;
-  const matchIndex = title.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());
-  if (matchIndex === -1) return title;
-  const before = title.slice(0, matchIndex);
-  const match = title.slice(matchIndex, matchIndex + query.length);
-  const after = title.slice(matchIndex + query.length);
+
+  const lowerTitle = title.toLocaleLowerCase();
+  const lowerQuery = query.toLocaleLowerCase();
+  const fullMatchIndex = lowerTitle.indexOf(lowerQuery);
+  if (fullMatchIndex !== -1) {
+    return (
+      <>
+        {title.slice(0, fullMatchIndex)}
+        <mark className="rounded bg-[#E27D12]/25 px-0.5 text-white">
+          {title.slice(fullMatchIndex, fullMatchIndex + query.length)}
+        </mark>
+        {title.slice(fullMatchIndex + query.length)}
+      </>
+    );
+  }
+
+  const tokens = Array.from(new Set(query.split(/\s+/).filter(Boolean))).sort((a, b) => b.length - a.length);
+  if (tokens.length === 0) return title;
+
+  const escapedTokens = tokens.map(token => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp(`(${escapedTokens.join('|')})`, 'gi');
+  const parts = title.split(regex);
+  if (parts.length === 1) return title;
+
   return (
     <>
-      {before}
-      <mark className="rounded bg-[#E27D12]/25 px-0.5 text-white">{match}</mark>
-      {after}
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <mark key={i} className="rounded bg-[#E27D12]/25 px-0.5 text-white">
+            {part}
+          </mark>
+        ) : (
+          <React.Fragment key={i}>{part}</React.Fragment>
+        )
+      )}
     </>
   );
 }
@@ -440,6 +468,11 @@ export const UniversalSearchOverlay: React.FC<UniversalSearchOverlayProps> = ({
                     {result.kind === 'media' && result.matchedKeyword && (
                       <span className="ml-1.5 text-[11px] text-[#E27D12]/80">
                         · Keyword: {result.matchedKeyword}
+                      </span>
+                    )}
+                    {result.kind === 'external' && result.score === -1 && (
+                      <span className="ml-1.5 text-[11px] text-white/35">
+                        · Related match
                       </span>
                     )}
                   </span>
